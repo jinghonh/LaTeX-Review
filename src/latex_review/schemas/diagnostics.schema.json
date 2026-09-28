@@ -14,7 +14,7 @@
       "type": "object", "additionalProperties": false,
       "required": ["file", "start_line", "end_line", "start_column", "end_column", "confidence", "uncertainty_reason"],
       "properties": {
-        "file": {"type": ["string", "null"]}, "start_line": {"type": ["integer", "null"], "minimum": 1},
+        "file": {"type": ["string", "null"], "minLength": 1, "pattern": "^(?!/|\\\\|[A-Za-z]:)"}, "start_line": {"type": ["integer", "null"], "minimum": 1},
         "end_line": {"type": ["integer", "null"], "minimum": 1},
         "start_column": {"type": ["integer", "null"], "minimum": 1},
         "end_column": {"type": ["integer", "null"], "minimum": 1},

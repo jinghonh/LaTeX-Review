@@ -1,4 +1,5 @@
 import json
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
@@ -72,3 +73,49 @@ def test_invalid_contract_rejected():
     data["changes"][1]["source_new"]["uncertainty_reason"] = None
     with pytest.raises(ValidationError):
         validate_document(data)
+
+
+@pytest.mark.parametrize("kind,side", [("added", "new"), ("removed", "old"), ("modified", "old"), ("modified", "new")])
+def test_node_side_requires_location(kind, side):
+    document = representative_document()
+    change = next(c for c in document.changes if c.kind == kind) if kind != "removed" else PrimaryChange(
+        "removed", "removed", "paragraph", "p1", None, document.nodes_old[1].source, None, 1.0, ("text",), (), "删除"
+    )
+    with pytest.raises(ValueError):
+        replace(change, **{f"source_{side}": None})
+    data = json.loads(dumps(document))
+    if kind == "removed":
+        data["changes"][0] = {
+            **data["changes"][0], "id": "removed", "kind": "removed", "old_node_id": "p1", "new_node_id": None,
+            "source_old": json.loads(json.dumps(document.nodes_old[1].source.__dict__)), "source_new": None,
+        }
+    target = next(c for c in data["changes"] if c["kind"] == kind)
+    target[f"source_{side}"] = None
+    with pytest.raises(ValidationError):
+        validate_document(data)
+
+
+@pytest.mark.parametrize("path", ["", "/tmp/main.tex", "C:/paper/main.tex", "\\\\server\\share\\main.tex"])
+def test_source_file_must_be_relative(path):
+    with pytest.raises(ValueError):
+        SourceLocation(path, 1, 1)
+    data = json.loads(dumps(representative_document()))
+    data["nodes_old"][0]["source"]["file"] = path
+    with pytest.raises(ValidationError):
+        validate_document(data)
+    diagnostics = json.loads(dumps(DiagnosticsDocument(representative_document().diagnostics)))
+    diagnostics["diagnostics"][0]["source_new"]["file"] = path
+    with pytest.raises(ValidationError):
+        validate_document(diagnostics)
+
+
+def test_summary_hits_are_immutable_copy():
+    hits = {"text": 1}
+    summary = build_summary(representative_document().changes)
+    with pytest.raises(TypeError):
+        summary.category_hits["text"] = 100
+    from latex_review import Summary
+    copied = Summary(1, hits, 0, 0)
+    hits["text"] = 100
+    assert copied.category_hits["text"] == 1
+    assert summary.category_hits["text"] == 2

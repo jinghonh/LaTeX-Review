@@ -26,7 +26,7 @@
       "type": "object", "additionalProperties": false,
       "required": ["file", "start_line", "end_line", "start_column", "end_column", "confidence", "uncertainty_reason"],
       "properties": {
-        "file": {"type": ["string", "null"]},
+        "file": {"type": ["string", "null"], "minLength": 1, "pattern": "^(?!/|\\\\|[A-Za-z]:)"},
         "start_line": {"type": ["integer", "null"], "minimum": 1},
         "end_line": {"type": ["integer", "null"], "minimum": 1},
         "start_column": {"type": ["integer", "null"], "minimum": 1},
@@ -78,9 +78,9 @@
         "summary": {"type": "string"}
       },
       "allOf": [
-        {"if": {"properties": {"kind": {"const": "added"}}}, "then": {"properties": {"old_node_id": {"type": "null"}, "source_old": {"type": "null"}, "new_node_id": {"type": "string"}}}},
-        {"if": {"properties": {"kind": {"const": "removed"}}}, "then": {"properties": {"new_node_id": {"type": "null"}, "source_new": {"type": "null"}, "old_node_id": {"type": "string"}}}},
-        {"if": {"properties": {"kind": {"enum": ["modified", "moved"]}}}, "then": {"properties": {"old_node_id": {"type": "string"}, "new_node_id": {"type": "string"}}}}
+        {"if": {"properties": {"kind": {"const": "added"}}}, "then": {"properties": {"old_node_id": {"type": "null"}, "source_old": {"type": "null"}, "new_node_id": {"type": "string"}, "source_new": {"$ref": "#/$defs/location"}}}},
+        {"if": {"properties": {"kind": {"const": "removed"}}}, "then": {"properties": {"new_node_id": {"type": "null"}, "source_new": {"type": "null"}, "old_node_id": {"type": "string"}, "source_old": {"$ref": "#/$defs/location"}}}},
+        {"if": {"properties": {"kind": {"enum": ["modified", "moved"]}}}, "then": {"properties": {"old_node_id": {"type": "string"}, "new_node_id": {"type": "string"}, "source_old": {"$ref": "#/$defs/location"}, "source_new": {"$ref": "#/$defs/location"}}}}
       ]
     },
     "diagnostic": {

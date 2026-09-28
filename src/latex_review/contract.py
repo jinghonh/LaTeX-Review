@@ -5,7 +5,9 @@ from __future__ import annotations
 from dataclasses import asdict, dataclass, is_dataclass
 from importlib.resources import files
 import json
-from typing import Literal
+from pathlib import PurePosixPath, PureWindowsPath
+from types import MappingProxyType
+from typing import Literal, Mapping
 
 from jsonschema import Draft202012Validator
 
@@ -27,6 +29,8 @@ class SourceLocation:
     uncertainty_reason: str | None = None
 
     def __post_init__(self) -> None:
+        if self.file is not None and (not self.file or PurePosixPath(self.file).is_absolute() or PureWindowsPath(self.file).drive or self.file.startswith("\\")):
+            raise ValueError("源码文件必须是非空相对路径")
         if not 0 <= self.confidence <= 1:
             raise ValueError("源码定位置信度必须在 0 到 1 之间")
         if (self.file is None or self.start_line is None or self.end_line is None) and not self.uncertainty_reason:
@@ -81,12 +85,12 @@ class PrimaryChange:
     def __post_init__(self) -> None:
         if not 0 <= self.matching_confidence <= 1:
             raise ValueError("节点匹配置信度必须在 0 到 1 之间")
-        if self.kind == "added" and (self.old_node_id is not None or self.source_old is not None or self.new_node_id is None):
+        if self.kind == "added" and (self.old_node_id is not None or self.source_old is not None or self.new_node_id is None or self.source_new is None):
             raise ValueError("新增主变更只能有新侧节点和位置")
-        if self.kind == "removed" and (self.new_node_id is not None or self.source_new is not None or self.old_node_id is None):
+        if self.kind == "removed" and (self.new_node_id is not None or self.source_new is not None or self.old_node_id is None or self.source_old is None):
             raise ValueError("删除主变更只能有旧侧节点和位置")
-        if self.kind in ("modified", "moved") and (self.old_node_id is None or self.new_node_id is None):
-            raise ValueError("修改和移动主变更必须有双侧节点")
+        if self.kind in ("modified", "moved") and (self.old_node_id is None or self.new_node_id is None or self.source_old is None or self.source_new is None):
+            raise ValueError("修改和移动主变更必须有双侧节点和位置")
 
 
 @dataclass(frozen=True)
@@ -101,9 +105,12 @@ class Diagnostic:
 @dataclass(frozen=True)
 class Summary:
     changes: int
-    category_hits: dict[str, int]
+    category_hits: Mapping[str, int]
     added_words: int
     removed_words: int
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "category_hits", MappingProxyType(dict(self.category_hits)))
 
 
 @dataclass(frozen=True)
@@ -139,7 +146,18 @@ def build_summary(changes: tuple[PrimaryChange, ...], *, added_words: int = 0, r
 
 def _ordered(value: object) -> object:
     if isinstance(value, ReviewDocument):
-        result = asdict(value)
+        result = {
+            "schema_version": value.schema_version,
+            "entry": value.entry,
+            "old": asdict(value.old),
+            "new": asdict(value.new),
+            "summary": {
+                "changes": value.summary.changes,
+                "category_hits": dict(value.summary.category_hits),
+                "added_words": value.summary.added_words,
+                "removed_words": value.summary.removed_words,
+            },
+        }
         result["nodes_old"] = [asdict(node) for node in sorted(value.nodes_old, key=lambda n: n.id)]
         result["nodes_new"] = [asdict(node) for node in sorted(value.nodes_new, key=lambda n: n.id)]
         result["changes"] = []
