@@ -79,11 +79,15 @@ class ExpandedProject:
 
 
 _COMMAND = re.compile(r"\\(input|include|bibliography|addbibresource|includegraphics|bibliographystyle|graphicspath)(?![A-Za-z@])")
+_MACRO_DEFINITION = re.compile(r"\\(newcommand|renewcommand|providecommand|DeclareRobustCommand|def|gdef|edef|xdef)(?![A-Za-z@])")
 _GRAPHICS = (".pdf", ".png", ".jpg", ".jpeg", ".eps", ".svg", ".webp")
 
 
 def _git(where: Path, *args: str, check: bool = True) -> subprocess.CompletedProcess[bytes]:
-    result = subprocess.run(("git", "-C", str(where), *args), capture_output=True)
+    try:
+        result = subprocess.run(("git", "-C", str(where), *args), capture_output=True)
+    except FileNotFoundError as exc:
+        raise SourceError("explicit_sources_required", None, "未找到 Git；请显式指定两个目录或两个独立文件") from exc
     if check and result.returncode:
         raise SourceError("git_failed", None, result.stderr.decode("utf-8", "replace").strip() or "Git 命令失败")
     return result
@@ -246,6 +250,77 @@ def resolve_sources(
         )
 
 
+def _skip_space_comments(text: str, position: int) -> int:
+    """TeX 命令与参数之间可以有空白及整行注释。"""
+    while position < len(text):
+        if text[position].isspace():
+            position += 1
+        elif text[position] == "%":
+            line_end = re.search(r"[\r\n]", text[position:])
+            position = len(text) if line_end is None else position + line_end.start()
+        else:
+            break
+    return position
+
+
+def _group_end(text: str, position: int, opening: str, closing: str) -> int | None:
+    if position >= len(text) or text[position] != opening:
+        return None
+    depth = 1
+    cursor = position + 1
+    while cursor < len(text):
+        if text[cursor] == "\\" and cursor + 1 < len(text) and text[cursor + 1] in (opening, closing, "%"):
+            cursor += 2
+            continue
+        if text[cursor] == "%":
+            line_end = re.search(r"[\r\n]", text[cursor:])
+            if line_end is None:
+                return None
+            cursor += line_end.start()
+            continue
+        if text[cursor] == opening:
+            depth += 1
+        elif text[cursor] == closing:
+            depth -= 1
+            if depth == 0:
+                return cursor + 1
+        cursor += 1
+    return None
+
+
+def _macro_definition_end(text: str, match: re.Match[str]) -> tuple[int, str] | None:
+    cursor = match.end()
+    if text[cursor:cursor + 1] == "*":
+        cursor += 1
+    cursor = _skip_space_comments(text, cursor)
+    if match.group(1) in ("def", "gdef", "edef", "xdef"):
+        name = re.match(r"\\[A-Za-z@]+", text[cursor:])
+        if name is None:
+            return None
+        cursor += len(name.group())
+        while cursor < len(text) and text[cursor] != "{":
+            cursor += 1
+    elif cursor < len(text) and text[cursor] == "{":
+        cursor = _group_end(text, cursor, "{", "}")
+        if cursor is None:
+            return None
+    else:
+        name = re.match(r"\\[A-Za-z@]+", text[cursor:])
+        if name is None:
+            return None
+        cursor += len(name.group())
+    cursor = _skip_space_comments(text, cursor)
+    for _ in range(2):
+        if cursor < len(text) and text[cursor] == "[":
+            cursor = _group_end(text, cursor, "[", "]")
+            if cursor is None:
+                return None
+            cursor = _skip_space_comments(text, cursor)
+    body_start = cursor
+    end = _group_end(text, body_start, "{", "}")
+    return None if end is None else (end, text[body_start + 1:end - 1])
+
+
 def _commands(text: str):
     """仅识别静态字面依赖；注释及 verbatim 内的命令不当作依赖。"""
     index = 0
@@ -269,6 +344,16 @@ def _commands(text: str):
         if text[index] != "\\":
             index += 1
             continue
+        definition = _MACRO_DEFINITION.match(text, index)
+        if definition is not None:
+            parsed = _macro_definition_end(text, definition)
+            if parsed is not None:
+                end, body = parsed
+                yield "macro_definition", index, end, body
+                index = end
+                continue
+            yield "unparsed_macro_definition", index, len(text), text[definition.end():]
+            return
         match = _COMMAND.match(text, index)
         if match is None:
             index += 2  # 已转义的 %、反斜线等不再次扫描。
@@ -277,26 +362,17 @@ def _commands(text: str):
         cursor = match.end()
         if name == "includegraphics" and cursor < len(text) and text[cursor] == "*":
             cursor += 1
-        while cursor < len(text) and text[cursor].isspace():
-            cursor += 1
+        cursor = _skip_space_comments(text, cursor)
         if name in ("includegraphics", "addbibresource") and cursor < len(text) and text[cursor] == "[":
             close = text.find("]", cursor + 1)
             if close < 0:
                 index = match.end()
                 continue
             cursor = close + 1
-            while cursor < len(text) and text[cursor].isspace():
-                cursor += 1
+            cursor = _skip_space_comments(text, cursor)
         if cursor < len(text) and text[cursor] == "{":
-            depth = 1
-            close = cursor + 1
-            while close < len(text) and depth:
-                if text[close] == "{":
-                    depth += 1
-                elif text[close] == "}":
-                    depth -= 1
-                close += 1
-            if depth:
+            close = _group_end(text, cursor, "{", "}")
+            if close is None:
                 index = match.end()
                 continue
             argument = text[cursor + 1:close - 1]
@@ -391,6 +467,13 @@ def expand_project(source: ProjectSource) -> ExpandedProject:
         files[file] = content
         cursor = 0
         for name, start, end, argument in _commands(content):
+            if name == "unparsed_macro_definition":
+                issue("uncertain_dependency", "宏定义无法静态解析；未展开其中可能存在的依赖", file, start, end, chain)
+                continue
+            if name == "macro_definition":
+                if _COMMAND.search(argument):
+                    issue("uncertain_dependency", "宏定义内的依赖命令未执行，实际依赖取决于宏调用", file, start, end, chain)
+                continue
             if name == "graphicspath":
                 graphics_paths.extend(re.findall(r"\{([^{}]+)\}", argument))
                 continue

@@ -1,4 +1,5 @@
 import json
+import os
 from pathlib import Path
 import subprocess
 import sys
@@ -192,3 +193,51 @@ def test_no_head_and_cli_inspection(tmp_path):
     assert result.returncode == 0, result.stderr
     payload = json.loads(result.stdout)
     assert payload["old"]["text"] == "内容" and payload["new"]["text"] == "另一个"
+
+
+def test_macro_definition_body_is_preserved_without_executing_dependencies(tmp_path):
+    for side in ("old", "new"):
+        root = tmp_path / side
+        source = "\\newcommand{\\later}{\\input{appendix}}\n\\def\\next{\\include{appendix}}\n\\later\n\\input{actual}\n"
+        write(root, "main.tex", source)
+        write(root, "appendix.tex", "不得提前展开")
+        write(root, "actual.tex", "实际包含")
+    with resolve_sources(entry="main.tex", old_dir=tmp_path / "old", new_dir=tmp_path / "new") as pair:
+        for side in (pair.old, pair.new):
+            result = side.expand()
+            assert result.text == source.replace("\\input{actual}", "实际包含")
+            assert [(item.kind, item.file) for item in result.dependencies] == [("include", "actual.tex")]
+            assert [item.code for item in result.diagnostics] == ["uncertain_dependency", "uncertain_dependency"]
+            assert "不得提前展开" not in result.text
+
+
+def test_input_argument_after_tex_comment(tmp_path):
+    for side in ("old", "new"):
+        root = tmp_path / side
+        write(root, "main.tex", "前\\input% 注释内的 { } 不属于参数\r\n{chapter}后")
+        write(root, "chapter.tex", "章节")
+    with resolve_sources(entry="main.tex", old_dir=tmp_path / "old", new_dir=tmp_path / "new") as pair:
+        result = pair.old.expand()
+        assert result.text == "前章节后"
+        assert [(item.kind, item.file) for item in result.dependencies] == [("include", "chapter.tex")]
+        assert result.diagnostics == ()
+        assert result.origin_ranges(1, 3)[0].origin.file == "chapter.tex"
+
+
+def test_missing_git_binary_is_structured_source_error(tmp_path):
+    old, new = tmp_path / "old", tmp_path / "new"
+    write(old, "main.tex", "旧")
+    write(new, "main.tex", "新")
+    environment = dict(os.environ, PATH="")
+    missing_git = subprocess.run(
+        [sys.executable, "-m", "latex_review.cli", "main.tex", "--inspect-sources"],
+        cwd=old, env=environment, capture_output=True, text=True,
+    )
+    assert missing_git.returncode == 4
+    assert '"code": "explicit_sources_required"' in missing_git.stderr
+    assert "显式指定" in missing_git.stderr
+    explicit = subprocess.run(
+        [sys.executable, "-m", "latex_review.cli", "--old-dir", str(old), "--new-dir", str(new), "--entry", "main.tex", "--inspect-sources"],
+        cwd=tmp_path, env=environment, capture_output=True, text=True,
+    )
+    assert explicit.returncode == 0, explicit.stderr
