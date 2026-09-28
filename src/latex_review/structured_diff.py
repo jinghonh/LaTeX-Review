@@ -23,6 +23,77 @@ def _kind(left: object | None, right: object | None) -> str:
     return "modified" if left is not None and right is not None else "removed" if left is not None else "added"
 
 
+def _site_context(parent: ParsedNode | None, sites: list[ParsedNode], by_id: dict[str, ParsedNode]) -> list[tuple[tuple[str, ...], tuple[str, ...]]]:
+    if parent is None:
+        return []
+    raw = list(parent.review.raw_latex)
+    for child_id in parent.review.child_ids:
+        child = by_id[child_id]
+        if child.review.type in {"citation", "inline_math", "reference"}:
+            start = child.expanded_start - parent.expanded_start
+            end = child.expanded_end - parent.expanded_start
+            raw[start:end] = " " * (end - start)
+    text = "".join(raw)
+    result = []
+    for site in sites:
+        start = site.expanded_start - parent.expanded_start
+        end = site.expanded_end - parent.expanded_start
+        before = re.findall(r"\w+|[^\s\w]", text[:start])[-2:]
+        after = re.findall(r"\w+|[^\s\w]", text[end:])[:2]
+        result.append((tuple(before), tuple(after)))
+    return result
+
+
+def align_inline_sites(left: ParsedNode | None, right: ParsedNode | None,
+                       old_project: ParsedProject, new_project: ParsedProject, kind: str) -> list[tuple[int | None, int | None]]:
+    """以相邻正文为主、内容为辅，对齐段内站点；插删不挪用相邻来源。"""
+    old_by_id, new_by_id = old_project.by_id(), new_project.by_id()
+    old_sites = [old_by_id[child] for child in left.review.child_ids if old_by_id[child].review.type == kind] if left else []
+    new_sites = [new_by_id[child] for child in right.review.child_ids if new_by_id[child].review.type == kind] if right else []
+    old_context = _site_context(left, old_sites, old_by_id)
+    new_context = _site_context(right, new_sites, new_by_id)
+
+    def identity(node: ParsedNode):
+        if kind == "citation":
+            return tuple(sorted(set(node.citations)))
+        tokens, metadata, ok = _math_parts(node.review.raw_latex)
+        return tokens if ok else node.review.raw_latex
+
+    def score(i: int, j: int) -> float:
+        context = sum(SequenceMatcher(None, old_context[i][side], new_context[j][side], autojunk=False).ratio()
+                      for side in (0, 1))
+        return .45 * context + (.3 if identity(old_sites[i]) == identity(new_sites[j]) else 0)
+
+    count_old, count_new = len(old_sites), len(new_sites)
+    values = [[0.0] * (count_new + 1) for _ in range(count_old + 1)]
+    actions = [[""] * (count_new + 1) for _ in range(count_old + 1)]
+    for i in range(1, count_old + 1):
+        values[i][0], actions[i][0] = -.2 * i, "removed"
+    for j in range(1, count_new + 1):
+        values[0][j], actions[0][j] = -.2 * j, "added"
+    for i in range(1, count_old + 1):
+        for j in range(1, count_new + 1):
+            candidates = ((values[i - 1][j - 1] + score(i - 1, j - 1), "paired"),
+                          (values[i - 1][j] - .2, "removed"),
+                          (values[i][j - 1] - .2, "added"))
+            values[i][j], actions[i][j] = max(candidates, key=lambda item: item[0])
+    aligned = []
+    i, j = count_old, count_new
+    while i or j:
+        action = actions[i][j]
+        if action == "paired":
+            aligned.append((i - 1, j - 1))
+            i -= 1
+            j -= 1
+        elif action == "removed":
+            aligned.append((i - 1, None))
+            i -= 1
+        else:
+            aligned.append((None, j - 1))
+            j -= 1
+    return list(reversed(aligned))
+
+
 def _math_parts(raw: str) -> tuple[tuple[str, ...], tuple[str, ...], bool]:
     """剥离定界符及编号元信息；不对未知结构编造精细数学差异。"""
     mask = _masked(raw)
@@ -104,15 +175,16 @@ def citation_details(left: ParsedNode | None, right: ParsedNode | None,
     old_sites = [old_by_id[child] for child in left.review.child_ids if old_by_id[child].review.type == "citation"] if left else []
     new_sites = [new_by_id[child] for child in right.review.child_ids if new_by_id[child].review.type == "citation"] if right else []
     details: list[ChangeDetail] = []
-    for index in range(max(len(old_sites), len(new_sites))):
-        old_site = old_sites[index] if index < len(old_sites) else None
-        new_site = new_sites[index] if index < len(new_sites) else None
+    for old_index, new_index in align_inline_sites(left, right, old_project, new_project, "citation"):
+        old_site = old_sites[old_index] if old_index is not None else None
+        new_site = new_sites[new_index] if new_index is not None else None
         old_keys = set(old_site.citations) if old_site else set()
         new_keys = set(new_site.citations) if new_site else set()
         if old_keys == new_keys:
             continue
         removed, added = sorted(old_keys - new_keys), sorted(new_keys - old_keys)
-        summary = f"第 {index + 1} 处引用：删 {', '.join(removed) or '无'}；增 {', '.join(added) or '无'}"
+        position = old_index if old_index is not None else new_index
+        summary = f"第 {position + 1} 处引用：删 {', '.join(removed) or '无'}；增 {', '.join(added) or '无'}"
         _detail(details, "citation", _kind(old_site, new_site), ", ".join(sorted(old_keys)) or None,
                 ", ".join(sorted(new_keys)) or None, summary, old_site, new_site)
     return details

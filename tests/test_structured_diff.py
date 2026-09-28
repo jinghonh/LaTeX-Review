@@ -69,6 +69,28 @@ def test_same_citation_key_moves_between_positions_without_global_cancellation(t
     assert all(detail.source_old and detail.source_new for detail in result.document.changes[0].details)
 
 
+def test_removed_citation_does_not_consume_later_unchanged_site(tmp_path):
+    _, _, result = _compare(tmp_path, r"Before \cite{drop} shared \cite{keep}.",
+                            r"Before shared \cite{keep}.")
+    assert result.document.summary.changes == 1
+    details = result.document.changes[0].details
+    citation = [detail for detail in details if detail.category == "citation"]
+    assert len(citation) == 1
+    assert citation[0].kind == "removed"
+    assert citation[0].old_text == "drop" and citation[0].new_text is None
+    assert citation[0].source_old is not None and citation[0].source_new is None
+
+
+def test_inserted_inline_math_preserves_later_formula_sources(tmp_path):
+    _, _, result = _compare(tmp_path, r"Values $a$ then $b$.", r"Values $x$ $a$ then $b$.")
+    assert result.document.summary.changes == 1
+    equations = [detail for detail in result.document.changes[0].details if detail.category == "equation"]
+    assert len(equations) == 1
+    assert equations[0].kind == "added"
+    assert equations[0].old_text is None and equations[0].new_text == "$x$"
+    assert equations[0].source_old is None and equations[0].source_new is not None
+
+
 def test_paragraph_text_citation_and_math_count_once(tmp_path):
     _, _, result = _compare(tmp_path, r"Old word $x$ \cite{a}.", r"New word $y$ \cite{b}.")
     assert result.document.summary.changes == 1
@@ -123,6 +145,23 @@ def test_table_row_insert_is_one_whole_change(tmp_path):
                             r"\begin{tabular}{c}A\\ X\\ B\end{tabular}")
     assert result.document.summary.changes == 1
     assert result.document.changes[0].node_type == "table"
+
+
+def test_array_inside_equation_has_table_detail_and_reading_preview(tmp_path):
+    old, new, result = _compare(
+        tmp_path,
+        r"\begin{equation}\begin{array}{cc}a&b\\c&d\end{array}\end{equation}",
+        r"\begin{equation}\begin{array}{cc}a&x\\c&d\end{array}\end{equation}",
+    )
+    assert any(node.review.type == "table" and node.review.parent_id for node in old.nodes)
+    assert any(node.review.type == "table" and node.review.parent_id for node in new.nodes)
+    assert result.document.summary.changes == 1
+    assert result.document.summary.category_hits["table"] == 1
+    table_detail = next(detail for detail in result.document.changes[0].details if detail.category == "table")
+    assert "a&b" in table_detail.old_text and "a&x" in table_detail.new_text
+    preview = render_preview(old, new).html
+    assert preview.count('class="table-preview"') == 2
+    assert 'class="review-node node-table"' in preview
 
 
 @pytest.mark.parametrize(("before", "after", "kind"), [

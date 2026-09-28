@@ -387,6 +387,18 @@ class _Builder:
             else:
                 i += 1
 
+    def _array_children(self, parent: str, start: int, end: int) -> None:
+        """数学块中的 array 是从属表格，保留其独立来源和预览节点。"""
+        i = start
+        while match := _ENV.search(self.mask, i, end):
+            i = match.end()
+            if match.group(1) != "begin" or match.group(2) != "array":
+                continue
+            extent = _environment_end(self.mask, match.start(), end)
+            if extent:
+                self.add("table", match.start(), extent[1], parent)
+                i = extent[1]
+
     def scan(self, start: int, end: int, parent: str | None = None, *, sections: bool = True) -> None:
         i, pending = start, start
         while i < end:
@@ -428,6 +440,7 @@ class _Builder:
                                 self._inline(node, opening + 1, closing - 1)
                         self._unknown_children(node, env.end(), extent[0])
                     elif kind == "equation":
+                        self._array_children(node, env.end(), extent[0])
                         self._unknown_children(node, env.end(), extent[0])
                     i = extent[1]
                     pending = i
@@ -436,7 +449,8 @@ class _Builder:
                 close = self.mask.find("\\]", i + 2, end)
                 if close >= 0:
                     self._flush(pending, i, parent)
-                    self.add("equation", i, close + 2, parent)
+                    node = self.add("equation", i, close + 2, parent)
+                    self._array_children(node, i + 2, close)
                     i = close + 2
                     pending = i
                     continue
@@ -444,7 +458,8 @@ class _Builder:
                 close = _math_end(self.mask, i, end)
                 if close:
                     self._flush(pending, i, parent)
-                    self.add("equation", i, close, parent)
+                    node = self.add("equation", i, close, parent)
+                    self._array_children(node, i + 2, close - 2)
                     i = close
                     pending = i
                     continue

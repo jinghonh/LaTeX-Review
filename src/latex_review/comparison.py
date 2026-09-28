@@ -9,8 +9,8 @@ from typing import Mapping
 
 from .contract import ChangeDetail, Diagnostic, PrimaryChange, ReviewDocument, ReviewNode, SourceLocation, build_summary
 from .matching import NodeMapping, _semantic_raw, match_nodes
-from .structure import ParsedProject
-from .structured_diff import citation_details, equation_details, figure_details, table_details
+from .structure import ParsedNode, ParsedProject
+from .structured_diff import align_inline_sites, citation_details, equation_details, figure_details, table_details
 from .text_diff import TokenEdit, scan_latex, token_edits
 
 
@@ -96,9 +96,10 @@ def compare_projects(old: ParsedProject, new: ParsedProject, *, review_comments:
                                         detail.source_old, detail.source_new))
         old_math = [a[child] for child in left.child_ids if a[child].review.type == "inline_math"] if left else []
         new_math = [b[child] for child in right.child_ids if b[child].review.type == "inline_math"] if right else []
-        for index in range(max(len(old_math), len(new_math))):
-            left_inline = old_math[index] if index < len(old_math) else None
-            right_inline = new_math[index] if index < len(new_math) else None
+        for old_index, new_index in align_inline_sites(a[left.id] if left else None,
+                                                        b[right.id] if right else None, old, new, "inline_math"):
+            left_inline = old_math[old_index] if old_index is not None else None
+            right_inline = new_math[new_index] if new_index is not None else None
             unsupported = any(d.code == "unknown_latex" for node in (left_inline, right_inline) if node
                               for d in node.diagnostics)
             for detail in equation_details(left_inline, right_inline, diagnostics, unsupported=unsupported):
@@ -121,6 +122,14 @@ def compare_projects(old: ParsedProject, new: ParsedProject, *, review_comments:
                               for project, node in ((old, left_node), (new, right_node)) if node
                               for child in node.review.child_ids)
             details = equation_details(left_node, right_node, diagnostics, unsupported=unsupported)
+            old_arrays = [a[child] for child in left.child_ids if a[child].review.type == "table"] if left else []
+            new_arrays = [b[child] for child in right.child_ids if b[child].review.type == "table"] if right else []
+            for index in range(max(len(old_arrays), len(new_arrays))):
+                for detail in table_details(old_arrays[index] if index < len(old_arrays) else None,
+                                            new_arrays[index] if index < len(new_arrays) else None):
+                    details.append(ChangeDetail(f"detail-{len(details) + 1:03d}", detail.category, detail.kind,
+                                                detail.old_text, detail.new_text, detail.summary,
+                                                detail.source_old, detail.source_new))
         elif kind == "figure":
             details = figure_details(left_node, right_node)
         else:
@@ -128,7 +137,12 @@ def compare_projects(old: ParsedProject, new: ParsedProject, *, review_comments:
         if not details:
             return
         change_kind = "modified" if left and right else "removed" if left else "added"
-        emit(change_kind, left, right, confidence, (kind,), tuple(details), f"{kind} 整体变化；{reason}")
+        emit(change_kind, left, right, confidence, tuple(dict.fromkeys(detail.category for detail in details)),
+             tuple(details), f"{kind} 整体变化；{reason}")
+
+    def nested_array(node: ReviewNode, by_id: dict[str, ParsedNode]) -> bool:
+        return (node.type == "table" and node.parent_id is not None and
+                by_id[node.parent_id].review.type == "equation")
 
     # 配对及未配对节点均按旧侧文档顺序输出，末尾追加新侧新增。
     pairs = {pair.old_id: pair for pair in mapping.pairs}
@@ -136,7 +150,7 @@ def compare_projects(old: ParsedProject, new: ParsedProject, *, review_comments:
     unmatched_new = {item.node_id: item for item in mapping.new_unmatched}
     for node in old.nodes:
         left = node.review
-        if not (_is_text_node(left) or left.type in {"equation", "figure", "table"}):
+        if nested_array(left, a) or not (_is_text_node(left) or left.type in {"equation", "figure", "table"}):
             continue
         if pair := pairs.get(left.id):
             (text_change if _is_text_node(left) else structured_change)(left, b[pair.new_id].review, pair.confidence, pair.reason)
@@ -147,7 +161,7 @@ def compare_projects(old: ParsedProject, new: ParsedProject, *, review_comments:
                                               source_old=left.source))
     for node in new.nodes:
         right = node.review
-        if (_is_text_node(right) or right.type in {"equation", "figure", "table"}) and (item := unmatched_new.get(right.id)):
+        if not nested_array(right, b) and (_is_text_node(right) or right.type in {"equation", "figure", "table"}) and (item := unmatched_new.get(right.id)):
             (text_change if _is_text_node(right) else structured_change)(None, right, item.confidence, item.reason)
             if item.confidence:
                 diagnostics.append(Diagnostic("low_confidence_match", "warning", "节点未可靠配对；按删除与新增处理：" + item.reason,

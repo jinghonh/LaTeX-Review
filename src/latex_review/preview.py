@@ -220,7 +220,9 @@ def _body(node: ParsedNode, project: ParsedProject, side: str, by_id: dict[str, 
     if kind == "paragraph":
         return f'<p>{_inline_html(node.review.raw_latex, project, side, children, diagnostics, node.review.source, node.expanded_start)}</p>'
     if kind == "equation":
-        return _math(node.review.raw_latex, True) + _embedded_fallbacks(children, side)
+        arrays = "".join(_render_node(child, project, side, by_id, diagnostics)
+                         for child in children if child.review.type == "table")
+        return _math(node.review.raw_latex, True) + arrays + _embedded_fallbacks(children, side)
     if kind == "list":
         tag = "ol" if node.review.raw_latex.startswith("\\begin{enumerate}") else "ul"
         return f"<{tag}>" + "".join(_render_node(child, project, side, by_id, diagnostics) for child in children) + f"</{tag}>"
