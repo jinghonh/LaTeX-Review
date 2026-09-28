@@ -1,0 +1,42 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/jinghonh/LaTeX-Review/blob/main/src/latex_review/schemas/diagnostics.schema.json",
+  "title": "LaTeX Review diagnostics.json 1.0",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "diagnostics"],
+  "properties": {
+    "schema_version": {"const": "1.0"},
+    "diagnostics": {"type": "array", "items": {"$ref": "#/$defs/diagnostic"}}
+  },
+  "$defs": {
+    "location": {
+      "type": "object", "additionalProperties": false,
+      "required": ["file", "start_line", "end_line", "start_column", "end_column", "confidence", "uncertainty_reason"],
+      "properties": {
+        "file": {"type": ["string", "null"], "minLength": 1, "pattern": "^(?!/|\\\\|[A-Za-z]:)"}, "start_line": {"type": ["integer", "null"], "minimum": 1},
+        "end_line": {"type": ["integer", "null"], "minimum": 1},
+        "start_column": {"type": ["integer", "null"], "minimum": 1},
+        "end_column": {"type": ["integer", "null"], "minimum": 1},
+        "confidence": {"type": "number", "minimum": 0, "maximum": 1},
+        "uncertainty_reason": {"type": ["string", "null"]}
+      },
+      "allOf": [
+        {"if": {"properties": {"file": {"type": "null"}}}, "then": {"properties": {"uncertainty_reason": {"type": "string", "minLength": 1}}}},
+        {"if": {"properties": {"start_line": {"type": "null"}}}, "then": {"properties": {"uncertainty_reason": {"type": "string", "minLength": 1}}}},
+        {"if": {"properties": {"end_line": {"type": "null"}}}, "then": {"properties": {"uncertainty_reason": {"type": "string", "minLength": 1}}}}
+      ]
+    },
+    "diagnostic": {
+      "type": "object", "additionalProperties": false,
+      "required": ["code", "severity", "message", "source_old", "source_new"],
+      "properties": {
+        "code": {"type": "string", "minLength": 1},
+        "severity": {"enum": ["info", "warning", "error"]},
+        "message": {"type": "string"},
+        "source_old": {"anyOf": [{"$ref": "#/$defs/location"}, {"type": "null"}]},
+        "source_new": {"anyOf": [{"$ref": "#/$defs/location"}, {"type": "null"}]}
+      }
+    }
+  }
+}

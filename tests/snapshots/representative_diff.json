@@ -1,0 +1,217 @@
+{
+  "changes": [
+    {
+      "categories": [
+        "text"
+      ],
+      "details": [
+        {
+          "category": "citation",
+          "id": "d1",
+          "kind": "modified",
+          "new_text": "b",
+          "old_text": "a",
+          "summary": "引用变化"
+        }
+      ],
+      "id": "c1",
+      "kind": "modified",
+      "matching_confidence": 0.8,
+      "new_node_id": "p2",
+      "node_type": "paragraph",
+      "old_node_id": "p1",
+      "source_new": {
+        "confidence": 1.0,
+        "end_column": null,
+        "end_line": 13,
+        "file": "sections/method.tex",
+        "start_column": null,
+        "start_line": 13,
+        "uncertainty_reason": null
+      },
+      "source_old": {
+        "confidence": 1.0,
+        "end_column": null,
+        "end_line": 12,
+        "file": "sections/method.tex",
+        "start_column": null,
+        "start_line": 12,
+        "uncertainty_reason": null
+      },
+      "summary": "修改段落"
+    },
+    {
+      "categories": [
+        "text"
+      ],
+      "details": [],
+      "id": "c2",
+      "kind": "added",
+      "matching_confidence": 1.0,
+      "new_node_id": "p3",
+      "node_type": "paragraph",
+      "old_node_id": null,
+      "source_new": {
+        "confidence": 0.2,
+        "end_column": null,
+        "end_line": null,
+        "file": "sections/method.tex",
+        "start_column": null,
+        "start_line": null,
+        "uncertainty_reason": "宏展开后无法确认行号"
+      },
+      "source_old": null,
+      "summary": "新增段落"
+    }
+  ],
+  "diagnostics": [
+    {
+      "code": "uncertain_source",
+      "message": "新增段落行号未知",
+      "severity": "warning",
+      "source_new": {
+        "confidence": 0.2,
+        "end_column": null,
+        "end_line": null,
+        "file": "sections/method.tex",
+        "start_column": null,
+        "start_line": null,
+        "uncertainty_reason": "宏展开后无法确认行号"
+      },
+      "source_old": null
+    }
+  ],
+  "entry": "main.tex",
+  "new": {
+    "identifier": ".",
+    "kind": "worktree"
+  },
+  "nodes_new": [
+    {
+      "child_ids": [],
+      "id": "p2",
+      "normalized_latex": null,
+      "parent_id": "sec",
+      "plain_text": null,
+      "raw_latex": "新文\\cite{b}",
+      "section_path": [
+        "方法"
+      ],
+      "source": {
+        "confidence": 1.0,
+        "end_column": null,
+        "end_line": 13,
+        "file": "sections/method.tex",
+        "start_column": null,
+        "start_line": 13,
+        "uncertainty_reason": null
+      },
+      "type": "paragraph"
+    },
+    {
+      "child_ids": [],
+      "id": "p3",
+      "normalized_latex": null,
+      "parent_id": "sec",
+      "plain_text": null,
+      "raw_latex": "新增",
+      "section_path": [
+        "方法"
+      ],
+      "source": {
+        "confidence": 0.2,
+        "end_column": null,
+        "end_line": null,
+        "file": "sections/method.tex",
+        "start_column": null,
+        "start_line": null,
+        "uncertainty_reason": "宏展开后无法确认行号"
+      },
+      "type": "paragraph"
+    },
+    {
+      "child_ids": [
+        "p2",
+        "p3"
+      ],
+      "id": "sec",
+      "normalized_latex": null,
+      "parent_id": null,
+      "plain_text": null,
+      "raw_latex": "\\section{方法}",
+      "section_path": [
+        "方法"
+      ],
+      "source": {
+        "confidence": 1.0,
+        "end_column": null,
+        "end_line": 13,
+        "file": "sections/method.tex",
+        "start_column": null,
+        "start_line": 13,
+        "uncertainty_reason": null
+      },
+      "type": "section"
+    }
+  ],
+  "nodes_old": [
+    {
+      "child_ids": [],
+      "id": "p1",
+      "normalized_latex": null,
+      "parent_id": "sec",
+      "plain_text": null,
+      "raw_latex": "旧文\\cite{a}",
+      "section_path": [
+        "方法"
+      ],
+      "source": {
+        "confidence": 1.0,
+        "end_column": null,
+        "end_line": 12,
+        "file": "sections/method.tex",
+        "start_column": null,
+        "start_line": 12,
+        "uncertainty_reason": null
+      },
+      "type": "paragraph"
+    },
+    {
+      "child_ids": [
+        "p1"
+      ],
+      "id": "sec",
+      "normalized_latex": null,
+      "parent_id": null,
+      "plain_text": null,
+      "raw_latex": "\\section{方法}",
+      "section_path": [
+        "方法"
+      ],
+      "source": {
+        "confidence": 1.0,
+        "end_column": null,
+        "end_line": 12,
+        "file": "sections/method.tex",
+        "start_column": null,
+        "start_line": 12,
+        "uncertainty_reason": null
+      },
+      "type": "section"
+    }
+  ],
+  "old": {
+    "identifier": "HEAD",
+    "kind": "git"
+  },
+  "schema_version": "1.0",
+  "summary": {
+    "added_words": 2,
+    "category_hits": {
+      "citation": 1,
+      "text": 2
+    },
+    "changes": 2,
+    "removed_words": 1
+  }
+}

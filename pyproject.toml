@@ -1,0 +1,26 @@
+[build-system]
+requires = ["setuptools>=77", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "latex-review"
+version = "0.1.0"
+description = "LaTeX 论文结构化审阅工具（工程骨架）"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = ["jsonschema>=4.21,<5"]
+
+[project.optional-dependencies]
+test = ["pytest>=8,<10"]
+
+[project.scripts]
+latex-review = "latex_review.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+latex_review = ["schemas/*.json"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
