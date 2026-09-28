@@ -1,0 +1,208 @@
+"""双侧审阅节点的确定性、一对一匹配。"""
+
+from __future__ import annotations
+
+from collections import Counter
+from dataclasses import dataclass
+from difflib import SequenceMatcher
+import re
+
+from .structure import ParsedNode, ParsedProject
+from .text_diff import normalized_text
+
+
+@dataclass(frozen=True)
+class NodePair:
+    old_id: str
+    new_id: str
+    confidence: float
+    reason: str
+
+
+@dataclass(frozen=True)
+class UnmatchedNode:
+    side: str
+    node_id: str
+    confidence: float  # 与最佳候选的分数；不是已经建立的配对。
+    reason: str
+
+
+@dataclass(frozen=True)
+class NodeMapping:
+    pairs: tuple[NodePair, ...]
+    old_unmatched: tuple[UnmatchedNode, ...]
+    new_unmatched: tuple[UnmatchedNode, ...]
+
+    @property
+    def old_to_new(self) -> dict[str, str]:
+        return {pair.old_id: pair.new_id for pair in self.pairs}
+
+    @property
+    def new_to_old(self) -> dict[str, str]:
+        return {pair.new_id: pair.old_id for pair in self.pairs}
+
+
+def _title(value: str) -> str:
+    value = re.sub(r"^\s*(?:第[一二三四五六七八九十百0-9]+[章节]|(?:\d+[.．、])+)\s*", "", value)
+    return " ".join(value.casefold().split())
+
+
+def _scope(node: ParsedNode) -> tuple[str, ...]:
+    path = node.review.section_path
+    if node.review.type in {"part", "chapter", "section", "subsection", "subsubsection"}:
+        path = path[:-1]
+    return tuple(_title(part) for part in path)
+
+
+def _neighbors(nodes: tuple[ParsedNode, ...], index: int) -> tuple[str | None, str | None]:
+    node = nodes[index]
+    scope = _scope(node)
+    previous = next((nodes[j].review.id for j in range(index - 1, -1, -1)
+                     if _scope(nodes[j]) == scope and nodes[j].review.type == node.review.type), None)
+    following = next((nodes[j].review.id for j in range(index + 1, len(nodes))
+                      if _scope(nodes[j]) == scope and nodes[j].review.type == node.review.type), None)
+    return previous, following
+
+
+def _ancestor_labels(node: ParsedNode, by_id: dict[str, ParsedNode]) -> set[str]:
+    ancestor_labels: set[str] = set()
+    parent_id = node.review.parent_id
+    while parent_id and parent_id in by_id:
+        ancestor = by_id[parent_id]
+        ancestor_labels.update(ancestor.labels)
+        parent_id = ancestor.review.parent_id
+    return ancestor_labels
+
+
+def _semantic_raw(node: ParsedNode, by_id: dict[str, ParsedNode]) -> str:
+    """标题标签有时落在下一段源码里；它不属于该段正文。"""
+    ancestor_labels = _ancestor_labels(node, by_id)
+    if not ancestor_labels:
+        return node.review.raw_latex
+    return re.sub(r"\\label\s*\{([^{}]+)\}",
+                  lambda match: "" if match.group(1) in ancestor_labels else match.group(),
+                  node.review.raw_latex)
+
+
+def match_nodes(old: ParsedProject, new: ParsedProject) -> NodeMapping:
+    """唯一标签和唯一内容先锚定，邻域只辅助有证据的剩余候选。"""
+    a, b = old.nodes, new.nodes
+    a_by_id, b_by_id = old.by_id(), new.by_id()
+    a_indices = {node.review.id: i for i, node in enumerate(a)}
+    a_scope = [_scope(node) for node in a]
+    b_scope = [_scope(node) for node in b]
+    a_neighbors = [_neighbors(a, i) for i in range(len(a))]
+    b_neighbors = [_neighbors(b, i) for i in range(len(b))]
+    a_raw = [_semantic_raw(node, a_by_id) for node in a]
+    b_raw = [_semantic_raw(node, b_by_id) for node in b]
+    a_effective_labels = [set(node.labels) - _ancestor_labels(node, a_by_id) for node in a]
+    b_effective_labels = [set(node.labels) - _ancestor_labels(node, b_by_id) for node in b]
+    a_labels = Counter((node.review.type, label) for node, labels in zip(a, a_effective_labels) for label in labels)
+    b_labels = Counter((node.review.type, label) for node, labels in zip(b, b_effective_labels) for label in labels)
+    a_text = [normalized_text(raw) for raw in a_raw]
+    b_text = [normalized_text(raw) for raw in b_raw]
+    used_a: set[int] = set()
+    used_b: set[int] = set()
+    pairs: list[NodePair] = []
+    pair_map: dict[str, str] = {}
+    similarities: dict[tuple[int, int], float] = {}
+
+    def add(i: int, j: int, confidence: float, reason: str) -> None:
+        used_a.add(i)
+        used_b.add(j)
+        pairs.append(NodePair(a[i].review.id, b[j].review.id, round(confidence, 3), reason))
+        pair_map[a[i].review.id] = b[j].review.id
+
+    def parents_match(i: int, j: int) -> bool:
+        old_parent, new_parent = a[i].review.parent_id, b[j].review.parent_id
+        return (old_parent is None and new_parent is None) or bool(old_parent and pair_map.get(old_parent) == new_parent)
+
+    # 重复标签没有身份语义，不能覆盖先前的标签映射。
+    for i, item in enumerate(a):
+        if i in used_a:
+            continue
+        labels = {label for label in a_effective_labels[i]
+                  if a_labels[item.review.type, label] == b_labels[item.review.type, label] == 1}
+        options = [j for j, candidate in enumerate(b) if j not in used_b and
+                   candidate.review.type == item.review.type and labels.intersection(b_effective_labels[j]) and
+                   a_scope[i] == b_scope[j] and parents_match(i, j)]
+        if len(options) == 1:
+            add(i, options[0], .99, "两侧唯一标签、类型和章节一致")
+
+    # 唯一规范化内容不依赖绝对序号；重复正文留给邻域阶段。
+    for i, item in enumerate(a):
+        if i in used_a or not a_text[i]:
+            continue
+        key = (item.review.type, a_scope[i], a_text[i])
+        ai = [k for k, n in enumerate(a) if k not in used_a and (n.review.type, a_scope[k], a_text[k]) == key]
+        bj = [k for k, n in enumerate(b) if k not in used_b and parents_match(i, k)
+              and (n.review.type, b_scope[k], b_text[k]) == key]
+        if len(ai) == len(bj) == 1:
+            add(i, bj[0], .98, "章节、类型和规范化内容唯一一致")
+
+    def score(i: int, j: int) -> tuple[float, str]:
+        left, right = a[i], b[j]
+        if left.review.type != right.review.type:
+            return 0.0, "节点类型不同"
+        if not parents_match(i, j):
+            return 0.0, "父节点未配对"
+        parent_pair = pair_map.get(left.review.parent_id)
+        same_scope = a_scope[i] == b_scope[j] or bool(parent_pair and parent_pair == right.review.parent_id)
+        if not same_scope:
+            return 0.0, "章节不同；跨章节移动留待后续版本"
+        if (i, j) not in similarities:
+            similarities[i, j] = SequenceMatcher(None, a_text[i], b_text[j], autojunk=False).ratio()
+        similarity = similarities[i, j]
+        old_prev, old_next = a_neighbors[i]
+        new_prev, new_next = b_neighbors[j]
+        neighbor = .5 * (old_prev is not None and pair_map.get(old_prev) == new_prev)
+        neighbor += .5 * (old_next is not None and pair_map.get(old_next) == new_next)
+        position = 1 - abs(i / max(len(a) - 1, 1) - j / max(len(b) - 1, 1))
+        value = .45 * similarity + .15 + .35 * neighbor + .05 * position
+        if similarity == 1:
+            value = max(value, .8)
+        reason = f"内容相似度 {similarity:.2f}；邻域支持 {neighbor:.1f}；章节和类型一致"
+        return round(min(value, .97), 3), reason
+
+    # 每轮只提交双方唯一的最佳候选；稳定排序只决定处理次序，不解除歧义。
+    while True:
+        candidates = {(i, j): score(i, j) for i in range(len(a)) if i not in used_a
+                      for j in range(len(b)) if j not in used_b and a[i].review.type == b[j].review.type}
+        eligible = []
+        for (i, j), (value, reason) in candidates.items():
+            if value < .45:
+                continue
+            other_a = max((v[0] for (k, l), v in candidates.items() if k == i and l != j), default=0)
+            other_b = max((v[0] for (k, l), v in candidates.items() if l == j and k != i), default=0)
+            if value - max(other_a, other_b) >= .08:
+                eligible.append((value, i, j, reason))
+        if not eligible:
+            break
+        eligible.sort(key=lambda item: (-item[0], item[1], item[2]))
+        _, i, j, reason = eligible[0]
+        add(i, j, candidates[i, j][0], reason)
+
+    def unmatched(side: str) -> tuple[UnmatchedNode, ...]:
+        own, other, used, other_used = (a, b, used_a, used_b) if side == "old" else (b, a, used_b, used_a)
+        output = []
+        for index, node in enumerate(own):
+            if index in used:
+                continue
+            options = [(score(index, k) if side == "old" else score(k, index))[0]
+                       for k, candidate in enumerate(other) if k not in other_used and
+                       candidate.review.type == node.review.type]
+            best = max(options, default=0.0)
+            if best:
+                reason = "候选存在歧义或置信度不足，按删除和新增处理"
+            else:
+                same_scope = any(candidate.review.type == node.review.type and
+                                 (a_scope[index] == b_scope[k] if side == "old" else b_scope[index] == a_scope[k])
+                                 for k, candidate in enumerate(other) if k not in other_used)
+                reason = "父节点未可靠配对" if same_scope else "无同章节同类型候选"
+            output.append(UnmatchedNode(side, node.review.id, best, reason))
+        return tuple(output)
+
+    pairs.sort(key=lambda item: a_indices[item.old_id])
+    assert len({pair.old_id for pair in pairs}) == len(pairs)
+    assert len({pair.new_id for pair in pairs}) == len(pairs)
+    return NodeMapping(tuple(pairs), unmatched("old"), unmatched("new"))
