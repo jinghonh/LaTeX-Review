@@ -13,7 +13,7 @@ with resolve_sources(entry="main.tex", old_dir="paper-old", new_dir="paper-new")
 
 来源形式互斥：`old_dir`、`new_dir` 与相对 `entry`；两个独立文件 `old_file`、`new_file`；或 Git 的相对/绝对 `entry`，可另指定成对的 `old_revision`、`new_revision`。Git 默认比较当前 `HEAD` 的完整对象树和当前磁盘工作区。两侧的 `identity.kind` 分别为 `git`、`worktree`、`directory` 或 `file`；Git 标识固定为完整提交 SHA。工作区副本依据 Git 索引列出已跟踪路径，再读取磁盘内容，同时纳入未忽略的未跟踪文件；已删除的文件不会从索引回填。被忽略的未跟踪依赖给出 `ignored_dependency` 诊断。
 
-`ExpandedProject.text` 是包含文件替换后的文字；宏定义、调用、注释及资源命令原样保留。宏定义体内的依赖命令不会提前执行，并给出不确定性诊断。`dependencies` 逐次记录包含、图与文献资源；重复包含各有不同 `include_instance`。静态解析不能确定的依赖、缺依赖和包含循环保留原命令，并分别报告诊断。此层不执行 TeX 宏，也不构建审阅节点。
+`ExpandedProject.text` 是包含文件替换后的文字；宏与环境定义、调用、注释及资源命令原样保留。宏和环境的定义体内的依赖命令不会提前执行，并给出不确定性诊断。`dependencies` 逐次记录包含、图与文献资源；重复包含各有不同 `include_instance`。静态解析不能确定的依赖、缺依赖和包含循环保留原命令，并分别报告诊断。此层不执行 TeX 宏，也不构建审阅节点。
 
 `ExpandedProject.origin_ranges(start, end)` 返回展开区间内所有来源片段。展开偏移和原文件偏移都是**零起始 Unicode 字符下标，区间右端不含**；行列均从 1 开始，结束行列指向右端排他位置。`\r\n` 算一个换行，多字节字符算一个字符。每个 `MappedRange` 同时记录展开区间、原文件相对路径及字符区间、行列、包含实例和 `confidence`。已确定内容为 `exact`；缺失或无法静态展开的包含命令为 `unknown`。跨文件节点和重复包含应保留返回的全部片段，不能合并成单个连续原文范围。此映射不改变公共 `ReviewNode` 输出契约；后续结构解析可用片段集合决定节点定位或明确标记不确定。
 

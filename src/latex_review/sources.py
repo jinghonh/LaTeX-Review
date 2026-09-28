@@ -79,7 +79,7 @@ class ExpandedProject:
 
 
 _COMMAND = re.compile(r"\\(input|include|bibliography|addbibresource|includegraphics|bibliographystyle|graphicspath)(?![A-Za-z@])")
-_MACRO_DEFINITION = re.compile(r"\\(newcommand|renewcommand|providecommand|DeclareRobustCommand|def|gdef|edef|xdef)(?![A-Za-z@])")
+_MACRO_DEFINITION = re.compile(r"\\(newcommand|renewcommand|providecommand|DeclareRobustCommand|newenvironment|renewenvironment|provideenvironment|def|gdef|edef|xdef)(?![A-Za-z@])")
 _GRAPHICS = (".pdf", ".png", ".jpg", ".jpeg", ".eps", ".svg", ".webp")
 
 
@@ -318,6 +318,8 @@ def _macro_definition_end(text: str, match: re.Match[str]) -> tuple[int, str] | 
             cursor = _skip_space_comments(text, cursor)
     body_start = cursor
     end = _group_end(text, body_start, "{", "}")
+    if end is not None and match.group(1).endswith("environment"):
+        end = _group_end(text, _skip_space_comments(text, end), "{", "}")
     return None if end is None else (end, text[body_start + 1:end - 1])
 
 

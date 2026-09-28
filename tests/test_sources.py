@@ -211,6 +211,26 @@ def test_macro_definition_body_is_preserved_without_executing_dependencies(tmp_p
             assert "不得提前展开" not in result.text
 
 
+@pytest.mark.parametrize("definition", [
+    "\\newenvironment{later}{\\input{begin-part}}{\\include{end-part}}\n",
+    "\\renewenvironment{later}[1]{\\input{begin-part}}{\\include{end-part}}\n",
+])
+def test_environment_definition_preserves_both_bodies(tmp_path, definition):
+    for side in ("old", "new"):
+        root = tmp_path / side
+        write(root, "main.tex", definition + "\\input{actual}\n")
+        write(root, "begin-part.tex", "开始体不应展开")
+        write(root, "end-part.tex", "结束体不应展开")
+        write(root, "actual.tex", "正文应展开")
+    with resolve_sources(entry="main.tex", old_dir=tmp_path / "old", new_dir=tmp_path / "new") as pair:
+        for side in (pair.old, pair.new):
+            result = side.expand()
+            assert result.text == definition + "正文应展开\n"
+            assert [(item.kind, item.file) for item in result.dependencies] == [("include", "actual.tex")]
+            assert [item.code for item in result.diagnostics] == ["uncertain_dependency"]
+            assert "开始体不应展开" not in result.text and "结束体不应展开" not in result.text
+
+
 def test_input_argument_after_tex_comment(tmp_path):
     for side in ("old", "new"):
         root = tmp_path / side
