@@ -79,6 +79,28 @@ def test_removed_citation_does_not_consume_later_unchanged_site(tmp_path):
     assert citation[0].kind == "removed"
     assert citation[0].old_text == "drop" and citation[0].new_text is None
     assert citation[0].source_old is not None and citation[0].source_new is None
+    assert result.document.summary.category_hits == {"citation": 1}
+    assert all(detail.category == "citation" for detail in details)
+
+
+def test_same_key_moved_across_word_is_removed_and_added_with_own_sources(tmp_path):
+    _, _, result = _compare(tmp_path, r"Alpha \cite{k} Omega Sigma Tau.",
+                            r"Alpha Omega \cite{k} Sigma Tau.")
+    assert result.document.summary.changes == 1
+    assert result.document.summary.category_hits == {"citation": 1}
+    citations = [detail for detail in result.document.changes[0].details if detail.category == "citation"]
+    assert {detail.kind for detail in citations} == {"removed", "added"}
+    removed = next(detail for detail in citations if detail.kind == "removed")
+    added = next(detail for detail in citations if detail.kind == "added")
+    assert removed.source_old and removed.source_new is None
+    assert added.source_old is None and added.source_new
+
+
+def test_whitespace_change_next_to_stable_citation_remains_text_change(tmp_path):
+    _, _, result = _compare(tmp_path, r"A\cite{k} B.", r"A \cite{k} B.")
+    assert result.document.summary.changes == 1
+    assert result.document.summary.category_hits == {"text": 1}
+    assert any(detail.category == "text" for detail in result.document.changes[0].details)
 
 
 def test_inserted_inline_math_preserves_later_formula_sources(tmp_path):

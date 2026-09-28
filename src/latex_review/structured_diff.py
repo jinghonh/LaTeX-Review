@@ -60,6 +60,14 @@ def align_inline_sites(left: ParsedNode | None, right: ParsedNode | None,
         return tokens if ok else node.review.raw_latex
 
     def score(i: int, j: int) -> float:
+        if kind == "citation":
+            old_before, old_after = old_context[i]
+            new_before, new_after = new_context[j]
+            same_left = bool(old_before and new_before and old_before[-1] == new_before[-1])
+            same_right = bool(old_after and new_after and old_after[0] == new_after[0])
+            empty_both = not (old_before or old_after or new_before or new_after)
+            if not (same_left or same_right or empty_both):
+                return -1e6  # 同键但两侧相邻正文均变，不能视为原位置未变。
         context = sum(SequenceMatcher(None, old_context[i][side], new_context[j][side], autojunk=False).ratio()
                       for side in (0, 1))
         return .45 * context + (.3 if identity(old_sites[i]) == identity(new_sites[j]) else 0)

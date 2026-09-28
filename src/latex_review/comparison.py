@@ -51,6 +51,29 @@ def _text_of(tokens) -> str:
     return " ".join(token.text for token in tokens)
 
 
+def _prose_tokens(tokens):
+    """去掉行内站点后合并相邻普通空格，保留真实的词间边界。"""
+    result = []
+    for token in tokens:
+        if token.kind in {"citation", "math"}:
+            continue
+        if token.kind == "space" and token.text == "␠" and result and result[-1].kind == "space" and result[-1].text == "␠":
+            continue
+        result.append(token)
+    return tuple(result)
+
+
+def _site_spaces(parent: ParsedNode, site: ParsedNode) -> tuple[bool, bool]:
+    raw = parent.review.raw_latex
+    start = site.expanded_start - parent.expanded_start
+    end = site.expanded_end - parent.expanded_start
+    return (start > 0 and raw[start - 1].isspace(), end < len(raw) and raw[end].isspace())
+
+
+def _space_description(space: tuple[bool, bool]) -> str:
+    return f"前侧{'有' if space[0] else '无'}空白；后侧{'有' if space[1] else '无'}空白"
+
+
 def compare_projects(old: ParsedProject, new: ParsedProject, *, review_comments: bool = False) -> ComparisonResult:
     """比较解析后的两侧项目；主变更按审阅结构计数。"""
     mapping = match_nodes(old, new)
@@ -79,8 +102,7 @@ def compare_projects(old: ParsedProject, new: ParsedProject, *, review_comments:
         old_tokens = scan_latex(_semantic_raw(a[left.id], a))[0] if left else ()
         new_tokens = scan_latex(_semantic_raw(b[right.id], b))[0] if right else ()
         # 公式和引用是完整词元；其语义明细按子节点及其来源位置独立比较。
-        text_edits = token_edits(tuple(token for token in old_tokens if token.kind not in {"citation", "math"}),
-                                 tuple(token for token in new_tokens if token.kind not in {"citation", "math"}))
+        text_edits = token_edits(_prose_tokens(old_tokens), _prose_tokens(new_tokens))
         details: list[ChangeDetail] = []
         categories: list[str] = []
         for edit in text_edits:
@@ -107,6 +129,21 @@ def compare_projects(old: ParsedProject, new: ParsedProject, *, review_comments:
                 details.append(ChangeDetail(f"detail-{len(details) + 1:03d}", detail.category, detail.kind,
                                             detail.old_text, detail.new_text, detail.summary,
                                             detail.source_old, detail.source_new))
+        if not text_edits and left and right:
+            for site_kind in ("citation", "inline_math"):
+                old_sites = [a[child] for child in left.child_ids if a[child].review.type == site_kind]
+                new_sites = [b[child] for child in right.child_ids if b[child].review.type == site_kind]
+                for old_index, new_index in align_inline_sites(a[left.id], b[right.id], old, new, site_kind):
+                    if old_index is None or new_index is None:
+                        continue
+                    old_space = _site_spaces(a[left.id], old_sites[old_index])
+                    new_space = _site_spaces(b[right.id], new_sites[new_index])
+                    if old_space != new_space:
+                        categories.append("text")
+                        details.append(ChangeDetail(f"detail-{len(details) + 1:03d}", "text", "modified",
+                                                    _space_description(old_space), _space_description(new_space),
+                                                    "行内内容相邻空白变化"))
+                        break
         if not details:
             return
         kind = "modified" if left and right else "removed" if left else "added"
