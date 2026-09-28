@@ -22,6 +22,7 @@ from .preview import PreviewResult, render_preview
 from .matching import NodeMapping, NodePair, UnmatchedNode, match_nodes
 from .text_diff import CommentSpan, TextToken, TokenEdit, normalized_text, scan_latex, token_edits
 from .comparison import ComparisonResult, compare_projects
+from .report import ReportResult, write_report
 
 __all__ = [
     "SCHEMA_VERSION", "ChangeDetail", "ComparisonSource", "Diagnostic",
@@ -33,4 +34,5 @@ __all__ = [
     "NodeMapping", "NodePair", "UnmatchedNode", "match_nodes",
     "CommentSpan", "TextToken", "TokenEdit", "normalized_text", "scan_latex", "token_edits",
     "ComparisonResult", "compare_projects",
+    "ReportResult", "write_report",
 ]

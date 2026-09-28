@@ -46,6 +46,9 @@ class Dependency:
     file: str
     referenced_from: str
     include_instance: str
+    argument: str | None = None
+    source_start: int | None = None
+    source_end: int | None = None
 
 
 @dataclass(frozen=True)
@@ -487,7 +490,7 @@ def expand_project(source: ProjectSource) -> ExpandedProject:
                     emit(file, content, start, end, instance, "unknown")
                     cursor = end
                     continue  # 原命令仍保留在展开文本中。
-                dependencies.append(Dependency("include", resolved, file, instance))
+                dependencies.append(Dependency("include", resolved, file, instance, argument, start, end))
                 if resolved in chain:
                     issue("include_cycle", f"包含循环：{' → '.join((*chain, resolved))}", file, start, end, (*chain, resolved))
                     emit(file, content, cursor, start, instance)
@@ -512,7 +515,8 @@ def expand_project(source: ProjectSource) -> ExpandedProject:
                 if problem:
                     issue(problem, f"无法确定或读取资源 {item}；包含链：{' → '.join(chain)}", file, start, end, chain)
                 else:
-                    dependencies.append(Dependency("graphic" if name == "includegraphics" else "bibliography", resolved, file, instance))
+                    dependencies.append(Dependency("graphic" if name == "includegraphics" else "bibliography",
+                                                   resolved, file, instance, item, start, end))
         emit(file, content, cursor, len(content), instance)
 
     visit(source.entry, (source.entry,))
