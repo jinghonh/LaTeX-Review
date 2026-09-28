@@ -66,6 +66,8 @@ class ChangeDetail:
     old_text: str | None
     new_text: str | None
     summary: str
+    source_old: SourceLocation | None = None
+    source_new: SourceLocation | None = None
 
 
 @dataclass(frozen=True)
@@ -163,7 +165,13 @@ def _ordered(value: object) -> object:
         result["changes"] = []
         for change in sorted(value.changes, key=lambda c: c.id):
             item = asdict(change)
-            item["details"] = [asdict(detail) for detail in sorted(change.details, key=lambda d: d.id)]
+            item["details"] = []
+            for detail in sorted(change.details, key=lambda d: d.id):
+                detail_data = asdict(detail)
+                for side in ("source_old", "source_new"):
+                    if detail_data[side] is None:
+                        del detail_data[side]
+                item["details"].append(detail_data)
             item["categories"] = sorted(set(change.categories))
             result["changes"].append(item)
         result["diagnostics"] = [asdict(d) for d in sorted(value.diagnostics, key=lambda d: (d.code, d.message))]

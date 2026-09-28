@@ -9,6 +9,7 @@
 - `SourceLocation` 的 `file` 是非空的原始源文件相对路径；未知文件可填 `null`，但不得使用空字符串或绝对路径。行列号从 1 开始。未知文件或行号填 `null`，同时提供非空 `uncertainty_reason`；`confidence` 为独立的源码定位置信度。整侧不存在时，主变更中的对应位置直接为 `null`。
 - `PrimaryChange` 是总数计数单位，包含旧新节点标识、旧新位置、独立的 `matching_confidence`、类别和明细。节点存在的一侧必须有 `SourceLocation` 对象，即使文件或行号未知。新增仅有新侧，删除仅有旧侧。匹配不确定仍可通过置信度表示，不得伪造源码坐标。
 - `ChangeDetail` 记录所属主变更内的引用、公式等细节。`category_hits` 按包含该类别的**主变更**计数，同一主变更中的同类多个明细只命中一次；同一主变更可命中多个类别，所以各类别之和可以大于 `changes`。
+- `ChangeDetail.source_old` 与 `source_new` 是可选位置；引用位置、段内公式等可在保留父主变更位置的同时标明各自的原始源码位置。缺侧字段可省略，已有 1.0 输出保持兼容。结构化内容用法见[结构化内容差异接口](structured-content.md)。
 - `Summary.added_words` 与 `removed_words` 是正文词数，由后续比较器提供；注释主变更计入 `changes` 和 `comment` 类别，但不得计入这两个词数。`category_hits` 在构造时复制并冻结，避免构造后改动摘要。
 - `Diagnostic` 使用固定严重级别、稳定代码、消息及可选的旧新位置。诊断另存独立文件，即使无诊断也为 `[]`。
 

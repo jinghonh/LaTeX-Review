@@ -9,7 +9,8 @@ from typing import Mapping
 
 from .contract import ChangeDetail, Diagnostic, PrimaryChange, ReviewDocument, ReviewNode, SourceLocation, build_summary
 from .matching import NodeMapping, _semantic_raw, match_nodes
-from .structure import ParsedProject
+from .structure import ParsedNode, ParsedProject
+from .structured_diff import align_inline_sites, citation_details, equation_details, figure_details, table_details
 from .text_diff import TokenEdit, scan_latex, token_edits
 
 
@@ -50,6 +51,29 @@ def _text_of(tokens) -> str:
     return " ".join(token.text for token in tokens)
 
 
+def _prose_tokens(tokens):
+    """去掉行内站点后合并相邻普通空格，保留真实的词间边界。"""
+    result = []
+    for token in tokens:
+        if token.kind in {"citation", "math"}:
+            continue
+        if token.kind == "space" and token.text == "␠" and result and result[-1].kind == "space" and result[-1].text == "␠":
+            continue
+        result.append(token)
+    return tuple(result)
+
+
+def _site_spaces(parent: ParsedNode, site: ParsedNode) -> tuple[bool, bool]:
+    raw = parent.review.raw_latex
+    start = site.expanded_start - parent.expanded_start
+    end = site.expanded_end - parent.expanded_start
+    return (start > 0 and raw[start - 1].isspace(), end < len(raw) and raw[end].isspace())
+
+
+def _space_description(space: tuple[bool, bool]) -> str:
+    return f"前侧{'有' if space[0] else '无'}空白；后侧{'有' if space[1] else '无'}空白"
+
+
 def compare_projects(old: ParsedProject, new: ParsedProject, *, review_comments: bool = False) -> ComparisonResult:
     """比较解析后的两侧项目；主变更按审阅结构计数。"""
     mapping = match_nodes(old, new)
@@ -77,37 +101,86 @@ def compare_projects(old: ParsedProject, new: ParsedProject, *, review_comments:
                     reason: str) -> None:
         old_tokens = scan_latex(_semantic_raw(a[left.id], a))[0] if left else ()
         new_tokens = scan_latex(_semantic_raw(b[right.id], b))[0] if right else ()
-        edits = token_edits(old_tokens, new_tokens)
-        old_citations = set(a[left.id].citations) if left else set()
-        new_citations = set(b[right.id].citations) if right else set()
-        citation_changed = old_citations != new_citations
-        if not edits and not citation_changed:
-            return
+        # 公式和引用是完整词元；其语义明细按子节点及其来源位置独立比较。
+        text_edits = token_edits(_prose_tokens(old_tokens), _prose_tokens(new_tokens))
         details: list[ChangeDetail] = []
-        categories = []
-        for edit in edits:
+        categories: list[str] = []
+        for edit in text_edits:
             old_visible = _text_of(edit.old)
             new_visible = _text_of(edit.new)
-            citation_only = all(token.kind == "citation" for token in (*edit.old, *edit.new))
-            if citation_only:
-                continue
             categories.append("text")
             details.append(ChangeDetail(f"detail-{len(details) + 1:03d}", "text", edit.kind,
                                         old_visible or None, new_visible or None, "正文词元变化"))
-        if citation_changed:
+        for detail in citation_details(a[left.id] if left else None, b[right.id] if right else None, old, new):
             categories.append("citation")
-            details.append(ChangeDetail(f"detail-{len(details) + 1:03d}", "citation", "modified",
-                                        ", ".join(sorted(old_citations)) or None,
-                                        ", ".join(sorted(new_citations)) or None, "引用键变化"))
-        # 引用命令写法变化而键不变：仍保留可见词元差异。
-        if not details and edits:
-            categories.append("text")
-            for edit in edits:
-                details.append(ChangeDetail(f"detail-{len(details) + 1:03d}", "text", edit.kind,
-                                            _text_of(edit.old) or None, _text_of(edit.new) or None, "命令写法变化"))
+            details.append(ChangeDetail(f"detail-{len(details) + 1:03d}", detail.category, detail.kind,
+                                        detail.old_text, detail.new_text, detail.summary,
+                                        detail.source_old, detail.source_new))
+        old_math = [a[child] for child in left.child_ids if a[child].review.type == "inline_math"] if left else []
+        new_math = [b[child] for child in right.child_ids if b[child].review.type == "inline_math"] if right else []
+        for old_index, new_index in align_inline_sites(a[left.id] if left else None,
+                                                        b[right.id] if right else None, old, new, "inline_math"):
+            left_inline = old_math[old_index] if old_index is not None else None
+            right_inline = new_math[new_index] if new_index is not None else None
+            unsupported = any(d.code == "unknown_latex" for node in (left_inline, right_inline) if node
+                              for d in node.diagnostics)
+            for detail in equation_details(left_inline, right_inline, diagnostics, unsupported=unsupported):
+                categories.append("equation")
+                details.append(ChangeDetail(f"detail-{len(details) + 1:03d}", detail.category, detail.kind,
+                                            detail.old_text, detail.new_text, detail.summary,
+                                            detail.source_old, detail.source_new))
+        # 站点边界独立于正文词元编辑；即使同段另有词或空白变化也保留此明细。
+        if left and right:
+            for site_kind in ("citation", "inline_math"):
+                old_sites = [a[child] for child in left.child_ids if a[child].review.type == site_kind]
+                new_sites = [b[child] for child in right.child_ids if b[child].review.type == site_kind]
+                for old_index, new_index in align_inline_sites(a[left.id], b[right.id], old, new, site_kind):
+                    if old_index is None or new_index is None:
+                        continue
+                    old_space = _site_spaces(a[left.id], old_sites[old_index])
+                    new_space = _site_spaces(b[right.id], new_sites[new_index])
+                    if old_space != new_space:
+                        categories.append("text")
+                        details.append(ChangeDetail(f"detail-{len(details) + 1:03d}", "text", "modified",
+                                                    _space_description(old_space), _space_description(new_space),
+                                                    "行内内容相邻空白变化"))
+                        break
+        if not details:
+            return
         kind = "modified" if left and right else "removed" if left else "added"
         emit(kind, left, right, confidence, tuple(dict.fromkeys(categories)), tuple(details),
-             f"{('正文修改' if kind == 'modified' else '正文删除' if kind == 'removed' else '正文新增')}；{reason}", edits)
+             f"{('正文修改' if kind == 'modified' else '正文删除' if kind == 'removed' else '正文新增')}；{reason}", text_edits)
+
+    def structured_change(left: ReviewNode | None, right: ReviewNode | None, confidence: float,
+                          reason: str) -> None:
+        kind = (right or left).type
+        left_node, right_node = a[left.id] if left else None, b[right.id] if right else None
+        if kind == "equation":
+            unsupported = any(project.by_id()[child].review.type == "fallback"
+                              for project, node in ((old, left_node), (new, right_node)) if node
+                              for child in node.review.child_ids)
+            details = equation_details(left_node, right_node, diagnostics, unsupported=unsupported)
+            old_arrays = [a[child] for child in left.child_ids if a[child].review.type == "table"] if left else []
+            new_arrays = [b[child] for child in right.child_ids if b[child].review.type == "table"] if right else []
+            for index in range(max(len(old_arrays), len(new_arrays))):
+                for detail in table_details(old_arrays[index] if index < len(old_arrays) else None,
+                                            new_arrays[index] if index < len(new_arrays) else None):
+                    details.append(ChangeDetail(f"detail-{len(details) + 1:03d}", detail.category, detail.kind,
+                                                detail.old_text, detail.new_text, detail.summary,
+                                                detail.source_old, detail.source_new))
+        elif kind == "figure":
+            details = figure_details(left_node, right_node)
+        else:
+            details = table_details(left_node, right_node)
+        if not details:
+            return
+        change_kind = "modified" if left and right else "removed" if left else "added"
+        emit(change_kind, left, right, confidence, tuple(dict.fromkeys(detail.category for detail in details)),
+             tuple(details), f"{kind} 整体变化；{reason}")
+
+    def nested_array(node: ReviewNode, by_id: dict[str, ParsedNode]) -> bool:
+        return (node.type == "table" and node.parent_id is not None and
+                by_id[node.parent_id].review.type == "equation")
 
     # 配对及未配对节点均按旧侧文档顺序输出，末尾追加新侧新增。
     pairs = {pair.old_id: pair for pair in mapping.pairs}
@@ -115,19 +188,19 @@ def compare_projects(old: ParsedProject, new: ParsedProject, *, review_comments:
     unmatched_new = {item.node_id: item for item in mapping.new_unmatched}
     for node in old.nodes:
         left = node.review
-        if not _is_text_node(left):
+        if nested_array(left, a) or not (_is_text_node(left) or left.type in {"equation", "figure", "table"}):
             continue
         if pair := pairs.get(left.id):
-            text_change(left, b[pair.new_id].review, pair.confidence, pair.reason)
+            (text_change if _is_text_node(left) else structured_change)(left, b[pair.new_id].review, pair.confidence, pair.reason)
         elif item := unmatched_old.get(left.id):
-            text_change(left, None, item.confidence, item.reason)
+            (text_change if _is_text_node(left) else structured_change)(left, None, item.confidence, item.reason)
             if item.confidence:
                 diagnostics.append(Diagnostic("low_confidence_match", "warning", "节点未可靠配对；按删除与新增处理：" + item.reason,
                                               source_old=left.source))
     for node in new.nodes:
         right = node.review
-        if _is_text_node(right) and (item := unmatched_new.get(right.id)):
-            text_change(None, right, item.confidence, item.reason)
+        if not nested_array(right, b) and (_is_text_node(right) or right.type in {"equation", "figure", "table"}) and (item := unmatched_new.get(right.id)):
+            (text_change if _is_text_node(right) else structured_change)(None, right, item.confidence, item.reason)
             if item.confidence:
                 diagnostics.append(Diagnostic("low_confidence_match", "warning", "节点未可靠配对；按删除与新增处理：" + item.reason,
                                               source_new=right.source))

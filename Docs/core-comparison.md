@@ -19,4 +19,4 @@ with resolve_sources(entry="main.tex", old_dir="old", new_dir="new") as pair:
 
 `review_comments` 默认关闭。开启后，段内及独立行注释以独立的 `comment` 审阅节点和主变更记录，计入总数和分类命中数，不计正文增删词数。相同注释按顺序稳定对齐，修改、插入和删除分别记录。注释节点仅在开启时追加到两侧 `ReviewDocument` 节点列表；公共数据格式无需升级。
 
-本模块为 #10 保留公式、图表等节点的一对一映射，目前不生成这些结构的专门差异；三栏报告由 #16 消费比较结果。
+主票 #10 已在同一 `compare_projects` 接口上加入公式、引用、图和表的专门明细；计数、来源与回退规则见[结构化内容差异接口](structured-content.md)。三栏报告仍由 #16 消费比较结果。

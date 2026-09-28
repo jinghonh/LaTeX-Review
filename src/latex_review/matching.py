@@ -8,7 +8,7 @@ from difflib import SequenceMatcher
 import re
 
 from .structure import ParsedNode, ParsedProject
-from .text_diff import normalized_text
+from .text_diff import normalized_text, scan_latex
 
 
 @dataclass(frozen=True)
@@ -84,6 +84,14 @@ def _semantic_raw(node: ParsedNode, by_id: dict[str, ParsedNode]) -> str:
                   node.review.raw_latex)
 
 
+def _matching_text(raw: str, kind: str) -> str:
+    if kind == "paragraph":
+        return " ".join("⟦引用⟧" if token.kind == "citation" else
+                        "⟦公式⟧" if token.kind == "math" else token.text
+                        for token in scan_latex(raw)[0])
+    return normalized_text(raw)
+
+
 def match_nodes(old: ParsedProject, new: ParsedProject) -> NodeMapping:
     """唯一标签和唯一内容先锚定，邻域只辅助有证据的剩余候选。"""
     a, b = old.nodes, new.nodes
@@ -99,8 +107,8 @@ def match_nodes(old: ParsedProject, new: ParsedProject) -> NodeMapping:
     b_effective_labels = [set(node.labels) - _ancestor_labels(node, b_by_id) for node in b]
     a_labels = Counter((node.review.type, label) for node, labels in zip(a, a_effective_labels) for label in labels)
     b_labels = Counter((node.review.type, label) for node, labels in zip(b, b_effective_labels) for label in labels)
-    a_text = [normalized_text(raw) for raw in a_raw]
-    b_text = [normalized_text(raw) for raw in b_raw]
+    a_text = [_matching_text(raw, node.review.type) for raw, node in zip(a_raw, a)]
+    b_text = [_matching_text(raw, node.review.type) for raw, node in zip(b_raw, b)]
     used_a: set[int] = set()
     used_b: set[int] = set()
     pairs: list[NodePair] = []
@@ -142,6 +150,20 @@ def match_nodes(old: ParsedProject, new: ParsedProject) -> NodeMapping:
               and scope_compatible(i, k) and n.review.type == item.review.type and b_text[k] == a_text[i]]
         if len(ai) == len(bj) == 1:
             add(i, bj[0], .98, "章节、类型和规范化内容唯一一致")
+
+    # 图表与独立公式按同一父结构内的剩余顺序配对；只有两侧剩余数量相等才使用
+    # 此锚点。多项内部字段同时改变时，原始字符串相似度不足以可靠建立配对。
+    for kind in ("equation", "figure", "table"):
+        scopes = sorted({_scope(node) for node in a if node.review.type == kind} |
+                        {_scope(node) for node in b if node.review.type == kind})
+        for scope in scopes:
+            old_indices = [i for i, node in enumerate(a) if i not in used_a and node.review.type == kind and a_scope[i] == scope]
+            new_indices = [j for j, node in enumerate(b) if j not in used_b and node.review.type == kind and b_scope[j] == scope]
+            if len(old_indices) != len(new_indices):
+                continue
+            for i, j in zip(old_indices, new_indices):
+                if parents_match(i, j) and scope_compatible(i, j):
+                    add(i, j, .75, "同一父结构内结构化节点顺序对应")
 
     def score(i: int, j: int) -> tuple[float, str]:
         left, right = a[i], b[j]

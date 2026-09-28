@@ -186,6 +186,26 @@ def _embedded_fallbacks(children: list[ParsedNode], side: str) -> str:
     )
 
 
+def _table_preview(raw: str) -> str | None:
+    """只展示简单 tabular/array；复杂宏由双侧源码预览承担。"""
+    opening = re.search(r"\\begin\{(?:tabular\*?|array)\}(?:\[[^\]]*\])?\{[^{}]*\}", raw)
+    if not opening:
+        return None
+    closing = re.search(r"\\end\{(?:tabular\*?|array)\}", raw[opening.end():])
+    if not closing:
+        return None
+    body = raw[opening.end():opening.end() + closing.start()]
+    if re.search(r"\\(?!hline\b|cline\b)", re.sub(r"(?<!\\)\\\\", "", body)):
+        return None
+    body = re.sub(r"\\hline\b|\\cline\{[^{}]*\}", "", body)
+    rows = []
+    for row in re.split(r"(?<!\\)\\\\", body):
+        cells = [cell.strip() for cell in row.split("&")]
+        if any(cells):
+            rows.append("<tr>" + "".join(f"<td>{_e(cell)}</td>" for cell in cells) + "</tr>")
+    return '<table class="table-preview"><tbody>' + "".join(rows) + "</tbody></table>" if rows else None
+
+
 def _body(node: ParsedNode, project: ParsedProject, side: str, by_id: dict[str, ParsedNode], diagnostics: list[Diagnostic]) -> str:
     kind = node.review.type
     children = [by_id[child] for child in node.review.child_ids]
@@ -200,7 +220,9 @@ def _body(node: ParsedNode, project: ParsedProject, side: str, by_id: dict[str, 
     if kind == "paragraph":
         return f'<p>{_inline_html(node.review.raw_latex, project, side, children, diagnostics, node.review.source, node.expanded_start)}</p>'
     if kind == "equation":
-        return _math(node.review.raw_latex, True) + _embedded_fallbacks(children, side)
+        arrays = "".join(_render_node(child, project, side, by_id, diagnostics)
+                         for child in children if child.review.type == "table")
+        return _math(node.review.raw_latex, True) + arrays + _embedded_fallbacks(children, side)
     if kind == "list":
         tag = "ol" if node.review.raw_latex.startswith("\\begin{enumerate}") else "ul"
         return f"<{tag}>" + "".join(_render_node(child, project, side, by_id, diagnostics) for child in children) + f"</{tag}>"
@@ -216,12 +238,15 @@ def _body(node: ParsedNode, project: ParsedProject, side: str, by_id: dict[str, 
     if kind == "figure":
         caption = _caption(node.review.raw_latex)
         assets = "".join(f'<p class="asset">图资源：{_e(asset)}</p>' for asset in node.assets)
+        missing = "".join(f'<p class="node-warning">{_e(diag.message)}</p>' for diag in node.diagnostics
+                          if diag.code in {"missing_dependency", "dependency_outside_root"})
         caption_children = [child for child in children if child.review.type != "fallback"]
-        return assets + (f'<figcaption>{_inline_html(caption[0], project, side, caption_children, diagnostics, node.review.source, node.expanded_start + caption[1])}</figcaption>' if caption else "") + _embedded_fallbacks(children, side)
+        return assets + missing + (f'<figcaption>{_inline_html(caption[0], project, side, caption_children, diagnostics, node.review.source, node.expanded_start + caption[1])}</figcaption>' if caption else "") + _embedded_fallbacks(children, side)
     if kind == "table":
         caption = _caption(node.review.raw_latex)
         caption_children = [child for child in children if child.review.type != "fallback"]
         return ((f'<p class="table-caption">{_inline_html(caption[0], project, side, caption_children, diagnostics, node.review.source, node.expanded_start + caption[1])}</p>' if caption else "")
+                + (_table_preview(node.review.raw_latex) or '<p class="node-warning">复杂表格预览使用原始 LaTeX。</p>')
                 + f'<pre class="table-source">{_e(node.review.raw_latex)}</pre>' + _embedded_fallbacks(children, side))
     if kind == "bibliography":
         return '<h3>参考文献</h3>' + ("<ol>" + "".join(_render_node(child, project, side, by_id, diagnostics) for child in children) + "</ol>" if children else '<p>参考文献资源见源码。</p>')
@@ -282,6 +307,7 @@ main{{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:1rem;paddin
 .node-theorem{{border-left:3px solid #7b7161;padding:.25rem 1rem;background:#faf9f6}}
 .theorem-title{{font-weight:700;text-transform:capitalize}}figure{{margin:1rem 0;padding:.8rem;border:1px solid #ddd8cb}}
 figcaption,.table-caption{{font-style:italic}}.asset,.fallback-label{{color:#75531e}}
+.table-preview{{border-collapse:collapse;margin:.6rem 0}}.table-preview td{{border:1px solid #ddd8cb;padding:.25rem .6rem}}
 .math-tex{{font-family:serif;white-space:pre-wrap;overflow-wrap:anywhere}}.node-equation{{overflow-x:auto;text-align:center;margin:1rem 0}}
 .latex-source{{font-size:.75rem;color:#6b6356;margin:.4rem 0}}.latex-source pre,.fallback-raw,.table-source{{white-space:pre-wrap;overflow-wrap:anywhere;background:#f6f4ef;padding:.7rem;text-align:left}}
 .node-warning{{color:#9b3c26;background:#fff1e8;padding:.35rem .55rem}}.fallback-inline{{background:#fff1e8;color:#8d3320}}

@@ -18,7 +18,7 @@ def main(argv: list[str] | None = None) -> int:
     parser = ReviewArgumentParser(
         prog="latex-review",
         description="LaTeX 论文审阅工具。已提供比较来源检查；完整审阅命令尚未实现。",
-        epilog="--inspect-sources 只解析来源和依赖，不生成审阅报告或调用编译器。",
+        epilog="--inspect-sources 只解析来源和依赖，不生成审阅报告或调用编译器。图片同路径的内容检测及表格单元格定位属于后续版本。",
     )
     parser.add_argument("paths", nargs="*", help="Git 模式的入口，或两个独立源文件")
     parser.add_argument("--entry", dest="entry_option", help="双目录模式下两侧共同的相对入口")

@@ -20,12 +20,13 @@ _ENV = re.compile(r"\\(begin|end)\s*\{([^{}\s]+)\}")
 _HEADING = {"part": 0, "chapter": 1, "section": 2, "subsection": 3, "subsubsection": 4}
 _MATH_ENV = {"equation", "equation*", "align", "align*", "gather", "gather*", "multline", "multline*", "displaymath", "math"}
 _LIST_ENV = {"itemize", "enumerate", "description"}
-_TABLE_ENV = {"table", "table*", "tabular", "tabular*", "longtable"}
+_TABLE_ENV = {"table", "table*", "tabular", "tabular*", "longtable", "array"}
 _FIGURE_ENV = {"figure", "figure*"}
 _THEOREM_ENV = {"theorem", "lemma", "proposition", "corollary", "definition", "remark", "proof", "example", "claim"}
 _SAFE_COMMANDS = {
     "documentclass", "usepackage", "begin", "end", "label", "ref", "eqref", "autoref", "pageref", *CITATION_COMMANDS,
     "includegraphics", "caption", "centering", "item", "bibitem", "bibliography", "bibliographystyle", "addbibresource", "printbibliography",
+    "tag", "notag", "nonumber",
     "input", "include", "graphicspath", "textbf", "textit", "emph", "texttt", "underline", "footnote", "url", "href", "hfill",
     "small", "large", "Large", "normalsize", "itshape", "bfseries", "textsc", "noindent", "newline", "newpage", "clearpage",
     "maketitle", "title", "author", "date", "abstract", "thanks", "today", "and", "quad", "qquad", "ldots", "cdots",
@@ -281,6 +282,9 @@ class _Builder:
             local.append(_diagnostic("low_confidence_source", "结构来源位置不确定；已保留全部原文片段", location, self.project.source.side))
         if kind == "fallback":
             local.append(_diagnostic("unknown_latex", "未知或无法解析的 LaTeX 已保留原文", location, self.project.source.side))
+        if kind == "inline_math" and any(match.group(1) in self.unknown and match.group(1) not in _SAFE_COMMANDS
+                                          for match in _COMMAND.finditer(_masked(raw))):
+            local.append(_diagnostic("unknown_latex", "行内公式含未知宏，比较时保留原文", location, self.project.source.side))
         self.diagnostics.extend(local)
         self.items[node_id] = dict(kind=kind, start=start, end=end, parent=parent, children=[], path=path,
                                    origins=origins, location=location, labels=labels, citations=citations,
@@ -383,6 +387,18 @@ class _Builder:
             else:
                 i += 1
 
+    def _array_children(self, parent: str, start: int, end: int) -> None:
+        """数学块中的 array 是从属表格，保留其独立来源和预览节点。"""
+        i = start
+        while match := _ENV.search(self.mask, i, end):
+            i = match.end()
+            if match.group(1) != "begin" or match.group(2) != "array":
+                continue
+            extent = _environment_end(self.mask, match.start(), end)
+            if extent:
+                self.add("table", match.start(), extent[1], parent)
+                i = extent[1]
+
     def scan(self, start: int, end: int, parent: str | None = None, *, sections: bool = True) -> None:
         i, pending = start, start
         while i < end:
@@ -424,6 +440,7 @@ class _Builder:
                                 self._inline(node, opening + 1, closing - 1)
                         self._unknown_children(node, env.end(), extent[0])
                     elif kind == "equation":
+                        self._array_children(node, env.end(), extent[0])
                         self._unknown_children(node, env.end(), extent[0])
                     i = extent[1]
                     pending = i
@@ -432,7 +449,8 @@ class _Builder:
                 close = self.mask.find("\\]", i + 2, end)
                 if close >= 0:
                     self._flush(pending, i, parent)
-                    self.add("equation", i, close + 2, parent)
+                    node = self.add("equation", i, close + 2, parent)
+                    self._array_children(node, i + 2, close)
                     i = close + 2
                     pending = i
                     continue
@@ -440,7 +458,8 @@ class _Builder:
                 close = _math_end(self.mask, i, end)
                 if close:
                     self._flush(pending, i, parent)
-                    self.add("equation", i, close, parent)
+                    node = self.add("equation", i, close, parent)
+                    self._array_children(node, i + 2, close - 2)
                     i = close
                     pending = i
                     continue
