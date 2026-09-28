@@ -20,12 +20,13 @@ _ENV = re.compile(r"\\(begin|end)\s*\{([^{}\s]+)\}")
 _HEADING = {"part": 0, "chapter": 1, "section": 2, "subsection": 3, "subsubsection": 4}
 _MATH_ENV = {"equation", "equation*", "align", "align*", "gather", "gather*", "multline", "multline*", "displaymath", "math"}
 _LIST_ENV = {"itemize", "enumerate", "description"}
-_TABLE_ENV = {"table", "table*", "tabular", "tabular*", "longtable"}
+_TABLE_ENV = {"table", "table*", "tabular", "tabular*", "longtable", "array"}
 _FIGURE_ENV = {"figure", "figure*"}
 _THEOREM_ENV = {"theorem", "lemma", "proposition", "corollary", "definition", "remark", "proof", "example", "claim"}
 _SAFE_COMMANDS = {
     "documentclass", "usepackage", "begin", "end", "label", "ref", "eqref", "autoref", "pageref", *CITATION_COMMANDS,
     "includegraphics", "caption", "centering", "item", "bibitem", "bibliography", "bibliographystyle", "addbibresource", "printbibliography",
+    "tag", "notag", "nonumber",
     "input", "include", "graphicspath", "textbf", "textit", "emph", "texttt", "underline", "footnote", "url", "href", "hfill",
     "small", "large", "Large", "normalsize", "itshape", "bfseries", "textsc", "noindent", "newline", "newpage", "clearpage",
     "maketitle", "title", "author", "date", "abstract", "thanks", "today", "and", "quad", "qquad", "ldots", "cdots",
@@ -281,6 +282,9 @@ class _Builder:
             local.append(_diagnostic("low_confidence_source", "结构来源位置不确定；已保留全部原文片段", location, self.project.source.side))
         if kind == "fallback":
             local.append(_diagnostic("unknown_latex", "未知或无法解析的 LaTeX 已保留原文", location, self.project.source.side))
+        if kind == "inline_math" and any(match.group(1) in self.unknown and match.group(1) not in _SAFE_COMMANDS
+                                          for match in _COMMAND.finditer(_masked(raw))):
+            local.append(_diagnostic("unknown_latex", "行内公式含未知宏，比较时保留原文", location, self.project.source.side))
         self.diagnostics.extend(local)
         self.items[node_id] = dict(kind=kind, start=start, end=end, parent=parent, children=[], path=path,
                                    origins=origins, location=location, labels=labels, citations=citations,

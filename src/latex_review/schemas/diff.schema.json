@@ -59,7 +59,8 @@
       "properties": {
         "id": {"type": "string", "minLength": 1}, "category": {"$ref": "#/$defs/category"},
         "kind": {"$ref": "#/$defs/kind"}, "old_text": {"type": ["string", "null"]},
-        "new_text": {"type": ["string", "null"]}, "summary": {"type": "string"}
+        "new_text": {"type": ["string", "null"]}, "summary": {"type": "string"},
+        "source_old": {"$ref": "#/$defs/location"}, "source_new": {"$ref": "#/$defs/location"}
       }
     },
     "category": {"enum": ["text", "equation", "figure", "table", "citation", "comment"]},
