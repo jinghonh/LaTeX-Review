@@ -12,6 +12,7 @@ from plasTeX.TeX import TeX
 from .contract import Diagnostic, ReviewNode, SourceLocation
 from .source_map import MappedRange
 from .sources import ExpandedProject, SourceIssue
+from .text_diff import CITATION_COMMANDS
 
 
 _COMMAND = re.compile(r"\\([A-Za-z@]+|.)")
@@ -23,7 +24,7 @@ _TABLE_ENV = {"table", "table*", "tabular", "tabular*", "longtable"}
 _FIGURE_ENV = {"figure", "figure*"}
 _THEOREM_ENV = {"theorem", "lemma", "proposition", "corollary", "definition", "remark", "proof", "example", "claim"}
 _SAFE_COMMANDS = {
-    "documentclass", "usepackage", "begin", "end", "label", "ref", "eqref", "autoref", "pageref", "cite", "citep", "citet", "nocite",
+    "documentclass", "usepackage", "begin", "end", "label", "ref", "eqref", "autoref", "pageref", *CITATION_COMMANDS,
     "includegraphics", "caption", "centering", "item", "bibitem", "bibliography", "bibliographystyle", "addbibresource", "printbibliography",
     "input", "include", "graphicspath", "textbf", "textit", "emph", "texttt", "underline", "footnote", "url", "href", "hfill",
     "small", "large", "Large", "normalsize", "itshape", "bfseries", "textsc", "noindent", "newline", "newpage", "clearpage",
@@ -110,8 +111,11 @@ def _argument(mask: str, start: int) -> tuple[int, str, int] | None:
         i += 1
     while i < len(mask) and mask[i].isspace():
         i += 1
-    if i < len(mask) and mask[i] == "[":
-        i = _group_end(mask, i, "[", "]") or i
+    while i < len(mask) and mask[i] == "[":
+        end = _group_end(mask, i, "[", "]")
+        if end is None:
+            return None
+        i = end
         while i < len(mask) and mask[i].isspace():
             i += 1
     end = _group_end(mask, i)
@@ -183,7 +187,8 @@ def _metadata(raw: str) -> tuple[tuple[str, ...], tuple[str, ...], tuple[str, ..
         for match in re.finditer(pattern, _masked(raw)):
             values.extend(part.strip() for part in match.group(1).split(",") if part.strip())
         return tuple(dict.fromkeys(values))
-    return (groups(r"\\label\s*\{([^{}]+)\}"), groups(r"\\(?:cite|citep|citet|nocite)(?:\s*\[[^\]]*\])?\s*\{([^{}]+)\}"),
+    citation_pattern = r"\\(?:" + "|".join(CITATION_COMMANDS) + r")(?![A-Za-z@])(?:\s*\[[^\]]*\])*\s*\{([^{}]+)\}"
+    return (groups(r"\\label\s*\{([^{}]+)\}"), groups(citation_pattern),
             groups(r"\\(?:ref|eqref|autoref|pageref)\s*\{([^{}]+)\}"),
             groups(r"\\includegraphics\*?(?:\s*\[[^\]]*\])?\s*\{([^{}]+)\}"))
 
@@ -304,8 +309,8 @@ class _Builder:
             if match:
                 name = match.group(1)
                 arg = _argument(self.mask, match.end())
-                if name in {"cite", "citep", "citet", "ref", "eqref", "autoref", "pageref"} and arg:
-                    self.add("citation" if name.startswith("cite") else "reference", i, arg[0], parent)
+                if name in {*CITATION_COMMANDS, "ref", "eqref", "autoref", "pageref"} and arg:
+                    self.add("citation" if name in CITATION_COMMANDS else "reference", i, arg[0], parent)
                     i = arg[0]
                     continue
                 uncertain = (self.project.origin_ranges(i, min(arg[0] if arg else match.end(), end))
