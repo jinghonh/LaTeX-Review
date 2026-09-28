@@ -1,4 +1,5 @@
 from pathlib import Path
+import unicodedata
 
 from latex_review import (
     compare_projects, dumps, match_nodes, parse_project, resolve_sources, scan_latex, token_edits,
@@ -92,6 +93,25 @@ def test_unique_heading_label_survives_renamed_section_and_keeps_child(tmp_path)
     assert next(pair for pair in mapping.pairs if pair.old_id == heading.review.id).reason.startswith("两侧唯一标签")
 
 
+def test_child_label_anchors_rewritten_text_after_parent_heading_rename(tmp_path):
+    old, new = next(_projects(tmp_path, r"\section{Old heading}\label{sec:stable}" + "\n" +
+                              r"\label{p:stable} Astronomy orbit galaxies.",
+                              r"\section{Entirely new heading}\label{sec:stable}" + "\n" +
+                              r"\label{p:stable} Cooking bread tomatoes."))
+    mapping = match_nodes(old, new)
+    paragraph = _paragraphs(old)[0]
+    matched = next(pair for pair in mapping.pairs if pair.old_id == paragraph.review.id)
+    assert matched.reason.startswith("两侧唯一标签")
+    assert compare_projects(old, new).document.summary.changes == 2
+
+    unrelated_old, unrelated_new = next(_projects(tmp_path / "unrelated",
+                                        r"\section{Astronomy}" + "\nOpening.\n\n" +
+                                        r"\label{p:stable} Orbit galaxies.",
+                                        r"\subsection{Cooking}" + "\nOpening.\n\n" +
+                                        r"\label{p:stable} Bread tomatoes."))
+    assert not match_nodes(unrelated_old, unrelated_new).pairs
+
+
 def test_unrelated_paragraphs_report_low_confidence_as_remove_and_add(tmp_path):
     old, new = next(_projects(tmp_path, "Astronomy orbit galaxies.", "Cooking bread tomatoes."))
     result = compare_projects(old, new)
@@ -118,6 +138,30 @@ def test_word_tokens_preserve_protected_regions_and_count_chinese_per_character(
     assert sum(t.words for edit in edits for t in edit.old) == 2
     assert sum(t.words for edit in edits for t in edit.new) == 3
     assert scan_latex(r"\textbf{Alpha 中文}")[0][0].words == 3
+
+
+def test_semantic_space_boundary_and_unicode_latin_word_count(tmp_path):
+    for left, right in ((r"$x$ y", r"$x$y"),
+                        (r"\mbox{a} b", r"\mbox{a}b"),
+                        (r"hello \textbf{x}", r"hello\textbf{x}")):
+        edits = token_edits(scan_latex(left)[0], scan_latex(right)[0])
+        assert len(edits) == 1
+        assert any(token.kind == "space" for token in (*edits[0].old, *edits[0].new))
+    assert not token_edits(scan_latex(r"\LaTeX  text")[0], scan_latex(r"\LaTeX text")[0])
+    assert not token_edits(scan_latex("a  b\nc")[0], scan_latex("a b c")[0])
+    old, new = next(_projects(tmp_path, r"$x$ y", r"$x$y"))
+    result = compare_projects(old, new)
+    assert result.document.summary.changes == 1
+    assert (result.document.summary.added_words, result.document.summary.removed_words) == (0, 0)
+    assert "␠" in result.document.changes[0].details[0].old_text
+
+    polish = "Zażółć gęślą jaźń"
+    for text in (polish, unicodedata.normalize("NFD", polish)):
+        assert [token.text for token in scan_latex(text)[0] if token.words] == text.split()
+        assert sum(token.words for token in scan_latex(text)[0]) == 3
+    before, after = next(_projects(tmp_path / "latin", "Zażółć gęślą jaźń.", "Zażółć nową jaźń."))
+    counted = compare_projects(before, after).document.summary
+    assert (counted.added_words, counted.removed_words) == (1, 1)
 
 
 def test_paragraph_whitespace_chinese_counts_and_verbatim_content(tmp_path):
@@ -162,3 +206,19 @@ def test_text_and_citation_details_share_one_primary_change(tmp_path):
     assert (result.document.summary.added_words, result.document.summary.removed_words) == (1, 1)
     assert len(result.token_changes) == 1
     dumps(result.document)
+
+
+def test_extended_citation_commands_and_two_optional_arguments(tmp_path):
+    old, new = next(_projects(tmp_path, r"See \parencite[pre][post]{old-key} and \textcite{same}.",
+                              r"See \parencite[pre][post]{new-key} and \textcite{same}."))
+    paragraph_old = _paragraphs(old)[0]
+    paragraph_new = _paragraphs(new)[0]
+    assert paragraph_old.citations == ("old-key", "same")
+    assert paragraph_new.citations == ("new-key", "same")
+    assert any(node.review.type == "citation" and node.review.raw_latex.startswith(r"\parencite")
+               for node in old.nodes)
+    result = compare_projects(old, new)
+    assert result.document.summary.changes == 1
+    assert result.document.summary.category_hits == {"citation": 1}
+    assert (result.document.summary.added_words, result.document.summary.removed_words) == (0, 0)
+    assert result.document.changes[0].details[0].category == "citation"

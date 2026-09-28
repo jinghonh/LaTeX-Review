@@ -117,6 +117,9 @@ def match_nodes(old: ParsedProject, new: ParsedProject) -> NodeMapping:
         old_parent, new_parent = a[i].review.parent_id, b[j].review.parent_id
         return (old_parent is None and new_parent is None) or bool(old_parent and pair_map.get(old_parent) == new_parent)
 
+    def scope_compatible(i: int, j: int) -> bool:
+        return a_scope[i] == b_scope[j] or bool(a[i].review.parent_id and parents_match(i, j))
+
     # 重复标签没有身份语义，不能覆盖先前的标签映射。
     for i, item in enumerate(a):
         if i in used_a:
@@ -125,7 +128,7 @@ def match_nodes(old: ParsedProject, new: ParsedProject) -> NodeMapping:
                   if a_labels[item.review.type, label] == b_labels[item.review.type, label] == 1}
         options = [j for j, candidate in enumerate(b) if j not in used_b and
                    candidate.review.type == item.review.type and labels.intersection(b_effective_labels[j]) and
-                   a_scope[i] == b_scope[j] and parents_match(i, j)]
+                   scope_compatible(i, j) and parents_match(i, j)]
         if len(options) == 1:
             add(i, options[0], .99, "两侧唯一标签、类型和章节一致")
 
@@ -136,7 +139,7 @@ def match_nodes(old: ParsedProject, new: ParsedProject) -> NodeMapping:
         key = (item.review.type, a_scope[i], a_text[i])
         ai = [k for k, n in enumerate(a) if k not in used_a and (n.review.type, a_scope[k], a_text[k]) == key]
         bj = [k for k, n in enumerate(b) if k not in used_b and parents_match(i, k)
-              and (n.review.type, b_scope[k], b_text[k]) == key]
+              and scope_compatible(i, k) and n.review.type == item.review.type and b_text[k] == a_text[i]]
         if len(ai) == len(bj) == 1:
             add(i, bj[0], .98, "章节、类型和规范化内容唯一一致")
 
@@ -146,9 +149,7 @@ def match_nodes(old: ParsedProject, new: ParsedProject) -> NodeMapping:
             return 0.0, "节点类型不同"
         if not parents_match(i, j):
             return 0.0, "父节点未配对"
-        parent_pair = pair_map.get(left.review.parent_id)
-        same_scope = a_scope[i] == b_scope[j] or bool(parent_pair and parent_pair == right.review.parent_id)
-        if not same_scope:
+        if not scope_compatible(i, j):
             return 0.0, "章节不同；跨章节移动留待后续版本"
         if (i, j) not in similarities:
             similarities[i, j] = SequenceMatcher(None, a_text[i], b_text[j], autojunk=False).ratio()

@@ -10,8 +10,8 @@ import unicodedata
 
 _COMMAND = re.compile(r"\\(?:[A-Za-z@]+\*?|.)")
 _VERBATIM = re.compile(r"\\begin\{(verbatim\*?|Verbatim|lstlisting|minted)\}")
-_WORD = re.compile(r"[A-Za-zÀ-ÖØ-öø-ÿ0-9]+(?:['’][A-Za-zÀ-ÖØ-öø-ÿ0-9]+)*|[\u3400-\u9fff]|[^\W\d_]", re.UNICODE)
-_CITATION = re.compile(r"\\(?:cite|citep|citet|nocite|parencite|textcite)\b")
+CITATION_COMMANDS = ("cite", "citep", "citet", "nocite", "parencite", "textcite")
+_CITATION = re.compile(r"\\(?:" + "|".join(CITATION_COMMANDS) + r")\b")
 _REFERENCE = re.compile(r"\\(?:ref|eqref|autoref|pageref|cref|Cref)\b")
 _TEXT_ARGUMENT_COMMANDS = {"textbf", "textit", "emph", "texttt", "textsc", "underline", "footnote"}
 
@@ -66,6 +66,26 @@ def _math_end(text: str, start: int, opening: str, closing: str) -> int | None:
     return None
 
 
+def _latin_or_digit(char: str) -> bool:
+    return char.isdecimal() or (unicodedata.category(char).startswith("L") and
+                                unicodedata.name(char, "").startswith("LATIN "))
+
+
+def _word_end(text: str, start: int) -> int | None:
+    if not _latin_or_digit(text[start]):
+        return None
+    index = start + 1
+    while index < len(text):
+        char = text[index]
+        if _latin_or_digit(char) or unicodedata.category(char).startswith("M"):
+            index += 1
+        elif char in "'’" and index + 1 < len(text) and _latin_or_digit(text[index + 1]):
+            index += 1
+        else:
+            break
+    return index
+
+
 def _without_comments(raw: str) -> tuple[str, tuple[CommentSpan, ...]]:
     """按 TeX 规则移除注释及紧随的换行，逐字片段除外。"""
     parts: list[str] = []
@@ -112,6 +132,7 @@ def scan_latex(raw: str) -> tuple[tuple[TextToken, ...], tuple[CommentSpan, ...]
     raw, comments = _without_comments(raw)
     tokens: list[TextToken] = []
     index = 0
+    ignored_control_space = False
     while index < len(raw):
         verbatim = _VERBATIM.match(raw, index)
         if verbatim:
@@ -121,6 +142,7 @@ def scan_latex(raw: str) -> tuple[tuple[TextToken, ...], tuple[CommentSpan, ...]
                 end += len(closing)
                 tokens.append(TextToken(raw[index:end], "verbatim"))
                 index = end
+                ignored_control_space = False
                 continue
         if raw.startswith(r"\verb", index) and (index + 5 == len(raw) or not raw[index + 5].isalpha()):
             delimiter_at = index + 5 + (index + 5 < len(raw) and raw[index + 5] == "*")
@@ -129,6 +151,7 @@ def scan_latex(raw: str) -> tuple[tuple[TextToken, ...], tuple[CommentSpan, ...]
                 if end >= 0:
                     tokens.append(TextToken(raw[index:end + 1], "verbatim"))
                     index = end + 1
+                    ignored_control_space = False
                     continue
         if raw.startswith(r"\(", index) or raw.startswith(r"\[", index):
             opening = raw[index:index + 2]
@@ -137,6 +160,7 @@ def scan_latex(raw: str) -> tuple[tuple[TextToken, ...], tuple[CommentSpan, ...]
             if end:
                 tokens.append(TextToken(raw[index:end], "math"))
                 index = end
+                ignored_control_space = False
                 continue
         if raw[index] == "$":
             opening = "$$" if raw.startswith("$$", index) else "$"
@@ -144,6 +168,7 @@ def scan_latex(raw: str) -> tuple[tuple[TextToken, ...], tuple[CommentSpan, ...]
             if end:
                 tokens.append(TextToken(raw[index:end], "math"))
                 index = end
+                ignored_control_space = False
                 continue
         command = _COMMAND.match(raw, index)
         if command:
@@ -151,6 +176,7 @@ def scan_latex(raw: str) -> tuple[tuple[TextToken, ...], tuple[CommentSpan, ...]
             if raw[index:end] == r"\%":
                 tokens.append(TextToken("%", "symbol"))
                 index = end
+                ignored_control_space = False
                 continue
             # 空白只在命令紧邻参数时归入命令；参数内原文不折叠。
             arguments = []
@@ -175,20 +201,26 @@ def scan_latex(raw: str) -> tuple[tuple[TextToken, ...], tuple[CommentSpan, ...]
                     words = sum(token.words for token in scan_latex(content)[0])
             tokens.append(TextToken(name + "".join(arguments), kind, words))
             index = end
+            ignored_control_space = not arguments and bool(re.fullmatch(r"\\[A-Za-z@]+", name))
             continue
         if raw[index].isspace():
-            index += 1
+            while index < len(raw) and raw[index].isspace():
+                index += 1
+            if tokens and index < len(raw) and not ignored_control_space:
+                tokens.append(TextToken("␠", "space"))
             continue
-        match = _WORD.match(raw, index)
-        if match:
-            tokens.append(TextToken(match.group(), "word", 1))
-            index = match.end()
+        end = _word_end(raw, index)
+        if end is not None:
+            tokens.append(TextToken(raw[index:end], "word", 1))
+            index = end
+            ignored_control_space = False
             continue
         if unicodedata.category(raw[index]).startswith("P") or raw[index] in "{}":
             tokens.append(TextToken(raw[index], "symbol"))
         else:
             tokens.append(TextToken(raw[index], "word", 1))
         index += 1
+        ignored_control_space = False
     return tuple(tokens), comments
 
 
