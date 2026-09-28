@@ -171,6 +171,13 @@ def _source_details(node: ParsedNode) -> str:
             f'<pre>{_e(node.review.raw_latex)}</pre></details>')
 
 
+def _caption(raw: str) -> tuple[str, int] | None:
+    mask = _masked(raw)
+    command = re.search(r"\\caption(?![A-Za-z@])", mask)
+    argument = _argument(mask, command.end()) if command else None
+    return None if argument is None else (raw[argument[2]:argument[0] - 1], argument[2])
+
+
 def _embedded_fallbacks(children: list[ParsedNode], side: str) -> str:
     return "".join(
         f'<p class="node-warning" id="{_e(_anchor(side, child.review.id))}" '
@@ -207,14 +214,14 @@ def _body(node: ParsedNode, project: ParsedProject, side: str, by_id: dict[str, 
         title = name.group(1) if name else "定理"
         return f'<p class="theorem-title">{_e(title)}</p>' + "".join(_render_node(child, project, side, by_id, diagnostics) for child in children)
     if kind == "figure":
-        caption = re.search(r"\\caption(?:\[[^\]]*\])?\s*\{([^{}]*)\}", node.review.raw_latex)
+        caption = _caption(node.review.raw_latex)
         assets = "".join(f'<p class="asset">图资源：{_e(asset)}</p>' for asset in node.assets)
         caption_children = [child for child in children if child.review.type != "fallback"]
-        return assets + (f'<figcaption>{_inline_html(caption.group(1), project, side, caption_children, diagnostics, node.review.source)}</figcaption>' if caption else "") + _embedded_fallbacks(children, side)
+        return assets + (f'<figcaption>{_inline_html(caption[0], project, side, caption_children, diagnostics, node.review.source, node.expanded_start + caption[1])}</figcaption>' if caption else "") + _embedded_fallbacks(children, side)
     if kind == "table":
-        caption = re.search(r"\\caption(?:\[[^\]]*\])?\s*\{([^{}]*)\}", node.review.raw_latex)
+        caption = _caption(node.review.raw_latex)
         caption_children = [child for child in children if child.review.type != "fallback"]
-        return ((f'<p class="table-caption">{_inline_html(caption.group(1), project, side, caption_children, diagnostics, node.review.source)}</p>' if caption else "")
+        return ((f'<p class="table-caption">{_inline_html(caption[0], project, side, caption_children, diagnostics, node.review.source, node.expanded_start + caption[1])}</p>' if caption else "")
                 + f'<pre class="table-source">{_e(node.review.raw_latex)}</pre>' + _embedded_fallbacks(children, side))
     if kind == "bibliography":
         return '<h3>参考文献</h3>' + ("<ol>" + "".join(_render_node(child, project, side, by_id, diagnostics) for child in children) + "</ol>" if children else '<p>参考文献资源见源码。</p>')

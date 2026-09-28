@@ -15,7 +15,7 @@ from .sources import ExpandedProject, SourceIssue
 
 
 _COMMAND = re.compile(r"\\([A-Za-z@]+|.)")
-_ENV = re.compile(r"\\(begin|end)\s*\{([A-Za-z@*]+)\}")
+_ENV = re.compile(r"\\(begin|end)\s*\{([^{}\s]+)\}")
 _HEADING = {"part": 0, "chapter": 1, "section": 2, "subsection": 3, "subsubsection": 4}
 _MATH_ENV = {"equation", "equation*", "align", "align*", "gather", "gather*", "multline", "multline*", "displaymath", "math"}
 _LIST_ENV = {"itemize", "enumerate", "description"}

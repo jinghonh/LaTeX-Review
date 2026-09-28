@@ -120,3 +120,22 @@ context.window.mathDependencyFailed();
 if(status.dataset.state !== 'failed' || !status.textContent.includes('原始 TeX')) process.exit(1);
 """ % json.dumps(script)
         subprocess.run(["node", "-e", harness], check=True)
+
+
+def test_nested_captions_and_underscored_unknown_environment(tmp_path):
+    source = r"""\begin{document}
+\begin{figure}\caption{A caption with \emph{nested emphasis}.}\end{figure}
+\begin{table}\caption[Short]{A table with \emph{nested text}.}\end{table}
+\begin{odd_env_name}Unknown content\end{odd_env_name}
+\end{document}"""
+    old, new = _pair(tmp_path, source)
+    with resolve_sources(entry="main.tex", old_dir=old, new_dir=new) as pair:
+        before, after = parse_project(pair.old.expand()), parse_project(pair.new.expand())
+        preview = render_preview(before, after)
+    assert re.search(r"<figcaption>\s*A caption with <em>nested emphasis</em>\.\s*</figcaption>", preview.html)
+    assert re.search(r'<p class="table-caption">\s*A table with <em>nested text</em>\.\s*</p>', preview.html)
+    fallback = next(node for node in before.nodes if node.review.type == "fallback" and "odd_env_name" in node.review.raw_latex)
+    assert fallback.review.raw_latex == r"\begin{odd_env_name}Unknown content\end{odd_env_name}"
+    assert fallback.review.source.file == "main.tex" and fallback.origins
+    assert any(diagnostic.code == "unknown_latex" for diagnostic in fallback.diagnostics)
+    assert "未识别的 LaTeX 内容，原文如下" in preview.html
