@@ -209,6 +209,11 @@ def scan_latex(raw: str) -> tuple[tuple[TextToken, ...], tuple[CommentSpan, ...]
             if tokens and index < len(raw) and not ignored_control_space:
                 tokens.append(TextToken("␠", "space"))
             continue
+        if raw[index] == "~":
+            tokens.append(TextToken("~", "space"))
+            index += 1
+            ignored_control_space = False
+            continue
         end = _word_end(raw, index)
         if end is not None:
             tokens.append(TextToken(raw[index:end], "word", 1))

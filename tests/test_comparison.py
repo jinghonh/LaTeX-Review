@@ -164,6 +164,17 @@ def test_semantic_space_boundary_and_unicode_latin_word_count(tmp_path):
     assert (counted.added_words, counted.removed_words) == (1, 1)
 
 
+def test_nonbreaking_space_before_reference_changes_format_without_adding_word(tmp_path):
+    old, new = next(_projects(tmp_path, r"See Fig.\ref{fig:one}.", r"See Fig.~\ref{fig:one}."))
+    result = compare_projects(old, new)
+    assert result.document.summary.changes == 1
+    assert result.document.summary.category_hits == {"text": 1}
+    assert (result.document.summary.added_words, result.document.summary.removed_words) == (0, 0)
+    assert result.document.changes[0].details[0].new_text == "~"
+    assert token_edits(scan_latex(r"Fig. \ref{fig:one}")[0],
+                       scan_latex(r"Fig.~\ref{fig:one}")[0])
+
+
 def test_paragraph_whitespace_chinese_counts_and_verbatim_content(tmp_path):
     old, new = next(_projects(tmp_path, "Alpha  beta\n中文一。\n\n\\begin{verbatim}a b\\end{verbatim}",
                               "Alpha beta 中文二。\n\n\\begin{verbatim}a  b\\end{verbatim}"))
