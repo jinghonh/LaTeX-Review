@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from html import escape
 from pathlib import Path
 import shutil
 import struct
@@ -10,7 +11,10 @@ import sys
 import time
 import zlib
 
+import pytest
+
 from latex_review import compare_projects, parse_project, resolve_sources, write_report
+from latex_review.report import ReportPathError
 
 
 def _png(rgb: tuple[int, int, int]) -> bytes:
@@ -55,6 +59,10 @@ New text \cite{b}.
         if change["new_node_id"]:
             assert f'id="new-{change["new_node_id"]}"' in html
     assert any(item["code"] == "report_asset_missing" for item in data["diagnostics"])
+    assert f'data-count="{len(data["diagnostics"])}"' in html
+    for diagnostic in data["diagnostics"]:
+        assert diagnostic["code"] in html
+        assert escape(diagnostic["message"]) in html
     assert "图缺失：fig/missing.png" in html and "Missing image" in html
     assert "data-old-location=" in html and "data-new-location=" in html
     assert 'id="old-comment-old-000001"' in html and 'id="new-comment-new-000001"' in html
@@ -97,3 +105,74 @@ def test_pdf_preview_failure_keeps_provenance_and_caption(tmp_path: Path) -> Non
                              pdf_converter=str(converter), conversion_timeout=0.1)
     assert time.monotonic() - start < 2
     assert "PDF 预览不可用" in timed.html.read_text(encoding="utf-8")
+
+
+@pytest.mark.parametrize("managed_path", ["assets/old/fig", "diff.json", "diagnostics.json", "report.html"])
+def test_managed_output_rejects_symlinks_without_touching_external_file(tmp_path: Path, managed_path: str) -> None:
+    old, new = tmp_path / "old", tmp_path / "new"
+    _project(old, r"\begin{figure}\includegraphics{fig/same.png}\caption{Old}\end{figure}", (255, 0, 0))
+    _project(new, r"\begin{figure}\includegraphics{fig/same.png}\caption{New}\end{figure}", (0, 0, 255))
+    output, external = tmp_path / "output", tmp_path / "external"
+    output.mkdir(); external.mkdir()
+    target = output / managed_path
+    target.parent.mkdir(parents=True, exist_ok=True)
+    if managed_path.startswith("assets"):
+        (external / "same.png").write_bytes(b"outside")
+        target.symlink_to(external, target_is_directory=True)
+        outside_file = external / "same.png"
+    else:
+        outside_file = external / "outside.txt"
+        outside_file.write_bytes(b"outside")
+        target.symlink_to(outside_file)
+    with resolve_sources(entry="main.tex", old_dir=old, new_dir=new) as pair:
+        before, after = parse_project(pair.old.expand()), parse_project(pair.new.expand())
+        with pytest.raises(ReportPathError):
+            write_report(before, after, compare_projects(before, after), output, pdf_converter="")
+    assert outside_file.read_bytes() == b"outside"
+
+
+def test_graphics_resolve_by_command_origin_and_include_instance(tmp_path: Path) -> None:
+    old, new = tmp_path / "old", tmp_path / "new"
+    for root in (old, new):
+        (root / "fig").mkdir(parents=True)
+        (root / "fig/same.png").write_bytes(_png((10, 20, 30)))
+        for name, color in (("left", (255, 0, 0)), ("right", (0, 0, 255))):
+            folder = root / name
+            folder.mkdir()
+            (folder / "same.png").write_bytes(_png(color))
+            (folder / "part.tex").write_text(
+                f"\\begin{{figure}}\\includegraphics{{same}}\\caption{{{name}}}\\end{{figure}}\n",
+                encoding="utf-8")
+        (root / "main.tex").write_text(
+            r"\begin{figure}\includegraphics{./fig/same.png}\caption{main}\end{figure}" + "\n"
+            + r"\input{left/part}\input{right/part}" + "\n", encoding="utf-8")
+    with resolve_sources(entry="main.tex", old_dir=old, new_dir=new) as pair:
+        before, after = parse_project(pair.old.expand()), parse_project(pair.new.expand())
+        report = write_report(before, after, compare_projects(before, after), tmp_path / "output", pdf_converter="")
+    html = report.html.read_text(encoding="utf-8")
+    for side in ("old", "new"):
+        for path in ("fig/same.png", "left/same.png", "right/same.png"):
+            assert f'src="assets/{side}/{path}"' in html
+            assert (report.directory / "assets" / side / path).is_file()
+    assert (report.directory / "assets/old/left/same.png").read_bytes() != (report.directory / "assets/old/right/same.png").read_bytes()
+    assert not any(item.code == "report_asset_missing" for item in report.document.diagnostics)
+
+
+def test_inline_details_jump_to_their_own_anchors(tmp_path: Path) -> None:
+    old, new = tmp_path / "old", tmp_path / "new"
+    old.mkdir(); new.mkdir()
+    (old / "main.tex").write_text(r"\section{Results}" + "\n" + r"Text \cite{old} and $x$.", encoding="utf-8")
+    (new / "main.tex").write_text(r"\section{Results}" + "\n" + r"Text \cite{new} and $y$.", encoding="utf-8")
+    with resolve_sources(entry="main.tex", old_dir=old, new_dir=new) as pair:
+        before, after = parse_project(pair.old.expand()), parse_project(pair.new.expand())
+        report = write_report(before, after, compare_projects(before, after), tmp_path / "output", pdf_converter="")
+    html = report.html.read_text(encoding="utf-8")
+    for category, node_type in (("citation", "citation"), ("equation", "inline_math")):
+        change = next(change for change in report.document.changes
+                      if any(detail.category == category for detail in change.details))
+        old_child = next(node for node in report.document.nodes_old
+                         if node.parent_id == change.old_node_id and node.type == node_type)
+        new_child = next(node for node in report.document.nodes_new
+                         if node.parent_id == change.new_node_id and node.type == node_type)
+        assert f'id="old-{old_child.id}"' in html and f'id="new-{new_child.id}"' in html
+        assert f'class="detail-jump" data-old="{old_child.id}" data-new="{new_child.id}"' in html
