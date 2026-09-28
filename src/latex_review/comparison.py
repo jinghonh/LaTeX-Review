@@ -129,7 +129,8 @@ def compare_projects(old: ParsedProject, new: ParsedProject, *, review_comments:
                 details.append(ChangeDetail(f"detail-{len(details) + 1:03d}", detail.category, detail.kind,
                                             detail.old_text, detail.new_text, detail.summary,
                                             detail.source_old, detail.source_new))
-        if not text_edits and left and right:
+        # 站点边界独立于正文词元编辑；即使同段另有词或空白变化也保留此明细。
+        if left and right:
             for site_kind in ("citation", "inline_math"):
                 old_sites = [a[child] for child in left.child_ids if a[child].review.type == site_kind]
                 new_sites = [b[child] for child in right.child_ids if b[child].review.type == site_kind]

@@ -103,6 +103,16 @@ def test_whitespace_change_next_to_stable_citation_remains_text_change(tmp_path)
     assert any(detail.category == "text" for detail in result.document.changes[0].details)
 
 
+def test_citation_adjacent_space_survives_other_word_edit(tmp_path):
+    _, _, result = _compare(tmp_path, r"A\cite{k} B.", r"A \cite{k} C.")
+    assert result.document.summary.changes == 1
+    assert result.document.summary.category_hits == {"text": 1}
+    details = result.document.changes[0].details
+    assert any(detail.old_text == "B" and detail.new_text == "C" for detail in details)
+    assert any(detail.summary == "行内内容相邻空白变化" for detail in details)
+    assert all(detail.category == "text" for detail in details)
+
+
 def test_inserted_inline_math_preserves_later_formula_sources(tmp_path):
     _, _, result = _compare(tmp_path, r"Values $a$ then $b$.", r"Values $x$ $a$ then $b$.")
     assert result.document.summary.changes == 1
