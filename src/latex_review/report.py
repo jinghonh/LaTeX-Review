@@ -360,7 +360,29 @@ def _rendering_html(rendering: dict | None, statuses: tuple | None) -> str:
                      f'{pair["old"] or "—"} → {pair["new"] or "—"}</h3>' + "".join(pictures) + "</article>")
     return ('<section class="rendered-pages" aria-label="编译页面与视觉差异"><h2>编译页面与视觉差异</h2>'
             '<p>页面差异表示排版像素变化，不证明内容语义变化。</p><ul>' + "".join(items) + '</ul>'
-            f'<p>{_e(summary)}</p>' + "".join(cards) + '</section>')
+            f'<p>{_e(summary)}</p>' + "".join(cards) + '''</section>
+<script>(function(){
+ const pages=document.querySelector('.rendered-pages');
+ pages.addEventListener('click',function(event){
+  const link=event.target.closest('a[href^="#"]');
+  if(!link||!pages.contains(link))return;
+  const card=document.getElementById(link.getAttribute('href').slice(1));
+  if(!card||!card.classList.contains('change-card'))return;
+  event.preventDefault();
+  if(card.hidden){
+   const kind=document.getElementById('kind-filter');
+   const category=document.getElementById('category-filter');
+   if(kind.value!=='all'&&kind.value!==card.dataset.kind)kind.value='all';
+   if(category.value!=='all'&&!card.dataset.categories.split(' ').includes(category.value))category.value='all';
+   kind.dispatchEvent(new Event('change',{bubbles:true}));
+  }
+  if(card.hidden)return;
+  card.scrollIntoView({block:'center',behavior:'auto'});
+  const button=card.querySelector('.change-jump');
+  button.focus({preventScroll:true});
+  button.click();
+ });
+})();</script>''')
 
 
 def _report_html(document: ReviewDocument, preview_html: str, *, rendering: dict | None = None,
