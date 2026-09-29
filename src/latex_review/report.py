@@ -24,6 +24,7 @@ from .sources import ExpandedProject
 
 
 _IMAGE_SUFFIXES = {".png", ".jpg", ".jpeg", ".webp", ".gif"}
+_LINKABLE_ASSET_SUFFIXES = _IMAGE_SUFFIXES | {".pdf"}
 _KIND_LABELS = {"added": "新增", "removed": "删除", "modified": "修改", "moved": "移动"}
 _CATEGORY_LABELS = {"text": "正文", "equation": "公式", "figure": "图", "table": "表格", "citation": "引用", "comment": "注释"}
 _SEVERITY_LABELS = {"info": "提示", "warning": "警告", "error": "错误"}
@@ -152,6 +153,19 @@ def _copy_asset(project: ParsedProject, relative: str, directory: Path, side: st
     return destination, url
 
 
+def _media_signature_matches(source: Path, suffix: str) -> bool:
+    with source.open("rb") as stream:
+        head = stream.read(1024)
+    return {
+        ".png": head.startswith(b"\x89PNG\r\n\x1a\n"),
+        ".jpg": head.startswith(b"\xff\xd8\xff"),
+        ".jpeg": head.startswith(b"\xff\xd8\xff"),
+        ".gif": head.startswith((b"GIF87a", b"GIF89a")),
+        ".webp": head.startswith(b"RIFF") and head[8:12] == b"WEBP",
+        ".pdf": head.lstrip().startswith(b"%PDF-"),
+    }[suffix]
+
+
 def _pdf_preview(source: Path, directory: Path, relative: Path, converter: str, timeout: float) -> Path | None:
     with tempfile.TemporaryDirectory(prefix="latex-review-pdf-") as temporary:
         output = Path(temporary) / "preview.png"
@@ -183,18 +197,29 @@ def _figure_assets(old: ParsedProject, new: ParsedProject, directory: Path,
             for asset in node.assets:
                 relative = _dependency(project, node, asset)
                 provenance = _location(node.review.source)
+                suffix = Path(relative or asset).suffix.lower()
+                if suffix and suffix not in _LINKABLE_ASSET_SUFFIXES:
+                    diagnostics.append(_asset_diagnostic("report_asset_unsupported",
+                                                         f"图资源格式不允许复制或链接：{asset}", node, side))
+                    cards.append(f'<div class="asset-card asset-missing" role="note">'
+                                 f'<strong>图资源格式未支持：{_e(asset)}</strong><p>{_e(provenance)}</p></div>')
+                    continue
                 if relative is None:
                     diagnostics.append(_asset_diagnostic("report_asset_missing", f"图资源无法定位：{asset}", node, side))
                     cards.append(f'<div class="asset-card asset-missing" role="note"><strong>图缺失：{_e(asset)}</strong>'
                                  f'<p>{_e(provenance)}</p><p>尺寸：未知</p></div>')
                     continue
-                if Path(relative).suffix.lower() == ".svg":
-                    diagnostics.append(_asset_diagnostic("report_asset_unsupported",
-                                                         f"SVG 可能含可执行内容，未复制或预览：{asset}", node, side))
-                    cards.append(f'<div class="asset-card asset-missing" role="note"><strong>SVG 图未预览：{_e(asset)}</strong>'
-                                 f'<p>{_e(provenance)}</p></div>')
-                    continue
                 try:
+                    root = project.expanded.source.root.resolve()
+                    source = (root / relative).resolve()
+                    if not source.is_relative_to(root):
+                        raise OSError("图资源逃出比较版本目录")
+                    if not _media_signature_matches(source, suffix):
+                        diagnostics.append(_asset_diagnostic("report_asset_unsupported",
+                                                             f"图资源内容与格式不符，未复制或链接：{asset}", node, side))
+                        cards.append(f'<div class="asset-card asset-missing" role="note">'
+                                     f'<strong>图资源格式未支持：{_e(asset)}</strong><p>{_e(provenance)}</p></div>')
+                        continue
                     copied, url = _copy_asset(project, relative, directory, side)
                 except ReportPathError:
                     raise
@@ -217,9 +242,6 @@ def _figure_assets(old: ParsedProject, new: ParsedProject, directory: Path,
                         diagnostics.append(_asset_diagnostic("report_pdf_preview_unavailable",
                                                             f"PDF 图预览不可用：{asset}", node, side))
                         picture = '<p class="asset-fallback">PDF 预览不可用，可打开原始文件。</p>'
-                else:
-                    diagnostics.append(_asset_diagnostic("report_asset_unsupported", f"不支持图预览：{asset}", node, side))
-                    picture = '<p class="asset-fallback">该格式暂无预览，可打开原始文件。</p>'
                 cards.append(f'<div class="asset-card">{picture}<p>图文件：<a href="{_e(url)}">{_e(asset)}</a></p>'
                              f'<p>{_e(provenance)}</p><p>尺寸：未知</p></div>')
             html[(side, node.review.id)] = "".join(cards)

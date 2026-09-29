@@ -190,6 +190,6 @@ def test_svg_script_is_not_copied_or_linked(tmp_path: Path) -> None:
         before, after = parse_project(pair.old.expand()), parse_project(pair.new.expand())
         report = write_report(before, after, compare_projects(before, after), tmp_path / "out")
     html = report.html.read_text()
-    assert "SVG 图未预览" in html and "alert(1)" not in html
+    assert "图资源格式未支持" in html and "alert(1)" not in html
     assert not (report.directory / "assets/old/fig/attack.svg").exists()
     assert any(item.code == "report_asset_unsupported" for item in report.document.diagnostics)

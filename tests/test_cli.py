@@ -175,3 +175,58 @@ def test_output_cannot_replace_project_source(tmp_path):
     result = run_cli(tmp_path, "main.tex", "--output", str(tmp_path))
     assert result.returncode == 64
     assert (tmp_path / "main.tex").read_text() == original
+
+
+def test_html_graphic_is_never_copied_or_linked(tmp_path):
+    project(tmp_path)
+    (tmp_path / "fig").mkdir()
+    (tmp_path / "fig/attack.html").write_text("<script>alert(1)</script>", encoding="utf-8")
+    (tmp_path / "main.tex").write_text(
+        r"\begin{figure}\includegraphics{fig/attack.html}\caption{Figure}\end{figure}", encoding="utf-8")
+    git(tmp_path, "add", "main.tex", "fig/attack.html")
+    git(tmp_path, "commit", "-qm", "graphic fixture")
+    result = run_cli(tmp_path, "main.tex")
+    assert result.returncode == 2, result.stderr
+    output = tmp_path / ".latex-review/latest"
+    html = output.joinpath("report.html").read_text()
+    assert "图资源格式未支持" in html
+    assert 'href="assets/old/fig/attack.html"' not in html
+    assert 'href="assets/new/fig/attack.html"' not in html
+    assert not output.joinpath("assets/old/fig/attack.html").exists()
+    assert not output.joinpath("assets/new/fig/attack.html").exists()
+    diagnostics = json.loads(output.joinpath("diagnostics.json").read_text())["diagnostics"]
+    assert any(item["code"] == "unsupported_dependency" for item in diagnostics)
+    assert any(item["code"] == "report_asset_unsupported" for item in diagnostics)
+
+    (tmp_path / "fig/attack.png").write_text("<script>alert(2)</script>", encoding="utf-8")
+    (tmp_path / "main.tex").write_text(
+        r"\begin{figure}\includegraphics{fig/attack.png}\caption{Figure}\end{figure}", encoding="utf-8")
+    git(tmp_path, "add", "main.tex", "fig/attack.png")
+    git(tmp_path, "commit", "-qm", "disguised graphic fixture")
+    disguised = run_cli(tmp_path, "main.tex")
+    assert disguised.returncode == 2, disguised.stderr
+    html = output.joinpath("report.html").read_text()
+    assert 'href="assets/old/fig/attack.png"' not in html
+    assert not output.joinpath("assets/old/fig/attack.png").exists()
+
+
+def test_invalid_config_invalidates_previous_report(tmp_path):
+    project(tmp_path)
+    assert run_cli(tmp_path, "main.tex").returncode == 0
+    default = tmp_path / ".latex-review/latest"
+    assert default.joinpath("report.html").exists()
+    (tmp_path / ".latex-review.toml").write_text("[render]\nmath='unsafe'\n", encoding="utf-8")
+    failed = run_cli(tmp_path, "main.tex")
+    assert failed.returncode == 64
+    assert not default.joinpath("report.html").exists()
+    assert not default.joinpath("diff.json").exists()
+    assert json.loads(default.joinpath("diagnostics.json").read_text())["diagnostics"][0]["code"] == "configuration_error"
+
+    custom = tmp_path / "custom-output"
+    assert run_cli(tmp_path, "main.tex", "--output", str(custom), "--math", "mathjax").returncode == 0
+    assert custom.joinpath("report.html").exists()
+    failed = run_cli(tmp_path, "main.tex", "--output", str(custom))
+    assert failed.returncode == 64
+    assert not custom.joinpath("report.html").exists()
+    assert not custom.joinpath("diff.json").exists()
+    assert json.loads(custom.joinpath("diagnostics.json").read_text())["diagnostics"][0]["code"] == "configuration_error"
