@@ -439,6 +439,8 @@ def expand_project(source: ProjectSource) -> ExpandedProject:
         option = Path(argument)
         if option.is_absolute():
             return None, "dependency_outside_root"
+        if extensions == _GRAPHICS and option.suffix and option.suffix.lower() not in _GRAPHICS:
+            return None, "unsupported_dependency"
         bases = [Path(current_file).parent, Path(".")]
         if any(Path(path).is_absolute() for path in paths):
             return None, "dependency_outside_root"

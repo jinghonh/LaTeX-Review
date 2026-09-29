@@ -137,6 +137,29 @@ def _record_failure(output: Path | None, diagnostic: Diagnostic) -> None:
         pass  # 输出路径本身不可写时，仅保留标准错误输出。
 
 
+def _known_output_after_config_error(args) -> Path | None:
+    """配置无效时只清除可安全确定的本轮报告目录。"""
+    config_path = Path(args.config).expanduser() if args.config else Path(".latex-review.toml")
+    try:
+        with config_path.open("rb") as stream:
+            raw = tomllib.load(stream)
+    except (OSError, tomllib.TOMLDecodeError):
+        raw = {}
+    if not isinstance(raw, dict):
+        raw = {}
+    configured = raw.get("output")
+    if not args.output and configured is not None and (not isinstance(configured, str) or not configured):
+        return None
+    target = Path(os.path.abspath(Path(args.output or configured or ".latex-review/latest").expanduser()))
+    if target in (Path.cwd(), Path("/")):
+        return None
+    try:
+        _check_output_separate(target, _source_options(args, raw))
+    except (ConfigurationError, SourceError, TypeError, AttributeError):
+        return None
+    return target
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = ReviewArgumentParser(prog="latex-review", description="比较论文并生成无编译审阅报告。",
                                   epilog="默认比较 Git HEAD 与磁盘工作区；--compile 尚未支持。")
@@ -198,6 +221,8 @@ def main(argv: list[str] | None = None) -> int:
         print(report.html)
         return 2 if any(d.severity in {"warning", "error"} for d in report.document.diagnostics) else 0
     except ConfigurationError as exc:
+        _record_failure(output if output_ready else _known_output_after_config_error(args),
+                        Diagnostic("configuration_error", "error", str(exc)))
         print(f"latex-review: 配置错误：{exc}", file=sys.stderr)
         return 64
     except SourceError as exc:
