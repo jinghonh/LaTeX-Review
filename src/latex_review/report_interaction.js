@@ -41,25 +41,97 @@
       current.classList.remove('context-hidden');
     }
   }
+  function retainContext(keep, side, node) {
+    const siblings = nodes[side].filter(item => item.parentElement === node.parentElement);
+    const index = siblings.indexOf(node);
+    for (const neighbor of siblings.slice(Math.max(0, index - 1), index + 2)) keep[side].add(neighbor);
+    for (let current = node; current && panels[side].contains(current);
+         current = current.parentElement.closest('.review-node')) keep[side].add(current);
+  }
+  function pairedContextAnchor(side, node) {
+    const other = side === 'old' ? 'new' : 'old';
+    const match = candidate => {
+      const id = paired[side].get(candidate.dataset.nodeId);
+      const counterpart = id && document.getElementById(other + '-' + id);
+      const review = reviewNode(counterpart, other);
+      return review ? [candidate, review] : null;
+    };
+    const nearest = candidates => {
+      const index = candidates.indexOf(node);
+      if (index < 0) return null;
+      for (let offset = 0; offset < candidates.length; offset++) {
+        for (const position of [index - offset, index + offset]) {
+          if (position < 0 || position >= candidates.length) continue;
+          const pair = match(candidates[position]);
+          if (pair) return pair;
+        }
+      }
+      return null;
+    };
+    const siblings = nodes[side].filter(item => item.parentElement === node.parentElement);
+    const nearby = nearest(siblings);
+    if (nearby) return nearby;
+    const index = nodes[side].indexOf(node);
+    for (let offset = 1; offset < nodes[side].length; offset++) {
+      for (const position of [index - offset, index + offset]) {
+        if (position < 0 || position >= nodes[side].length) continue;
+        const candidate = nodes[side][position];
+        if (candidate.contains(node) || node.contains(candidate)) continue;
+        const adjacent = match(candidate);
+        if (adjacent) return adjacent;
+      }
+    }
+    for (let parent = node.parentElement.closest('.review-node'); parent;
+         parent = parent.parentElement.closest('.review-node')) {
+      const fallback = match(parent);
+      if (fallback) return fallback;
+    }
+    return null;
+  }
   function context() {
     const keep = {old: new Set(), new: new Set()};
+    if (mode.value !== 'context') {
+      for (const side of ['old', 'new']) {
+        nodes[side].forEach(node => node.classList.remove('context-hidden'));
+        const empty = panels[side].querySelector('.side-empty');
+        if (empty.dataset.contextNotice === 'true') {
+          empty.classList.remove('is-visible');
+          delete empty.dataset.contextNotice;
+        }
+      }
+      return;
+    }
     for (const card of visibleCards()) {
       const jump = card.querySelector('.change-jump');
+      const targets = {};
       for (const side of ['old', 'new']) {
         const target = jump.dataset[side] && document.getElementById(side + '-' + jump.dataset[side]);
-        const node = reviewNode(target, side);
-        if (!node) continue;
-        const siblings = nodes[side].filter(item => item.parentElement === node.parentElement);
-        const index = siblings.indexOf(node);
-        for (const neighbor of siblings.slice(Math.max(0, index - 1), index + 2)) keep[side].add(neighbor);
-        for (let current = node; current && panels[side].contains(current);
-             current = current.parentElement.closest('.review-node')) keep[side].add(current);
+        targets[side] = reviewNode(target, side);
+        if (targets[side]) retainContext(keep, side, targets[side]);
+      }
+      if (!!targets.old !== !!targets.new) {
+        const side = targets.old ? 'old' : 'new';
+        const other = side === 'old' ? 'new' : 'old';
+        const anchor = pairedContextAnchor(side, targets[side]);
+        if (anchor) {
+          retainContext(keep, side, anchor[0]);
+          retainContext(keep, other, anchor[1]);
+        }
       }
     }
     for (const side of ['old', 'new']) {
       nodes[side].forEach(node => {
         node.classList.toggle('context-hidden', mode.value === 'context' && !keep[side].has(node));
       });
+      const empty = panels[side].querySelector('.side-empty');
+      if (mode.value === 'context' && keep[side].size === 0) {
+        empty.textContent = '此侧没有可对齐的上下文节点';
+        empty.dataset.contextNotice = 'true';
+        empty.classList.add('is-visible');
+      } else if (empty.dataset.contextNotice === 'true') {
+        empty.classList.remove('is-visible');
+        delete empty.dataset.contextNotice;
+      }
     }
   }
   function filter() {

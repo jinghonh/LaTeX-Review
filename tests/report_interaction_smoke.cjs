@@ -66,6 +66,11 @@ for (let i = 1; i <= 6; i++) {
   newParagraphs.push(register(newSection.append(new Element('new-p'+i+'-new', 'review-node', {nodeId:'p'+i+'-new'}, 100 + (i-1)*150 + (i>=3 ? 150 : 0), 100))));
 }
 const inserted = register(newSection.append(new Element('new-inserted', 'review-node', {nodeId:'inserted'}, 400, 100)));
+newSection.children.splice(newSection.children.indexOf(inserted), 1);
+newSection.children.splice(2, 0, inserted);
+const removed = register(oldSection.append(new Element('old-removed', 'review-node', {nodeId:'removed'}, 375, 50)));
+oldSection.children.splice(oldSection.children.indexOf(removed), 1);
+oldSection.children.splice(2, 0, removed);
 const changes = register(root.append(new Element('changes-side')));
 const card = changes.append(new Element('change-1', 'change-card', {kind:'modified',categories:'text'}));
 card.append(new Element('jump-1', 'change-jump', {old:'p4-old',new:'p4-new'}));
@@ -79,8 +84,9 @@ const document = {
 };
 const window = {reviewNodePairs: [['section-old','section-new'], ...Array.from({length:6}, (_,i)=>['p'+(i+1)+'-old','p'+(i+1)+'-new'])], matchMedia:()=>({matches:false})};
 let script = fs.readFileSync(process.argv[2], 'utf8');
-script = script.replace(/\}\)\(\);\s*$/, 'window.hooks={context,nearestAnchor,align};})();');
-vm.runInNewContext(script, {document, window, navigator:{}, performance:{now:()=>1000}, requestAnimationFrame: fn=>fn(), console});
+script = script.replace(/\}\)\(\);\s*$/, 'window.hooks={context,filter,nearestAnchor,align};})();');
+let now = 1000;
+vm.runInNewContext(script, {document, window, navigator:{}, performance:{now:()=>now}, requestAnimationFrame: fn=>fn(), console});
 
 ids.get('reading-mode').value = 'context';
 window.hooks.context();
@@ -101,4 +107,26 @@ assert(anchor[1] === oldParagraphs[2], '锚点应指向旧侧对应段落');
 ids.get('sync-scroll').checked = true;
 window.hooks.align('new');
 assert(old.scrollTop > 100 && old.scrollTop < 350, 'old scrollTop=' + old.scrollTop);
-console.log('上下文嵌套折叠与新增段落相邻锚点校验通过；旧侧滚动位置=' + old.scrollTop);
+
+const jump = card.querySelector('.change-jump');
+card.dataset.kind = 'added';
+jump.dataset.old = ''; jump.dataset.new = 'inserted';
+ids.get('kind-filter').value = 'added';
+ids.get('reading-mode').value = 'context';
+window.hooks.filter();
+assert(oldParagraphs.some(node => node.getClientRects().length), '仅新增时旧侧不可空白');
+const addedAnchor = window.hooks.nearestAnchor('new', inserted, 250);
+assert(addedAnchor && addedAnchor[1].getClientRects().length, '仅新增时仍需可见旧侧锚点');
+now = 1500;
+window.hooks.align('new');
+
+card.dataset.kind = 'removed';
+jump.dataset.old = 'removed'; jump.dataset.new = '';
+ids.get('kind-filter').value = 'removed';
+window.hooks.filter();
+assert(newParagraphs.some(node => node.getClientRects().length), '仅删除时新侧不可空白');
+const removedAnchor = window.hooks.nearestAnchor('old', removed, 250);
+assert(removedAnchor && removedAnchor[1].getClientRects().length, '仅删除时仍需可见新侧锚点');
+now = 2000;
+window.hooks.align('old');
+console.log('嵌套折叠、相邻锚点以及仅新增或仅删除的双侧上下文校验通过');
