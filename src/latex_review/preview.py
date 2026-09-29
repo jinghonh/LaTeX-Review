@@ -135,7 +135,7 @@ def _parse_dom(raw: str):
 
 
 def _dom_html(node: object, project: ParsedProject, side: str, inline: list[ParsedNode], cursors: dict[str, int],
-              diagnostics: list[Diagnostic]) -> str:
+              diagnostics: list[Diagnostic], source: SourceLocation | None) -> str:
     name = getattr(node, "nodeName", "")
     if name == "#text":
         return _e(str(node))
@@ -158,6 +158,13 @@ def _dom_html(node: object, project: ParsedProject, side: str, inline: list[Pars
             argument = _argument(_masked(raw), command.end()) if command else None
             keys = tuple(part.strip() for part in argument[1].split(",")) if argument else ()
         if kind == "citation":
+            location = item.review.source if item else source or SourceLocation(
+                None, None, None, confidence=0, uncertainty_reason="引用来源不确定")
+            for key in keys:
+                if key not in project.bibliography:
+                    diagnostic = _missing_bibliography(key, project, side, location)
+                    if diagnostic not in diagnostics:
+                        diagnostics.append(diagnostic)
             return _citation_html(tuple(keys), project, side, anchor)
         key = keys[0].strip() if keys else ""
         target = project.labels.get(key)
@@ -170,7 +177,8 @@ def _dom_html(node: object, project: ParsedProject, side: str, inline: list[Pars
         return f'<span class="unresolved-ref"{anchor}>?? ({_e(key)})</span>'
     if type(node).__module__ == "plasTeX.Context":
         return f'<span class="fallback-inline">未识别：<code>{_e(getattr(node, "source", ""))}</code></span>'
-    children = "".join(_dom_html(child, project, side, inline, cursors, diagnostics) for child in getattr(node, "childNodes", ()))
+    children = "".join(_dom_html(child, project, side, inline, cursors, diagnostics, source)
+                       for child in getattr(node, "childNodes", ()))
     if name in {"#document", "document", "par", "bgroup", "group"}:
         return children
     if name in {"textbf", "bfseries", "bf"}:
@@ -281,7 +289,7 @@ def _inline_html(raw: str, project: ParsedProject, side: str, inline: list[Parse
                 diagnostics.append(Diagnostic("preview_unknown_macro", "warning", f"预览无法解释宏 \\{name}；已显示原文",
                                               source_old=location if side == "old" else None,
                                               source_new=location if side == "new" else None))
-        return _dom_html(dom, project, side, inline, {}, diagnostics if diagnostics is not None else [])
+        return _dom_html(dom, project, side, inline, {}, diagnostics if diagnostics is not None else [], source)
     except Exception as exc:
         if diagnostics is not None and raw.strip():
             location = source or SourceLocation(None, None, None, confidence=0, uncertainty_reason="预览片段无法定位")

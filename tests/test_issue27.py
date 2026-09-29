@@ -129,6 +129,21 @@ def test_table_cell_with_missing_reference_key_keeps_key_and_diagnostic(tmp_path
     assert any(item.code == "bibliography_key_unresolved" and item.source_old for item in result.diagnostics)
 
 
+def test_nested_table_citation_missing_key_reaches_report_diagnostics(tmp_path):
+    source = r"\begin{document}\begin{tabular}{c}\textbf{\cite{absent}}\end{tabular}\end{document}"
+    old, new = _roots(tmp_path, source)
+    with resolve_sources(entry="main.tex", old_dir=old, new_dir=new) as pair:
+        before, after = parse_project(pair.old.expand()), parse_project(pair.new.expand())
+        comparison = compare_projects(before, after)
+        report = write_report(before, after, comparison, tmp_path / "report", pdf_converter="")
+    html = report.html.read_text(encoding="utf-8")
+    diff = json.loads(report.diff_json.read_text(encoding="utf-8"))
+    diagnostics = json.loads(report.directory.joinpath("diagnostics.json").read_text(encoding="utf-8"))
+    assert re.search(r'<td data-row="1" data-column="1">.*?absent.*?文献元数据未解析', html)
+    assert any(item["code"] == "bibliography_key_unresolved" for item in diff["diagnostics"])
+    assert any(item["code"] == "bibliography_key_unresolved" for item in diagnostics["diagnostics"])
+
+
 def test_unsupported_bibliography_keeps_key_and_preview(tmp_path):
     old, new = _roots(tmp_path, r"\begin{document}\cite{handmade}\begin{thebibliography}{9}"
                       r"\bibitem{handmade} 原始条目。\end{thebibliography}\end{document}")
