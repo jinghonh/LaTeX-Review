@@ -249,7 +249,6 @@ def test_clear_cache_removes_owned_stage_after_process_exit(tmp_path):
     paper = tmp_path / "paper"
     paper.mkdir()
     fixture(paper)
-    cache_dir = tmp_path / "custom-cache"
     child = """
 import os
 from pathlib import Path
@@ -258,32 +257,46 @@ import latex_review.cache as cache
 from latex_review.sources import resolve_sources
 from latex_review.structure import ParsedProject
 
+phase = sys.argv[3]
+if phase == 'during':
+    def stop_during_write(path, content):
+        with path.open('xb') as stream:
+            stream.write(content[:113])
+            stream.flush()
+            os.fsync(stream.fileno())
+        os._exit(92)
+    cache._write_stage = stop_during_write
 replace = os.replace
-def stop_before_first_replace(source, target):
-    if Path(source).name.startswith('.latex-review-stage-'):
+def stop_at_replace(source, target):
+    if phase == 'before' and Path(source).name.startswith('.latex-review-stage-'):
         os._exit(91)
+    if phase == 'after' and Path(source).name.startswith('.write-'):
+        os._exit(93)
     return replace(source, target)
-cache.os.replace = stop_before_first_replace
+cache.os.replace = stop_at_replace
 with resolve_sources(entry='main.tex', old_dir=sys.argv[1], new_dir=sys.argv[1]) as pair:
     cache.ParseCache(Path(sys.argv[2])).parse(pair.old.expand(),
         parser=lambda expanded: ParsedProject(expanded, (), (), {}))
 """
-    killed = subprocess.run([sys.executable, "-c", child, str(paper), str(cache_dir)],
-                            env=dict(os.environ, PYTHONPATH=str(ROOT / "src")), capture_output=True, text=True)
-    assert killed.returncode == 91, killed.stderr
-    prefix = cache_module.stage_prefix(cache_dir)
-    owned = list(tmp_path.glob(prefix + "*.tmp"))
-    assert len(owned) == 1 and owned[0].is_file()
     other_stage = tmp_path / (cache_module.stage_prefix(tmp_path / "other-cache") + "other.tmp")
-    other_stage.write_bytes(owned[0].read_bytes())
-    foreign = tmp_path / (prefix + "user.tmp")
-    foreign.write_text("普通暂存文件", encoding="utf-8")
-    assert run(paper, "--cache-dir", str(cache_dir), "--clear-cache").returncode == 64
-    assert owned[0].is_file() and foreign.read_text(encoding="utf-8") == "普通暂存文件"
-    foreign.unlink()
-    assert run(paper, "--cache-dir", str(cache_dir), "--clear-cache").returncode == 0
-    assert not owned[0].exists()
-    assert other_stage.is_file()
+    other_stage.write_text("别的缓存", encoding="utf-8")
+    for phase, exit_code in (("during", 92), ("before", 91), ("after", 93)):
+        cache_dir = tmp_path / f"custom-cache-{phase}"
+        killed = subprocess.run([sys.executable, "-c", child, str(paper), str(cache_dir), phase],
+                                env=dict(os.environ, PYTHONPATH=str(ROOT / "src")), capture_output=True, text=True)
+        assert killed.returncode == exit_code, killed.stderr
+        owned = (list(tmp_path.glob(cache_module.stage_prefix(cache_dir) + "*.tmp")) if phase != "after"
+                 else list(cache_dir.glob(".write-*.tmp")))
+        assert len(owned) == 1 and owned[0].is_file()
+        if phase == "during":
+            foreign = tmp_path / (cache_module.stage_prefix(cache_dir) + "user.tmp")
+            foreign.write_text("普通暂存文件", encoding="utf-8")
+            assert run(paper, "--cache-dir", str(cache_dir), "--clear-cache").returncode == 64
+            assert owned[0].is_file() and foreign.read_text(encoding="utf-8") == "普通暂存文件"
+            foreign.unlink()
+        assert run(paper, "--cache-dir", str(cache_dir), "--clear-cache").returncode == 0
+        assert not owned[0].exists()
+        assert other_stage.is_file()
 
 
 def test_clear_cache_rejects_hex_named_foreign_file_without_partial_delete(tmp_path):
@@ -293,7 +306,7 @@ def test_clear_cache_rejects_hex_named_foreign_file_without_partial_delete(tmp_p
     cache_dir = tmp_path / "custom-cache"
     assert run(paper, "--cache-dir", str(cache_dir)).returncode == 0
     valid_entries = {entry.name for entry in cache_dir.iterdir()}
-    assert len(valid_entries) == 2
+    assert len(valid_entries) == 3
     foreign = cache_dir / ("a" * 64 + ".json")
     foreign.write_text("普通文本文件", encoding="utf-8")
     rejected = run(paper, "--cache-dir", str(cache_dir), "--clear-cache")

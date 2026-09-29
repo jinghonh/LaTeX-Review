@@ -14,7 +14,7 @@ import subprocess
 import sys
 import tomllib
 
-from .cache import ParseCache, is_managed_cache_file, stage_prefix
+from .cache import OWNER_FILE, ParseCache, is_managed_cache_file, is_owned_stage, read_owner_secret, stage_prefix
 from .comparison import compare_projects
 from .contract import Diagnostic, SourceLocation
 from .report import ReportPathError, write_cache_metadata, write_failure_diagnostics, write_report, write_source_fallback
@@ -141,15 +141,20 @@ def _clear_cache(directory: Path, options: dict, *, managed_default: bool) -> No
         raise ConfigurationError("指定缓存目录位于论文来源内，拒绝清理")
     if directory.exists() and not directory.is_dir():
         raise ConfigurationError("缓存路径已存在且不是目录")
+    try:
+        secret = read_owner_secret(directory)
+    except (OSError, UnicodeError, ValueError) as exc:
+        raise ConfigurationError(f"缓存所有权标记无效：{exc}") from exc
     prefix = stage_prefix(directory)
-    stages = tuple(entry for entry in directory.parent.iterdir()
-                   if re.fullmatch(re.escape(prefix) + r"[A-Za-z0-9_-]+\.tmp", entry.name)) if directory.parent.is_dir() else ()
-    if any(entry.is_symlink() or not entry.is_file() or not is_managed_cache_file(entry, temporary=True)
+    stages = tuple(entry for entry in directory.parent.iterdir() if entry.name.startswith(prefix)
+                   and entry.name.endswith(".tmp")) if directory.parent.is_dir() else ()
+    if any(entry.is_symlink() or not entry.is_file() or not is_owned_stage(directory, entry, secret)
            for entry in stages):
         raise ConfigurationError("缓存暂存目录含无法确认归属的文件，拒绝清理")
     entries = tuple(directory.iterdir()) if directory.exists() else ()
     if any(entry.is_symlink() or not entry.is_file() or
-           not ((re.fullmatch(r"[0-9a-f]{64}\.json", entry.name) and is_managed_cache_file(entry)) or
+           not (entry.name == OWNER_FILE and secret is not None or
+                (re.fullmatch(r"[0-9a-f]{64}\.json", entry.name) and is_managed_cache_file(entry)) or
                 (re.fullmatch(r"\.write-[A-Za-z0-9_-]+(?:\.tmp)?", entry.name) and
                  is_managed_cache_file(entry, temporary=True))) for entry in entries):
         raise ConfigurationError("缓存目录含非缓存文件，拒绝清理")

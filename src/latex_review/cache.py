@@ -4,13 +4,14 @@ from __future__ import annotations
 
 from dataclasses import asdict
 from hashlib import sha256
+import hmac
 from importlib.metadata import version
 import json
 import os
 from pathlib import Path
 import re
 import secrets
-import tempfile
+from time import sleep
 
 from .contract import Diagnostic, ReviewNode, SourceLocation
 from .source_map import MappedRange, OriginRange
@@ -19,6 +20,7 @@ from .structure import ParsedNode, ParsedProject, parse_project
 
 
 CACHE_FORMAT = 1
+OWNER_FILE = ".latex-review-owner"
 _PARSER_FILES = ("cache.py", "sources.py", "source_map.py", "structure.py", "matching.py", "comparison.py",
                  "structured_diff.py", "text_diff.py", "contract.py")
 _RENDERER_FILES = ("preview.py", "report.py")
@@ -36,6 +38,65 @@ def stage_prefix(directory: Path) -> str:
     """把父目录中的写入暂存文件限定到其所属缓存目录。"""
     owner = _digest(os.fsencode(str(directory.resolve())))[:16]
     return f".latex-review-stage-{owner}-"
+
+
+def read_owner_secret(directory: Path) -> bytes | None:
+    marker = directory / OWNER_FILE
+    if marker.is_symlink():
+        raise ValueError("缓存所有权标记不可为链接")
+    try:
+        content = marker.read_text(encoding="ascii")
+    except FileNotFoundError:
+        return None
+    if re.fullmatch(r"[0-9a-f]{64}", content) is None:
+        raise ValueError("缓存所有权标记无效")
+    return bytes.fromhex(content)
+
+
+def _ensure_owner_secret(directory: Path) -> bytes:
+    for _ in range(50):
+        try:
+            existing = read_owner_secret(directory)
+        except ValueError:
+            sleep(.005)  # 另一写入者可能刚创建标记、尚未写完。
+            continue
+        if existing is not None:
+            return existing
+        value = secrets.token_hex(32)
+        try:
+            fd = os.open(directory / OWNER_FILE, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
+        except FileExistsError:
+            sleep(.005)
+            continue
+        with os.fdopen(fd, "w", encoding="ascii") as stream:
+            stream.write(value)
+            stream.flush()
+            os.fsync(stream.fileno())
+        return bytes.fromhex(value)
+    raise OSError("缓存所有权标记无法读取")
+
+
+def _stage_signature(secret: bytes, nonce: str) -> str:
+    return hmac.new(secret, nonce.encode("ascii"), sha256).hexdigest()[:32]
+
+
+def owned_stage_name(directory: Path, secret: bytes) -> str:
+    nonce = secrets.token_hex(16)
+    return f"{stage_prefix(directory)}{nonce}-{_stage_signature(secret, nonce)}.tmp"
+
+
+def is_owned_stage(directory: Path, path: Path, secret: bytes | None) -> bool:
+    if secret is None:
+        return False
+    match = re.fullmatch(re.escape(stage_prefix(directory)) + r"([0-9a-f]{32})-([0-9a-f]{32})\.tmp", path.name)
+    return bool(match and hmac.compare_digest(match.group(2), _stage_signature(secret, match.group(1))))
+
+
+def _write_stage(path: Path, content: bytes) -> None:
+    with path.open("xb") as stream:
+        stream.write(content)
+        stream.flush()
+        os.fsync(stream.fileno())
 
 
 def _read_envelope(path: Path, key: str | None) -> dict:
@@ -178,14 +239,9 @@ class ParseCache:
                 staging = pending = None
                 try:
                     self.directory.mkdir(parents=True, exist_ok=True)
-                    # 先在缓存目录外写完整信封；目录内可见的待替换文件始终可校验。
-                    with tempfile.NamedTemporaryFile("wb", dir=self.directory.parent,
-                                                     prefix=stage_prefix(self.directory), suffix=".tmp",
-                                                     delete=False) as stream:
-                        staging = Path(stream.name)
-                        stream.write(_json(envelope))
-                        stream.flush()
-                        os.fsync(stream.fileno())
+                    secret = _ensure_owner_secret(self.directory)
+                    staging = self.directory.parent / owned_stage_name(self.directory, secret)
+                    _write_stage(staging, _json(envelope))
                     pending = self.directory / f".write-{secrets.token_hex(16)}.tmp"
                     os.replace(staging, pending)
                     os.replace(pending, path)
