@@ -55,11 +55,10 @@ def test_cli_stops_and_releases_port(report, stop_signal):
         with ThreadPoolExecutor() as pool:
             pending = pool.submit(process.stdout.readline)
             try:
-                address = pending.result(timeout=30).strip()
+                address = pending.result(timeout=10).strip()
             except TimeoutError:
                 process.kill()
-                _, error = process.communicate(timeout=5)
-                pytest.fail(f'预览服务 30 秒内未输出地址；子进程错误：{error}')
+                raise
         assert address.startswith('http://127.0.0.1:')
         with urlopen(address, timeout=3) as response:
             assert response.status == 200
