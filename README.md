@@ -27,6 +27,8 @@ python -m pip install '.[test]'
 
 `latex-review main.tex` 默认比较 Git `HEAD` 与当前磁盘工作区，写入 `.latex-review/latest/report.html`、`diff.json`、`diagnostics.json`、`cache-meta.json`。可用 `--old`、`--new` 指定两个提交，或用 `--old-dir A --new-dir B --entry main.tex` 比较目录，也可直接提供两个独立文件。工作区快照包含暂存及未暂存内容、未忽略的未跟踪依赖；输出目录不参与快照。`--inspect-sources` 仅输出来源展开 JSON。用法与程序接口见[比较来源与展开接口](Docs/source-resolution.md)。
 
+浏览器工具无法打开本地文件页面时，运行 `latex-review-preview .latex-review/latest`，打开输出的 `http://127.0.0.1:端口/report.html`。服务仅监听本机，自动选择端口，并提供完整报告目录；按 Ctrl+C 停止。详细行为及智能体验收流程见[报告预览](Docs/report-preview.md)。
+
 GitHub 拉取请求的报告产物与评论发布须由仓库维护者按[工作流启用说明](Docs/github-actions.md)显式配置。模板默认不在本仓库运行。
 
 需要查看实际版式时，显式传入 `--compile`。命令会在两个私有副本中调用已安装的 `latexmk`，保留各侧编译文档、日志、状态及页面预览；`--compile-new-only` 只编译修改后版本。`--tex-engine` 可选 `pdflatex`、`xelatex` 或 `lualatex`。复杂宏和绘图可再加 `--sandbox-render`，要求 macOS 的隔离机制通过自检，否则拒绝高级执行。工具不会自动安装 TeX；缺少工具或某侧编译失败时，结构报告仍会保留。详细用法和产物见[真实编译、页面对比与沙箱渲染](Docs/compiled-rendering.md)。

@@ -15,6 +15,7 @@ test = ["pytest>=8,<10"]
 
 [project.scripts]
 latex-review = "latex_review.cli:main"
+latex-review-preview = "latex_review.serve:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]

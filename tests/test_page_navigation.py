@@ -2,13 +2,35 @@
 
 from __future__ import annotations
 
+from threading import Thread
+
 import pytest
+
+from latex_review.serve import create_server
 
 from latex_review import compare_projects, parse_project, resolve_sources, write_report
 from latex_review.compilation import CompileStatus
 
 
-def test_page_link_reveals_filtered_change_and_updates_preview(tmp_path) -> None:
+@pytest.fixture
+def report_server():
+    servers = []
+
+    def start(directory):
+        server = create_server(directory)
+        worker = Thread(target=server.serve_forever)
+        worker.start()
+        servers.append((server, worker))
+        return f"http://127.0.0.1:{server.server_port}/report.html"
+
+    yield start
+    for server, worker in servers:
+        server.shutdown()
+        worker.join()
+        server.server_close()
+
+
+def test_page_link_reveals_filtered_change_and_updates_preview(tmp_path, report_server) -> None:
     browser_api = pytest.importorskip("playwright.sync_api")
     old, new = tmp_path / "old", tmp_path / "new"
     old.mkdir(); new.mkdir()
@@ -36,7 +58,7 @@ def test_page_link_reveals_filtered_change_and_updates_preview(tmp_path) -> None
             pytest.skip(f"浏览器运行环境不可用：{exc}")
         try:
             page = browser.new_page()
-            page.goto(report.html.as_uri(), wait_until="domcontentloaded")
+            page.goto(report_server(report.html.parent), wait_until="domcontentloaded")
             card = page.locator(f"#{change.id}")
             other_kind = "added" if change.kind != "added" else "removed"
             page.locator("#kind-filter").select_option(other_kind)
