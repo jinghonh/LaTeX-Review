@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections import Counter
+from collections import Counter, defaultdict
 from dataclasses import dataclass
 from difflib import SequenceMatcher
 import re
@@ -190,13 +190,24 @@ def match_nodes(old: ParsedProject, new: ParsedProject) -> NodeMapping:
     # 每轮只提交双方唯一的最佳候选；稳定排序只决定处理次序，不解除歧义。
     while True:
         candidates = {(i, j): score(i, j) for i in range(len(a)) if i not in used_a
-                      for j in range(len(b)) if j not in used_b and a[i].review.type == b[j].review.type}
+                      for j in range(len(b)) if j not in used_b and a[i].review.type == b[j].review.type
+                      and parents_match(i, j) and scope_compatible(i, j)}
+        by_old = defaultdict(list)
+        by_new = defaultdict(list)
+        for (i, j), (value, _) in candidates.items():
+            by_old[i].append((value, j))
+            by_new[j].append((value, i))
+        for options in (*by_old.values(), *by_new.values()):
+            options.sort(reverse=True)
         eligible = []
         for (i, j), (value, reason) in candidates.items():
             if value < .45:
                 continue
-            other_a = max((v[0] for (k, l), v in candidates.items() if k == i and l != j), default=0)
-            other_b = max((v[0] for (k, l), v in candidates.items() if l == j and k != i), default=0)
+            old_options, new_options = by_old[i], by_new[j]
+            other_a = old_options[0][0] if old_options[0][1] != j else (
+                old_options[1][0] if len(old_options) > 1 else 0)
+            other_b = new_options[0][0] if new_options[0][1] != i else (
+                new_options[1][0] if len(new_options) > 1 else 0)
             if value - max(other_a, other_b) >= .08:
                 eligible.append((value, i, j, reason))
         if not eligible:

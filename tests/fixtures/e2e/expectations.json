@@ -1,0 +1,14 @@
+{
+  "changes": [
+    {"kind": "modified", "node_type": "paragraph", "category": "citation", "old": ["sections/intro.tex", 3], "new": ["sections/intro.tex", 5]},
+    {"kind": "added", "node_type": "paragraph", "category": "text", "old": null, "new": ["sections/intro.tex", 3]},
+    {"kind": "added", "node_type": "paragraph", "category": "text", "old": null, "new": ["sections/intro.tex", 9]},
+    {"kind": "modified", "node_type": "equation", "category": "equation", "old": ["sections/results.tex", 1], "new": ["sections/results.tex", 1]},
+    {"kind": "modified", "node_type": "table", "category": "table", "old": ["sections/results.tex", 3], "new": ["sections/results.tex", 3]},
+    {"kind": "removed", "node_type": "figure", "category": "figure", "old": ["sections/results.tex", 5], "new": null},
+    {"kind": "added", "node_type": "figure", "category": "figure", "old": null, "new": ["sections/results.tex", 5]},
+    {"kind": "added", "node_type": "figure", "category": "figure", "old": null, "new": ["sections/results.tex", 7]}
+  ],
+  "diagnostics": ["missing_dependency", "unknown_latex"],
+  "bib_only_changes": 0
+}
