@@ -92,7 +92,7 @@ def test_pdf_preview_failure_keeps_provenance_and_caption(tmp_path: Path) -> Non
     html = report.html.read_text(encoding="utf-8")
     data = json.loads(report.diff_json.read_text(encoding="utf-8"))
     assert "旧图注" in html and "新图注" in html
-    assert "PDF 预览不可用" in html and "尺寸：未知" in html
+    assert "此处暂无法预览" in html and "尺寸：未知" in html
     assert 'href="assets/old/fig/chart.pdf"' in html
     assert 'href="assets/new/fig/chart.pdf"' in html
     assert sum(item["code"] == "report_pdf_preview_unavailable" for item in data["diagnostics"]) == 2
@@ -106,7 +106,7 @@ def test_pdf_preview_failure_keeps_provenance_and_caption(tmp_path: Path) -> Non
         timed = write_report(before, after, compare_projects(before, after), tmp_path / "timed",
                              pdf_converter=str(converter), conversion_timeout=0.1)
     assert time.monotonic() - start < 2
-    assert "PDF 预览不可用" in timed.html.read_text(encoding="utf-8")
+    assert "此处暂无法预览" in timed.html.read_text(encoding="utf-8")
 
 
 @pytest.mark.parametrize("managed_path", ["assets/old/fig", "diff.json", "diagnostics.json", "report.html"])

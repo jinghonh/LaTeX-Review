@@ -12,7 +12,7 @@ from plasTeX.TeX import TeX
 
 from .contract import Diagnostic, ReviewNode, SourceLocation
 from .structure import ParsedNode, ParsedProject, _argument, _masked, _quiet_plastex
-from .table_model import parse_table
+from .table_model import display_tables
 from .macros import expand_call
 from .text_diff import CITATION_COMMANDS
 from .latex_commands import MATH_COMMANDS, REFERENCE_COMMANDS, TEXT_COMMANDS
@@ -29,13 +29,9 @@ _INLINE_SAFE = {
     "nabla", "ell", "operatorname", "overline", "hat", "bar", "tilde", *MATH_COMMANDS,
     *REFERENCE_COMMANDS, *TEXT_COMMANDS,
 }
-_UNSAFE_MATH = re.compile(r"\\(?:href|url|html\w*|class|style|cssId|cssClass)(?![A-Za-z@])|(?:javascript|data|vbscript)\s*:", re.I)
-_MATH_SAFE = {
-    "begin", "end", "label", "tag", "notag", "nonumber", "text", "mathrm", "mathbf", "mathbb", "mathcal",
-    "alpha", "beta", "gamma", "delta", "epsilon", "theta", "lambda", "mu", "pi", "sigma", "omega",
-    "sum", "prod", "int", "frac", "sqrt", "left", "right", "cdot", "times", "leq", "geq",
-    "infty", "partial", "nabla", "ell", "operatorname", "overline", "hat", "bar", "tilde", *MATH_COMMANDS,
-}
+_UNSAFE_MATH = re.compile(
+    r"\\(?:href|url|html\w*|class|style|cssId|cssClass|require|input|include|write|openout|read)"
+    r"(?![A-Za-z@])|(?:javascript|data|vbscript)\s*:", re.I)
 
 
 @dataclass(frozen=True)
@@ -87,28 +83,30 @@ def _missing_bibliography(key: str, project: ParsedProject, side: str, source: S
                       source_new=source if side == "new" else None)
 
 
-def _math(raw: str, display: bool) -> str:
-    if _UNSAFE_MATH.search(raw) or any(match.group(1) not in _MATH_SAFE
-                                       for match in re.finditer(r"\\([A-Za-z@]+)", raw)):
+def _math(raw: str, display: bool, fallback_url: str | None = None) -> str:
+    if _UNSAFE_MATH.search(raw):
         return '<span class="preview-unavailable">此处暂无法预览</span>'
     if raw.startswith("\\begin"):
-        wrapped = raw  # MathJax 处理完整环境；不能再套一层展示公式定界符。
+        expression = raw
     elif raw.startswith("\\[") and raw.endswith("\\]"):
-        wrapped = raw
+        expression = raw[2:-2]
     elif raw.startswith("\\(") and raw.endswith("\\)"):
-        wrapped = raw
+        expression = raw[2:-2]
     elif raw.startswith("$$") and raw.endswith("$$"):
-        wrapped = f"\\[{raw[2:-2]}\\]"
+        expression = raw[2:-2]
     elif raw.startswith("$") and raw.endswith("$"):
-        wrapped = f"\\({raw[1:-1]}\\)"
+        expression = raw[1:-1]
     else:
-        wrapped = f"\\[{raw}\\]" if display else f"\\({raw}\\)"
+        expression = raw
+    # 两侧可能复用相同标签；页面中的交叉引用由结构层处理，避免 MathJax 重复登记。
+    expression = re.sub(r"\\label\s*\{[^{}]*\}", "", expression)
     tag = "div" if display else "span"
-    return f'<{tag} class="math-tex">{_e(wrapped)}</{tag}>'
+    fallback = f' data-fallback-src="{_e(fallback_url)}"' if fallback_url else ""
+    return f'<{tag} class="math-tex" data-display="{str(display).lower()}"{fallback}>{_e(expression)}</{tag}>'
 
 
 def _math_preview(raw: str, project: ParsedProject, side: str, source: SourceLocation,
-                  diagnostics: list[Diagnostic], display: bool) -> str:
+                  diagnostics: list[Diagnostic], display: bool, fallback_url: str | None = None) -> str:
     expanded = raw
     unavailable = False
     if project.macros:
@@ -134,7 +132,11 @@ def _math_preview(raw: str, project: ParsedProject, side: str, source: SourceLoc
             expanded = "".join(pieces)
     if unavailable:
         return '<span class="preview-unavailable">此处暂无法预览</span>'
-    rendered = _math(expanded, display)
+    if _UNSAFE_MATH.search(expanded):
+        diagnostics.append(Diagnostic("preview_unsafe_math", "warning", "公式包含被禁止的命令，已显示占位",
+                                      source_old=source if side == "old" else None,
+                                      source_new=source if side == "new" else None))
+    rendered = _math(expanded, display, fallback_url)
     if expanded != raw:
         return f'<span class="macro-placeholder">{rendered}</span>'
     return rendered
@@ -368,6 +370,10 @@ def _embedded_fallbacks(children: list[ParsedNode], side: str) -> str:
 
 def _table_cell_html(cell: str, project: ParsedProject, side: str, diagnostics: list[Diagnostic],
                      source: SourceLocation) -> str:
+    stacked = re.fullmatch(r"\s*\\(?:makecell|shortstack)(?:\[[^\]]*\])?\s*\{(.*)\}\s*", cell, re.S)
+    if stacked:
+        return "<br>".join(_table_cell_html(part, project, side, diagnostics, source)
+                             for part in stacked.group(1).split(r"\\"))
     mask = _masked(cell)
     command = re.compile(r"\\(?:" + "|".join(CITATION_COMMANDS) + r")(?![A-Za-z@])")
     depth = 0
@@ -396,21 +402,29 @@ def _table_cell_html(cell: str, project: ParsedProject, side: str, diagnostics: 
 
 def _table_preview(node: ParsedNode, project: ParsedProject, side: str,
                    diagnostics: list[Diagnostic]) -> str | None:
-    """预览和差异使用相同的保守表格边界。"""
-    grid, reason = parse_table(node.review.raw_latex, allowed_commands=project.macros)
-    if grid is None:
+    """宽松显示表体；精确单元格比较另由 parse_table 处理。"""
+    tables = display_tables(node.review.raw_latex)
+    if not tables:
         diagnostics.append(Diagnostic("preview_table_fallback", "warning",
-                                      f"表格预览无法可靠解析：{reason}；已显示占位",
+                                      "表格预览无法提取表体；已显示占位",
                                       source_old=node.review.source if side == "old" else None,
                                       source_new=node.review.source if side == "new" else None))
         return None
-    rows = []
-    for row_index, row in enumerate(grid.rows, 1):
-        cells = "".join(f'<td data-row="{row_index}" data-column="{column_index}">'
-                        f'{_table_cell_html(cell, project, side, diagnostics, node.review.source)}</td>'
-                        for column_index, cell in enumerate(row, 1))
-        rows.append(f"<tr>{cells}</tr>")
-    return '<table class="table-preview"><tbody>' + "".join(rows) + "</tbody></table>"
+    rendered = []
+    for table in tables:
+        rows = []
+        for row_index, row in enumerate(table, 1):
+            column = 1
+            cells = []
+            for cell in row:
+                attrs = (f' data-row="{row_index}" data-column="{column}"'
+                         + (f' colspan="{cell.colspan}"' if cell.colspan > 1 else "")
+                         + (f' rowspan="{cell.rowspan}"' if cell.rowspan > 1 else ""))
+                cells.append(f'<td{attrs}>{_table_cell_html(cell.text, project, side, diagnostics, node.review.source)}</td>')
+                column += cell.colspan
+            rows.append(f"<tr>{''.join(cells)}</tr>")
+        rendered.append('<table class="table-preview"><tbody>' + "".join(rows) + "</tbody></table>")
+    return "".join(rendered)
 
 
 def _body(node: ParsedNode, project: ParsedProject, side: str, by_id: dict[str, ParsedNode], diagnostics: list[Diagnostic],
@@ -431,7 +445,8 @@ def _body(node: ParsedNode, project: ParsedProject, side: str, by_id: dict[str, 
     if kind == "equation":
         arrays = "".join(_render_node(child, project, side, by_id, diagnostics, figure_assets)
                          for child in children if child.review.type == "math_array")
-        return _math_preview(node.review.raw_latex, project, side, node.review.source, diagnostics, True) + arrays + _embedded_fallbacks(children, side)
+        fallback_url = (figure_assets or {}).get((side, node.review.id))
+        return _math_preview(node.review.raw_latex, project, side, node.review.source, diagnostics, True, fallback_url) + arrays
     if kind == "math_array":
         return ""  # 已由父公式预览，保留独立来源锚点。
     if kind == "frontmatter":
@@ -465,8 +480,12 @@ def _body(node: ParsedNode, project: ParsedProject, side: str, by_id: dict[str, 
     if kind == "table":
         caption = _caption(node.review.raw_latex)
         caption_children = [child for child in children if child.review.type != "fallback"]
+        compiled = (figure_assets or {}).get((side, node.review.id))
+        table_html = None if compiled and not display_tables(node.review.raw_latex) else _table_preview(node, project, side, diagnostics)
+        if table_html is None and compiled:
+            table_html = f'<img class="compiled-fragment" src="{_e(compiled)}" alt="表格预览" loading="lazy">'
         return ((f'<p class="table-caption">{_inline_html(caption[0], project, side, caption_children, diagnostics, node.review.source, node.expanded_start + caption[1])}</p>' if caption else "")
-                + (_table_preview(node, project, side, diagnostics) or '<p class="preview-unavailable">此处暂无法预览</p>')
+                + (table_html or '<p class="preview-unavailable">此处暂无法预览</p>')
                 + _embedded_fallbacks(children, side))
     if kind == "bibliography":
         return '<h3>参考文献</h3>' + ("<ol>" + "".join(_render_node(child, project, side, by_id, diagnostics, figure_assets) for child in children) + "</ol>" if children else '<p class="preview-unavailable">此处暂无法预览</p>')
@@ -552,7 +571,9 @@ main{{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:1rem;paddin
 .node-theorem{{border-left:3px solid #7b7161;padding:.25rem 1rem;background:#faf9f6}}
 .theorem-title{{font-weight:700;text-transform:capitalize}}figure{{margin:1rem 0;padding:.8rem;border:1px solid #ddd8cb}}
 figcaption,.table-caption{{font-style:italic}}.asset,.fallback-label{{color:#75531e}}
-.table-preview{{border-collapse:collapse;margin:.6rem 0}}.table-preview td{{border:1px solid #ddd8cb;padding:.25rem .6rem}}
+.node-table{{overflow-x:auto}}.table-preview{{border-collapse:collapse;margin:.6rem 0;width:max-content;max-width:none}}
+.table-preview td{{border:1px solid #ddd8cb;padding:.25rem .6rem;white-space:nowrap}}
+.compiled-fragment{{max-width:100%;height:auto}}
 .math-tex{{font-family:serif;white-space:pre-wrap;overflow-wrap:anywhere;visibility:hidden}}.math-tex.preview-unavailable{{visibility:visible}}.node-equation{{overflow-x:auto;text-align:center;margin:1rem 0}}
 .preview-unavailable{{color:#6b3e27;background:#fff1e8;padding:.35rem .55rem}}
 .citation,.cross-ref{{color:#315c86}}.unresolved-ref{{color:#9b3c26}}
@@ -564,15 +585,36 @@ figcaption,.table-caption{{font-style:italic}}.asset,.fallback-label{{color:#755
 <main>{_side(old, "old", "修改前", diagnostics, figure_assets, extra.get("old", ()))}{_side(new, "new", "修改后", diagnostics, figure_assets, extra.get("new", ()))}</main>
 <script>
 (function(){{
- window.MathJax={{tex:{{processEnvironments:true}},options:{{ignoreHtmlClass:'math-unsafe'}}}};
+ window.MathJax={{startup:{{typeset:false}},tex:{{packages:{{'[+]':['ams','newcommand','boldsymbol']}}}}}};
  const status=document.getElementById('math-status');
  let settled=false;
- function failed(){{if(settled)return;settled=true;status.textContent='在线公式排版不可用。';status.dataset.state='failed';document.querySelectorAll('.math-tex').forEach(function(node){{node.textContent='此处暂无法预览';node.classList.add('preview-unavailable');}});}}
+ const formulas=Array.from(document.querySelectorAll('.math-tex'));
+ window.reviewRenderDiagnostics=[];
+ function unavailable(node, reason){{
+   if(node.dataset.fallbackSrc){{const image=document.createElement('img');image.src=node.dataset.fallbackSrc;image.alt='公式预览';image.className='compiled-fragment';node.replaceChildren(image);}}
+   else{{node.textContent='此处暂无法预览';node.classList.add('preview-unavailable');}}
+   node.style.visibility='visible';node.dataset.renderError=String(reason);window.reviewRenderDiagnostics.push({{kind:'math',reason:String(reason)}});
+ }}
+ function failed(){{if(settled)return;settled=true;clearTimeout(timer);status.textContent='在线公式排版不可用。';status.dataset.state='failed';formulas.forEach(function(node){{unavailable(node,'公式引擎不可用');}});}}
  const timer=setTimeout(failed,10000);
  window.mathDependencyFailed=failed;
  window.mathDependencyReady=function(){{
-   if(!window.MathJax || !MathJax.startup || !MathJax.startup.promise){{failed();return;}}
-   MathJax.startup.promise.then(function(){{if(settled)return;settled=true;clearTimeout(timer);document.querySelectorAll('.math-tex').forEach(function(node){{node.style.visibility='visible';}});status.textContent='公式排版已加载。';status.dataset.state='ready';}},failed);
+   if(!window.MathJax || !MathJax.startup || !MathJax.startup.promise || !MathJax.tex2chtmlPromise){{failed();return;}}
+   MathJax.startup.promise.then(async function(){{
+     if(settled)return;
+     clearTimeout(timer);
+     let errors=0;
+     for(const node of formulas){{
+       try{{
+         const rendered=await MathJax.tex2chtmlPromise(node.textContent,{{display:node.dataset.display==='true'}});
+         if(rendered.querySelector('mjx-merror,[data-mjx-error],mtext[mathcolor="red"],mjx-mtext[style*="color: red"]'))throw new Error('公式语法或命令不受支持');
+         node.replaceChildren(rendered);node.style.visibility='visible';
+       }}catch(error){{errors++;unavailable(node,error && error.message || error);}}
+     }}
+     settled=true;
+     status.textContent=errors ? '部分公式暂无法预览。' : '公式排版完成。';
+     status.dataset.state=errors ? 'partial' : 'ready';
+   }},failed);
  }};
 }})();
 </script>

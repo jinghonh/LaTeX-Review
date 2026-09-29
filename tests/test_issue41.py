@@ -70,7 +70,8 @@ def test_unpreviewable_table_and_unknown_macro_keep_short_placeholder(tmp_path):
         html = write_report(before, after, compare_projects(before, after), tmp_path / "report",
                             pdf_converter="").html.read_text(encoding="utf-8")
     assert html.count("此处暂无法预览") >= 2
-    assert all(value not in html for value in (r"\multicolumn", r"\mystery", "私密源码", "私密参数"))
+    assert all(value not in html for value in (r"\multicolumn", r"\mystery", "私密参数"))
+    assert "私密源码" in html
     assert 'class="node-warning"' not in html and 'class="report-diagnostics"' not in html
     assert '.preview-side[data-side="old"] .is-highlighted' in html
     assert '.preview-side[data-side="new"] .is-highlighted' in html

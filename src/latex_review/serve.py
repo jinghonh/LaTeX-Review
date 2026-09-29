@@ -7,6 +7,7 @@ from functools import partial
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 import signal
+from socketserver import TCPServer
 import sys
 
 
@@ -31,12 +32,20 @@ class ReportHandler(SimpleHTTPRequestHandler):
         super().end_headers()
 
 
-def create_server(directory: Path, port: int = 0) -> ThreadingHTTPServer:
+class ReportServer(ThreadingHTTPServer):
+    def server_bind(self):
+        # HTTPServer 默认反查监听地址的主机名；部分 macOS 环境会在这里长期等待 DNS。
+        TCPServer.server_bind(self)
+        self.server_name = "localhost"
+        self.server_port = self.server_address[1]
+
+
+def create_server(directory: Path, port: int = 0) -> ReportServer:
     root = directory.expanduser().resolve()
     entry = root / "report.html"
     if not root.is_dir() or not entry.is_file() or not entry.resolve().is_relative_to(root):
         raise ValueError("报告目录必须包含目录内的 report.html 文件")
-    return ThreadingHTTPServer(("127.0.0.1", port), partial(ReportHandler, directory=str(root)))
+    return ReportServer(("127.0.0.1", port), partial(ReportHandler, directory=str(root)))
 
 
 def main(argv: list[str] | None = None) -> int:

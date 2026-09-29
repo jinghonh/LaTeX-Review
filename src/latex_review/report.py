@@ -22,10 +22,12 @@ from urllib.parse import quote
 from .comparison import ComparisonResult
 from .contract import (ChangeDetail, Diagnostic, DiagnosticsDocument, PrimaryChange, ReviewDocument,
                        ReviewNode, SourceLocation, build_summary, dumps)
-from .preview import render_preview
+from .preview import _UNSAFE_MATH, render_preview
 from .rules import check_rules
 from .structure import ParsedNode, ParsedProject
 from .sources import ExpandedProject
+from .table_model import display_tables
+from .latex_commands import MATH_COMMANDS
 
 
 _IMAGE_SUFFIXES = {".png", ".jpg", ".jpeg", ".webp", ".gif"}
@@ -210,27 +212,71 @@ def _media_signature_matches(source: Path, suffix: str) -> bool:
     }[suffix]
 
 
-def _pdf_preview(source: Path, directory: Path, relative: Path, converter: str, timeout: float) -> Path | None:
+def _graphic_page(raw: str, asset: str, occurrence: int = 0) -> tuple[int | None, str | None]:
+    seen = 0
+    for match in re.finditer(r"\\includegraphics\*?\s*(?:\[([^\]]*)\])?\s*\{([^{}]+)\}", raw):
+        if match.group(2).strip() != asset:
+            continue
+        if seen < occurrence:
+            seen += 1
+            continue
+        options = dict(part.strip().split("=", 1) if "=" in part else (part.strip(), "")
+                       for part in (match.group(1) or "").split(",") if part.strip())
+        # 影响图像内容的参数不能悄悄忽略，以免审阅者看到错误的图。
+        unsupported = set(options) & {"trim", "viewport", "clip", "angle", "origin", "pagebox"}
+        if unsupported:
+            return None, f"图像参数尚无法可靠转换：{', '.join(sorted(unsupported))}"
+        page = options.get("page", "1").strip()
+        if not page.isdigit() or not 1 <= int(page) <= 10000:
+            return None, f"无效的 PDF 页码：{page}"
+        return int(page), None
+    return (None, "图像调用与资源数量不符") if occurrence else (1, None)
+
+
+def _pdf_preview(source: Path, directory: Path, relative: Path,
+                 converters: tuple[tuple[str, str], ...], timeout: float, page: int) -> tuple[Path | None, str]:
+    if not converters:
+        return None, "缺少可用的 PDF 转换工具"
+    reasons = []
     with tempfile.TemporaryDirectory(prefix="latex-review-pdf-") as temporary:
         output = Path(temporary) / "preview.png"
         def limit_output() -> None:
             resource.setrlimit(resource.RLIMIT_FSIZE, (12 * 1024 * 1024, 12 * 1024 * 1024))
-        try:
-            result = subprocess.run((converter, "-f", "1", "-l", "1", "-singlefile", "-scale-to", "1200",
-                                     "-png", str(source), str(output.with_suffix(""))),
-                                    stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
-                                    stderr=subprocess.DEVNULL, timeout=timeout, check=False,
-                                    cwd=temporary, preexec_fn=limit_output)
-        except (OSError, subprocess.TimeoutExpired):
-            return None
-        if (result.returncode == 0 and not output.is_symlink() and output.is_file()
-                and 0 < output.stat().st_size <= 12 * 1024 * 1024):
-            return _write_managed(directory, relative, source=output)
-    return None
+            resource.setrlimit(resource.RLIMIT_CPU, (max(1, int(timeout) + 1), max(1, int(timeout) + 1)))
+        for kind, converter in converters:
+            output.unlink(missing_ok=True)
+            if kind == "pdftoppm":
+                command = (converter, "-f", str(page), "-l", str(page), "-singlefile", "-scale-to", "1200",
+                           "-png", str(source), str(output.with_suffix("")))
+            elif kind == "gs":
+                command = (converter, "-dSAFER", "-dBATCH", "-dNOPAUSE", "-sDEVICE=png16m",
+                           f"-dFirstPage={page}", f"-dLastPage={page}", "-r120",
+                           f"-sOutputFile={output}", str(source))
+            elif page == 1:
+                command = (converter, "-s", "format", "png", str(source), "--out", str(output))
+            else:
+                reasons.append("sips 不支持指定 PDF 页码")
+                continue
+            try:
+                result = subprocess.run(command, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+                                        stderr=subprocess.PIPE, timeout=timeout, check=False,
+                                        cwd=temporary, preexec_fn=limit_output)
+            except subprocess.TimeoutExpired:
+                reasons.append(f"{kind} 转换超时")
+                continue
+            except OSError as exc:
+                reasons.append(f"{kind} 无法启动：{exc}")
+                continue
+            if (result.returncode == 0 and not output.is_symlink() and output.is_file()
+                    and 0 < output.stat().st_size <= 12 * 1024 * 1024):
+                return _write_managed(directory, relative, source=output), ""
+            stderr = result.stderr[:500].decode("utf-8", "replace").strip()
+            reasons.append(f"{kind} 退出状态 {result.returncode}" + (f"：{stderr}" if stderr else ""))
+    return None, "；".join(reasons)
 
 
 def _figure_assets(old: ParsedProject, new: ParsedProject, directory: Path,
-                   converter: str | None, timeout: float) -> tuple[dict[tuple[str, str], str], list[Diagnostic]]:
+                   converters: tuple[tuple[str, str], ...], timeout: float) -> tuple[dict[tuple[str, str], str], list[Diagnostic]]:
     html: dict[tuple[str, str], str] = {}
     diagnostics: list[Diagnostic] = []
     for side, project in (("old", old), ("new", new)):
@@ -238,6 +284,7 @@ def _figure_assets(old: ParsedProject, new: ParsedProject, directory: Path,
             if node.review.type != "figure" or not node.assets:
                 continue
             cards = []
+            occurrences: dict[str, int] = {}
             for asset in node.assets:
                 relative = _dependency(project, node, asset)
                 provenance = _location(node.review.source)
@@ -277,15 +324,19 @@ def _figure_assets(old: ParsedProject, new: ParsedProject, directory: Path,
                 if suffix in _IMAGE_SUFFIXES:
                     picture = f'<img src="{_e(url)}" alt="图资源 {_e(asset)}" loading="lazy">'
                 elif suffix == ".pdf":
-                    preview_relative = Path("previews") / side / f"{copied.relative_to(directory / 'assets' / side)}.png"
-                    preview = _pdf_preview(copied, directory, preview_relative, converter, timeout) if converter else None
+                    page, option_problem = _graphic_page(node.review.raw_latex, asset,
+                                                          occurrences.get(asset, 0))
+                    occurrences[asset] = occurrences.get(asset, 0) + 1
+                    preview_relative = Path("previews") / side / f"{copied.relative_to(directory / 'assets' / side)}.page-{page or 1}.png"
+                    preview, reason = (_pdf_preview(copied, directory, preview_relative, converters, timeout, page)
+                                       if page is not None else (None, option_problem or "图像参数无法转换"))
                     if preview is not None:
                         preview_url = "/".join(quote(part) for part in preview.relative_to(directory).parts)
-                        picture = f'<img src="{_e(preview_url)}" alt="PDF 图 {_e(asset)} 的第一页预览" loading="lazy">'
+                        picture = f'<img src="{_e(preview_url)}" alt="PDF 图 {_e(asset)} 的第 {page} 页预览" loading="lazy">'
                     else:
                         diagnostics.append(_asset_diagnostic("report_pdf_preview_unavailable",
-                                                            f"PDF 图预览不可用：{asset}", node, side))
-                        picture = '<p class="asset-fallback">PDF 预览不可用，可打开原始文件。</p>'
+                                                            f"PDF 图预览不可用：{asset}；{reason}", node, side))
+                        picture = '<p class="asset-fallback">此处暂无法预览</p>'
                 cards.append(f'<div class="asset-card">{picture}<p>图文件：<a href="{_e(url)}">{_e(asset)}</a></p>'
                              f'<p>{_e(provenance)}</p><p>尺寸：未知</p></div>')
             html[(side, node.review.id)] = "".join(cards)
@@ -492,9 +543,10 @@ def write_report(old: ParsedProject, new: ParsedProject, comparison: ComparisonR
                  output_dir: str | Path, *, pdf_converter: str | None = None,
                  conversion_timeout: float = 8.0, editor_url_template: str | None = None,
                  single_file: bool = False, extra_diagnostics: tuple[Diagnostic, ...] = (),
-                 rendering: dict | None = None, statuses: tuple | None = None) -> ReportResult:
+                 rendering: dict | None = None, statuses: tuple | None = None,
+                 fragment_timeout: float = 6.0) -> ReportResult:
     """在来源快照有效期内写入 report.html、diff.json、diagnostics.json 和双侧资源。"""
-    if conversion_timeout <= 0:
+    if conversion_timeout <= 0 or fragment_timeout <= 0:
         raise ValueError("转换超时必须为正数")
     _validate_editor_template(editor_url_template)
     requested_directory = Path(output_dir)
@@ -502,8 +554,41 @@ def write_report(old: ParsedProject, new: ParsedProject, comparison: ComparisonR
         raise ReportPathError("报告输出目录不可为符号链接")
     directory = requested_directory.resolve()
     directory.mkdir(parents=True, exist_ok=True)
-    converter = shutil.which("pdftoppm") if pdf_converter is None else pdf_converter
-    figure_html, asset_diagnostics = _figure_assets(old, new, directory, converter, conversion_timeout)
+    if pdf_converter is None:
+        from .compilation import _program, _safe_path
+        safe_path, forbidden = _safe_path((old.expanded.source, new.expanded.source), directory)
+        converters = tuple((name, found) for name in ("pdftoppm", "gs", "sips")
+                           if (found := _program(name, safe_path, forbidden)))
+    else:
+        converters = (("pdftoppm", pdf_converter),) if pdf_converter else ()
+    figure_html, asset_diagnostics = _figure_assets(old, new, directory, converters, conversion_timeout)
+    from .fragment_render import render_fragment
+    fragment_diagnostics = []
+    known_math = MATH_COMMANDS | {"begin", "end", "label", "tag", "notag", "nonumber", "text", "operatorname"}
+    for side, project in (("old", old), ("new", new)):
+        attempted = 0
+        for node in project.nodes:
+            raw = node.review.raw_latex
+            if node.review.type == "table":
+                needed = bool(re.search(r"\\begin\{(?:tabular\*?|longtable)\}", raw)) and not display_tables(raw)
+            elif node.review.type == "equation":
+                needed = not _UNSAFE_MATH.search(raw) and any(
+                    match.group(1) not in known_math for match in re.finditer(r"\\([A-Za-z@]+)", raw))
+            else:
+                continue
+            if not needed:
+                continue
+            if attempted >= 8:
+                reason, image = "片段编译数量达到上限", None
+            else:
+                attempted += 1
+                image, reason = render_fragment(raw, node.review.type, project.expanded.source,
+                                                directory, converters, timeout=fragment_timeout)
+            if image is not None:
+                figure_html[(side, node.review.id)] = "/".join(quote(part) for part in image.relative_to(directory).parts)
+            else:
+                fragment_diagnostics.append(_asset_diagnostic("preview_fragment_unavailable",
+                                                              f"{node.review.type} 编译预览不可用：{reason}", node, side))
     parsed_ids = {"old": {node.review.id for node in old.nodes}, "new": {node.review.id for node in new.nodes}}
     extra_nodes = {
         "old": tuple(node for node in comparison.document.nodes_old if node.id not in parsed_ids["old"]),
@@ -513,7 +598,8 @@ def write_report(old: ParsedProject, new: ParsedProject, comparison: ComparisonR
     preview_diagnostics = (item for item in preview.diagnostics
                            if item.code not in {"bibliography_key_unresolved", "unresolved_reference"})
     diagnostics = tuple(dict.fromkeys((*comparison.document.diagnostics, *preview_diagnostics,
-                                       *check_rules(old, new), *asset_diagnostics, *extra_diagnostics)))
+                                       *check_rules(old, new), *asset_diagnostics,
+                                       *fragment_diagnostics, *extra_diagnostics)))
     document = replace(comparison.document, diagnostics=diagnostics)
     diff_json = dumps(document)
     pairs = tuple((pair.old_id, pair.new_id) for pair in comparison.mapping.pairs)

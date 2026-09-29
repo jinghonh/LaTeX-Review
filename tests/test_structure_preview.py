@@ -97,7 +97,7 @@ def test_two_side_preview_math_failure_and_anchor_isolation(tmp_path):
         result = render_preview(parsed_old, parsed_new)
     html = result.html
     assert "内容预览" in html and "不代表最终编译版式" in html
-    assert "\\(α+β\\)" in html and "x^2+y^2=z^2" in html
+    assert 'data-display="false">α+β</span>' in html and "x^2+y^2=z^2" in html
     assert "&lt;script&gt;alert(1)&lt;/script&gt;" not in html and "<script>alert(1)</script>" not in html
     assert "\\unknown" not in html and "查看 LaTeX 原文" not in html
     assert "此处暂无法预览" in html

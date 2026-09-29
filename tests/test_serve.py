@@ -3,6 +3,7 @@
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 import signal
+import socket
 import subprocess
 import sys
 from threading import Thread
@@ -45,6 +46,14 @@ def test_http_report_resources_and_directory_boundary(report, tmp_path):
         finally:
             server.shutdown()
             worker.join()
+
+
+def test_server_start_does_not_require_host_name_lookup(report, monkeypatch):
+    def unavailable(*args):
+        raise OSError("主机名反查不可用")
+    monkeypatch.setattr(socket, "getfqdn", unavailable)
+    with create_server(report) as server:
+        assert server.server_name == "localhost" and server.server_port > 0
 
 
 @pytest.mark.parametrize('stop_signal', [signal.SIGINT, signal.SIGTERM])
