@@ -230,3 +230,23 @@ def test_invalid_config_invalidates_previous_report(tmp_path):
     assert not custom.joinpath("report.html").exists()
     assert not custom.joinpath("diff.json").exists()
     assert json.loads(custom.joinpath("diagnostics.json").read_text())["diagnostics"][0]["code"] == "configuration_error"
+
+    (tmp_path / ".latex-review.toml").write_text("", encoding="utf-8")
+    assert run_cli(tmp_path, "main.tex", "--output", str(custom)).returncode == 0
+    (tmp_path / ".latex-review.toml").write_text("git = 'invalid-table'\n", encoding="utf-8")
+    failed = run_cli(tmp_path, "main.tex", "--output", str(custom))
+    assert failed.returncode == 64
+    assert not custom.joinpath("report.html").exists()
+    assert not custom.joinpath("diff.json").exists()
+    assert json.loads(custom.joinpath("diagnostics.json").read_text())["diagnostics"][0]["code"] == "configuration_error"
+
+    source_before = (tmp_path / "main.tex").read_text()
+    assert run_cli(tmp_path, "main.tex", "--output", str(tmp_path)).returncode == 64
+    assert (tmp_path / "main.tex").read_text() == source_before
+    external = tmp_path / "external"
+    external.mkdir()
+    (external / "report.html").write_text("outside", encoding="utf-8")
+    linked = tmp_path / "linked-output"
+    linked.symlink_to(external, target_is_directory=True)
+    assert run_cli(tmp_path, "main.tex", "--output", str(linked)).returncode == 64
+    assert (external / "report.html").read_text() == "outside"
