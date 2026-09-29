@@ -273,7 +273,7 @@ def _diagnostics_html(document: ReviewDocument) -> str:
            f'<h3>诊断 {len(items)}</h3>{body}</section>'
 
 
-def _change_cards(document: ReviewDocument, anchors: set[str]) -> str:
+def _change_cards(document: ReviewDocument, anchors: set[str], rendering: dict | None = None) -> str:
     cards = []
     for change in document.changes:
         categories = sorted(set(change.categories) | {detail.category for detail in change.details})
@@ -291,6 +291,16 @@ def _change_cards(document: ReviewDocument, anchors: set[str]) -> str:
                            f'{_e(_CATEGORY_LABELS.get(detail.category, detail.category))} · '
                            f'{_e(_KIND_LABELS.get(detail.kind, detail.kind))}：{_e(detail.summary)}</button>'
                            f'<small>{_e(detail.old_text or "∅")} → {_e(detail.new_text or "∅")}</small></li>')
+        page_links = []
+        if rendering:
+            for side, label in (("old", "旧"), ("new", "新")):
+                mapped = rendering.get("changes", {}).get(change.id, {}).get(side, {})
+                page = mapped.get("page")
+                if page:
+                    page_links.append(f'<a href="#page-{side}-{page}">{label}侧第 {page} 页</a>')
+                else:
+                    page_links.append(f'{label}侧页码不确定：{_e(mapped.get("reason", "未知"))}')
+        page_meta = f'<p class="card-pages">{" · ".join(page_links)}</p>' if page_links else ""
         cards.append(f'<article class="change-card" id="{_e(change.id)}" data-kind="{_e(change.kind)}" '
                      f'data-categories="{_e(" ".join(categories))}">'
                      f'<button type="button" class="change-jump" data-old="{_e(old_id)}" data-new="{_e(new_id)}" '
@@ -300,11 +310,61 @@ def _change_cards(document: ReviewDocument, anchors: set[str]) -> str:
                      f'<strong>{_e(change.summary)}</strong></button>'
                      f'<p class="card-meta">{badges} · 匹配置信度 {change.matching_confidence:.2f}</p>'
                      f'<p class="card-source">旧：{_e(_location(change.source_old))}<br>新：{_e(_location(change.source_new))}</p>'
+                     f'{page_meta}'
                      f'<ul class="detail-list">{"".join(details)}</ul></article>')
     return "".join(cards) or '<p class="empty-list">没有检测到主变更。</p>'
 
 
-def _report_html(document: ReviewDocument, preview_html: str) -> str:
+def _rendering_html(rendering: dict | None, statuses: tuple | None) -> str:
+    if rendering is None or statuses is None:
+        return ""
+    items = []
+    for status in statuses:
+        label = "修改前" if status.side == "old" else "修改后"
+        document_link = f'<a href="{_e(status.pdf)}">编译文档</a>' if status.pdf else "无编译文档"
+        log_link = f'<a href="{_e(status.log)}">编译日志</a>' if status.log else "无编译日志"
+        items.append(f'<li>{label}：{_e(status.status)}；{document_link}；'
+                     f'{log_link}'
+                     f'{"；" + _e(status.reason) if status.reason else ""}</li>')
+    cards = []
+    if rendering["comparable"]:
+        pairs = rendering["pairs"]
+        changed = sum(pair["kind"] == "changed" for pair in pairs)
+        added = sum(pair["kind"] == "added" for pair in pairs)
+        removed = sum(pair["kind"] == "removed" for pair in pairs)
+        summary = f"页面视觉差异：变化 {changed} 对，新增 {added} 页，删除 {removed} 页。此计数与主变更数分开。"
+    else:
+        pairs = [{"old": index, "new": None, "kind": "unpaired", "image": None}
+                 for index in range(1, len(rendering["old"]) + 1)]
+        pairs += [{"old": None, "new": index, "kind": "unpaired", "image": None}
+                  for index in range(1, len(rendering["new"]) + 1)]
+        summary = "缺少双侧编译文档，页面视觉差异不可比较。"
+    for pair in pairs:
+        pictures = []
+        for side, label in (("old", "修改前"), ("new", "修改后")):
+            page = pair[side]
+            if page is None:
+                continue
+            source = rendering[side][page - 1]
+            change_links = []
+            for change_id, mapped in rendering.get("changes", {}).items():
+                if mapped.get(side, {}).get("page") == page:
+                    change_links.append(f'<a href="#{_e(change_id)}">{_e(change_id)}</a>')
+            pictures.append(f'<figure id="page-{side}-{page}"><figcaption>{label}第 {page} 页；'
+                            f'{"、".join(change_links) if change_links else "无可确定页码的结构变更"}</figcaption>'
+                            f'<img src="{_e(source)}" alt="{label}第 {page} 页预览" loading="lazy"></figure>')
+        if pair.get("image"):
+            pictures.append(f'<figure><figcaption>视觉差异图</figcaption><img src="{_e(pair["image"])}" '
+                            'alt="页面像素差异" loading="lazy"></figure>')
+        cards.append(f'<article class="page-pair"><h3>{_e(pair["kind"])}：'
+                     f'{pair["old"] or "—"} → {pair["new"] or "—"}</h3>' + "".join(pictures) + "</article>")
+    return ('<section class="rendered-pages" aria-label="编译页面与视觉差异"><h2>编译页面与视觉差异</h2>'
+            '<p>页面差异表示排版像素变化，不证明内容语义变化。</p><ul>' + "".join(items) + '</ul>'
+            f'<p>{_e(summary)}</p>' + "".join(cards) + '</section>')
+
+
+def _report_html(document: ReviewDocument, preview_html: str, *, rendering: dict | None = None,
+                 statuses: tuple | None = None) -> str:
     # 预览层拥有节点 HTML 和公式降级逻辑；报告仅将它们嵌入三栏容器。
     style = re.search(r"<style>(.*?)</style>", preview_html, re.S)
     main = re.search(r"<main>(.*?)</main>", preview_html, re.S)
@@ -314,7 +374,7 @@ def _report_html(document: ReviewDocument, preview_html: str) -> str:
     counts = document.summary
     category_counts = " · ".join(f"{_CATEGORY_LABELS.get(key, key)} {value}" for key, value in counts.category_hits.items())
     anchors = set(re.findall(r'\bid="([^"]+)"', main.group(1)))
-    cards = _change_cards(document, anchors)
+    cards = _change_cards(document, anchors, rendering)
     diagnostics_html = _diagnostics_html(document)
     return f'''<!doctype html>
 <html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
@@ -344,6 +404,10 @@ button,select{{font:inherit}}button:focus-visible,select:focus-visible,a:focus-v
 .report-diagnostics{{border:1px solid #a9b4c1;background:#f8fafc;padding:.5rem;margin:.6rem 0}}
 .report-diagnostics h3{{margin:.1rem 0}}.report-diagnostics ul{{margin:.3rem 0;padding-left:1.2rem}}
 .report-diagnostics li{{margin:.4rem 0;overflow-wrap:anywhere}}.report-diagnostics small{{display:block;color:#374151}}
+.rendered-pages{{padding:1rem;background:white;margin:1rem;border:1px solid #b8c0ca}}
+.page-pair{{border-top:1px solid #b8c0ca;padding:.7rem 0;display:flex;gap:1rem;flex-wrap:wrap;align-items:start}}
+.page-pair h3{{width:100%;margin:.2rem 0}}.page-pair figure{{margin:0;max-width:31%;min-width:230px}}
+.page-pair img{{max-width:100%;height:auto;border:1px solid #b8c0ca}}
 @media(max-width:1000px){{main{{grid-template-columns:1fr}}.preview-side,.changes-side{{height:auto;max-height:none}}}}
 </style></head><body><header><h1>LaTeX 三栏审阅报告</h1>
 <p class="notice">内容预览供审阅，不代表最终编译版式；来源位置可能为近似值。</p>
@@ -354,6 +418,7 @@ button,select{{font:inherit}}button:focus-visible,select:focus-visible,a:focus-v
 <div class="filters"><label>操作 <select id="kind-filter"><option value="all">全部</option><option value="added">新增</option><option value="removed">删除</option><option value="modified">修改</option></select></label>
 <label>类别 <select id="category-filter"><option value="all">全部</option><option value="text">正文</option><option value="equation">公式</option><option value="figure">图</option><option value="table">表格</option><option value="citation">引用</option><option value="comment">注释</option></select></label></div>
 <p id="filter-count" role="status"></p><p id="jump-status" class="jump-status" role="status"></p>{diagnostics_html}{cards}</section></main>
+{_rendering_html(rendering, statuses)}
 <script>(function(){{
 const cards=Array.from(document.querySelectorAll('.change-card'));
 const kind=document.getElementById('kind-filter'),category=document.getElementById('category-filter');
@@ -390,7 +455,8 @@ document.getElementById('changes-side').addEventListener('click',function(event)
 
 def write_report(old: ParsedProject, new: ParsedProject, comparison: ComparisonResult,
                  output_dir: str | Path, *, pdf_converter: str | None = None,
-                 conversion_timeout: float = 8.0) -> ReportResult:
+                 conversion_timeout: float = 8.0, extra_diagnostics: tuple[Diagnostic, ...] = (),
+                 rendering: dict | None = None, statuses: tuple | None = None) -> ReportResult:
     """在来源快照有效期内写入 report.html、diff.json、diagnostics.json 和双侧资源。"""
     if conversion_timeout <= 0:
         raise ValueError("转换超时必须为正数")
@@ -407,10 +473,11 @@ def write_report(old: ParsedProject, new: ParsedProject, comparison: ComparisonR
         "new": tuple(node for node in comparison.document.nodes_new if node.id not in parsed_ids["new"]),
     }
     preview = render_preview(old, new, figure_assets=figure_html, extra_nodes=extra_nodes)
-    diagnostics = tuple(dict.fromkeys((*comparison.document.diagnostics, *preview.diagnostics, *asset_diagnostics)))
+    diagnostics = tuple(dict.fromkeys((*comparison.document.diagnostics, *preview.diagnostics,
+                                       *asset_diagnostics, *extra_diagnostics)))
     document = replace(comparison.document, diagnostics=diagnostics)
     diff_json = dumps(document)
-    html = _report_html(document, preview.html)
+    html = _report_html(document, preview.html, rendering=rendering, statuses=statuses)
     _write_managed(directory, Path("diff.json"), content=diff_json.encode("utf-8"))
     _write_managed(directory, Path("diagnostics.json"),
                    content=dumps(DiagnosticsDocument(diagnostics)).encode("utf-8"))
@@ -420,7 +487,9 @@ def write_report(old: ParsedProject, new: ParsedProject, comparison: ComparisonR
 
 def write_source_fallback(old: ExpandedProject, new: ExpandedProject, output_dir: str | Path, *,
                           parse_failures: list[tuple[str, str]] = (),
-                          parsed: tuple[ParsedProject | None, ParsedProject | None] = (None, None)) -> ReportResult:
+                          parsed: tuple[ParsedProject | None, ParsedProject | None] = (None, None),
+                          extra_diagnostics: tuple[Diagnostic, ...] = (), rendering: dict | None = None,
+                          statuses: tuple | None = None) -> ReportResult:
     """结构解析整体失败时，保留两侧逐文件原始源码及逐行差异。"""
     from difflib import SequenceMatcher
 
@@ -455,6 +524,7 @@ def write_source_fallback(old: ExpandedProject, new: ExpandedProject, output_dir
                                           source_old=location if issue.side == "old" else None,
                                           source_new=location if issue.side == "new" else None))
     diagnostics.append(Diagnostic("source_fallback", "warning", "结构解析整体失败；已生成源码对比报告，原始内容完整保留"))
+    diagnostics.extend(extra_diagnostics)
     document = ReviewDocument(old.source.entry, old.source.identity, new.source.identity,
                               (old_node,), (new_node,), changes, tuple(dict.fromkeys(diagnostics)),
                               build_summary(changes))
@@ -474,7 +544,7 @@ section{min-width:0}pre{white-space:pre-wrap;overflow-wrap:anywhere;border:1px s
 <p>结构解析整体失败。下方按文件保留两侧原始源码，着色行表示差异；不能作为结构化差异使用。</p>"""
             + diagnostics_html + '<main><section><h2>修改前</h2><pre>' + "".join(before)
             + '</pre></section><section><h2>修改后</h2><pre>' + "".join(after)
-            + '</pre></section></main></body></html>')
+            + '</pre></section></main>' + _rendering_html(rendering, statuses) + '</body></html>')
     _write_managed(directory, Path("diff.json"), content=dumps(document).encode("utf-8"))
     _write_managed(directory, Path("diagnostics.json"),
                    content=dumps(DiagnosticsDocument(document.diagnostics)).encode("utf-8"))

@@ -49,7 +49,7 @@ def test_default_head_worktree_and_no_tex_engine(tmp_path):
     assert "Old text" in json.dumps(data) and "New text" in json.dumps(data)
     assert json.loads((output / "diagnostics.json").read_text())["diagnostics"] == []
     assert not marker.exists()
-    assert run_cli(tmp_path, "main.tex", "--compile").returncode == 64
+    assert run_cli(tmp_path, "main.tex", "--compile-new-only").returncode == 64
     assert not marker.exists()
 
 

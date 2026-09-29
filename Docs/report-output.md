@@ -18,3 +18,5 @@ with resolve_sources(entry="main.tex", old_dir="old", new_dir="new") as pair:
 `write_report` 返回的 `ReportResult.document` 是实际序列化到 `diff.json` 的审阅文档，合并了比较、预览和资源诊断；页面摘要和变更卡片均从该文档生成。正文主变更按 #2 契约计数，引用等明细只命中类别，不另增总数。`pdf_converter` 默认自动查找 `pdftoppm`；传入空字符串可禁用 PDF 预览，传入可执行文件路径可指定受控转换器；`conversion_timeout` 默认 8 秒。转换器只读取图 PDF 的第一页，限制输出宽高、时间及文件大小，失败则保留原 PDF 文件链接、图注、来源和未知尺寸提示。仅允许受控图片格式与 PDF 被复制或链接；SVG、HTML 等其他格式显示安全占位并产生可定位诊断。此接口不执行论文编译引擎。
 
 命令行现已接入该接口；`latex-review main.tex` 默认比较 Git HEAD 与磁盘工作区，将报告写到 `.latex-review/latest/`。结构解析整体失败时另生成明确标识的源码对比报告，仍保留 `diff.json` 和 `diagnostics.json`。
+
+第二版的显式编译选项在写报告前生成额外诊断、编译产物与页面数据，再由同一报告接口嵌入可控位图及页面跳转。默认命令仍不运行 TeX。编译状态、页面数据和沙箱行为见[真实编译、页面对比与沙箱渲染](compiled-rendering.md)。
