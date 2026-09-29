@@ -7,8 +7,6 @@ from hashlib import sha1
 import logging
 import re
 
-from plasTeX.TeX import TeX
-
 from .contract import Diagnostic, ReviewNode, SourceLocation
 from .source_map import MappedRange
 from .sources import ExpandedProject, SourceIssue
@@ -204,20 +202,17 @@ def _plain(raw: str) -> str:
 
 
 def _plastex_unknown(text: str) -> tuple[set[str], str | None]:
-    tex = TeX()
-    try:
-        tex.input(text)
-        with _quiet_plastex():
-            document = tex.parse()
-    except Exception as exc:  # 局部扫描仍可保留原文。
-        return set(), str(exc)
-    unknown: set[str] = set()
-    def walk(node: object) -> None:
-        if type(node).__module__ == "plasTeX.Context":
-            unknown.add(getattr(node, "nodeName", ""))
-        for child in getattr(node, "childNodes", ()):
-            walk(child)
-    walk(document)
+    # 全文只做静态识别；把论文原文交给 TeX 解释器会执行包/宏代码。
+    math_names = {"alpha", "beta", "gamma", "delta", "epsilon", "theta", "lambda", "mu", "pi", "sigma",
+                  "omega", "sum", "prod", "int", "frac", "sqrt", "left", "right", "mathrm", "mathbf",
+                  "mathbb", "mathcal", "text", "cdot", "times", "leq", "geq", "infty", "partial",
+                  "nabla", "ell", "operatorname", "overline", "hat", "bar", "tilde"}
+    known = _SAFE_COMMANDS | set(_HEADING) | math_names
+    unknown = {match.group(1) for match in _COMMAND.finditer(_masked(text))
+               if match.group(1).isalpha() and match.group(1) not in known}
+    known_env = _MATH_ENV | _LIST_ENV | _TABLE_ENV | _FIGURE_ENV | _THEOREM_ENV | {"document", "thebibliography"}
+    unknown.update(match.group(2) for match in _ENV.finditer(_masked(text))
+                   if match.group(2) not in known_env)
     return unknown, None
 
 

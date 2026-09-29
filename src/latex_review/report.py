@@ -7,6 +7,7 @@ from html import escape
 import os
 from pathlib import Path
 import re
+import resource
 import secrets
 import shutil
 import stat
@@ -15,12 +16,14 @@ import tempfile
 from urllib.parse import quote
 
 from .comparison import ComparisonResult
-from .contract import ChangeDetail, Diagnostic, DiagnosticsDocument, PrimaryChange, ReviewDocument, SourceLocation, dumps
+from .contract import (ChangeDetail, Diagnostic, DiagnosticsDocument, PrimaryChange, ReviewDocument,
+                       ReviewNode, SourceLocation, build_summary, dumps)
 from .preview import render_preview
 from .structure import ParsedNode, ParsedProject
+from .sources import ExpandedProject
 
 
-_IMAGE_SUFFIXES = {".png", ".jpg", ".jpeg", ".svg", ".webp", ".gif"}
+_IMAGE_SUFFIXES = {".png", ".jpg", ".jpeg", ".webp", ".gif"}
 _KIND_LABELS = {"added": "新增", "removed": "删除", "modified": "修改", "moved": "移动"}
 _CATEGORY_LABELS = {"text": "正文", "equation": "公式", "figure": "图", "table": "表格", "citation": "引用", "comment": "注释"}
 _SEVERITY_LABELS = {"info": "提示", "warning": "警告", "error": "错误"}
@@ -152,11 +155,14 @@ def _copy_asset(project: ParsedProject, relative: str, directory: Path, side: st
 def _pdf_preview(source: Path, directory: Path, relative: Path, converter: str, timeout: float) -> Path | None:
     with tempfile.TemporaryDirectory(prefix="latex-review-pdf-") as temporary:
         output = Path(temporary) / "preview.png"
+        def limit_output() -> None:
+            resource.setrlimit(resource.RLIMIT_FSIZE, (12 * 1024 * 1024, 12 * 1024 * 1024))
         try:
             result = subprocess.run((converter, "-f", "1", "-l", "1", "-singlefile", "-scale-to", "1200",
                                      "-png", str(source), str(output.with_suffix(""))),
                                     stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
-                                    stderr=subprocess.DEVNULL, timeout=timeout, check=False)
+                                    stderr=subprocess.DEVNULL, timeout=timeout, check=False,
+                                    cwd=temporary, preexec_fn=limit_output)
         except (OSError, subprocess.TimeoutExpired):
             return None
         if (result.returncode == 0 and not output.is_symlink() and output.is_file()
@@ -181,6 +187,12 @@ def _figure_assets(old: ParsedProject, new: ParsedProject, directory: Path,
                     diagnostics.append(_asset_diagnostic("report_asset_missing", f"图资源无法定位：{asset}", node, side))
                     cards.append(f'<div class="asset-card asset-missing" role="note"><strong>图缺失：{_e(asset)}</strong>'
                                  f'<p>{_e(provenance)}</p><p>尺寸：未知</p></div>')
+                    continue
+                if Path(relative).suffix.lower() == ".svg":
+                    diagnostics.append(_asset_diagnostic("report_asset_unsupported",
+                                                         f"SVG 可能含可执行内容，未复制或预览：{asset}", node, side))
+                    cards.append(f'<div class="asset-card asset-missing" role="note"><strong>SVG 图未预览：{_e(asset)}</strong>'
+                                 f'<p>{_e(provenance)}</p></div>')
                     continue
                 try:
                     copied, url = _copy_asset(project, relative, directory, side)
@@ -382,3 +394,74 @@ def write_report(old: ParsedProject, new: ParsedProject, comparison: ComparisonR
                    content=dumps(DiagnosticsDocument(diagnostics)).encode("utf-8"))
     _write_managed(directory, Path("report.html"), content=html.encode("utf-8"))
     return ReportResult(directory, document)
+
+
+def write_source_fallback(old: ExpandedProject, new: ExpandedProject, output_dir: str | Path, *,
+                          parse_failures: list[tuple[str, str]] = (),
+                          parsed: tuple[ParsedProject | None, ParsedProject | None] = (None, None)) -> ReportResult:
+    """结构解析整体失败时，保留两侧逐文件原始源码及逐行差异。"""
+    from difflib import SequenceMatcher
+
+    directory = Path(output_dir)
+    if directory.is_symlink():
+        raise ReportPathError("报告输出目录不可为符号链接")
+    directory.mkdir(parents=True, exist_ok=True)
+    unknown = SourceLocation(None, None, None, confidence=0, uncertainty_reason="整体结构解析失败，无法定位到单个原文件")
+    def raw_files(project: ExpandedProject) -> str:
+        return "".join(f"===== {name} =====\n{content}\n"
+                       for name, content in sorted(project.source_map.files.items()))
+    old_raw, new_raw = raw_files(old), raw_files(new)
+    old_node = ReviewNode("source-old", "source_fallback", old_raw, None, (), (), unknown)
+    new_node = ReviewNode("source-new", "source_fallback", new_raw, None, (), (), unknown)
+    changes = ((PrimaryChange("source-change-1", "modified", "source_fallback", old_node.id, new_node.id,
+                              unknown, unknown, 0, ("text",), (), "结构解析失败；按展开源码对比"),)
+               if old_raw != new_raw else ())
+    diagnostics = [*(parsed[0].diagnostics if parsed[0] else ()),
+                   *(parsed[1].diagnostics if parsed[1] else ())]
+    for side, message in parse_failures:
+        diagnostics.append(Diagnostic("structure_parse_failed", "warning", f"{side} 结构解析失败：{message}",
+                                      source_old=unknown if side == "old" else None,
+                                      source_new=unknown if side == "new" else None))
+    for project in (old, new):
+        if parsed[0 if project.source.side == "old" else 1] is not None:
+            continue
+        for issue in project.diagnostics:
+            content = project.source_map.files.get(issue.file, "")
+            line = content[:issue.start].count("\n") + 1
+            location = SourceLocation(issue.file, line, line, confidence=0.3, uncertainty_reason="来源展开不确定")
+            diagnostics.append(Diagnostic(issue.code, "warning", issue.message,
+                                          source_old=location if issue.side == "old" else None,
+                                          source_new=location if issue.side == "new" else None))
+    diagnostics.append(Diagnostic("source_fallback", "warning", "结构解析整体失败；已生成源码对比报告，原始内容完整保留"))
+    document = ReviewDocument(old.source.entry, old.source.identity, new.source.identity,
+                              (old_node,), (new_node,), changes, tuple(dict.fromkeys(diagnostics)),
+                              build_summary(changes))
+    old_lines, new_lines = old_raw.splitlines(keepends=True), new_raw.splitlines(keepends=True)
+    before, after = [], []
+    for op, i, j, k, l in SequenceMatcher(None, old_lines, new_lines, autojunk=False).get_opcodes():
+        before.extend(f'<span class="{("removed" if op != "equal" else "same")}">{_e(line)}</span>'
+                      for line in old_lines[i:j])
+        after.extend(f'<span class="{("added" if op != "equal" else "same")}">{_e(line)}</span>'
+                     for line in new_lines[k:l])
+    diagnostics_html = _diagnostics_html(document)
+    html = ("""<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><title>源码对比报告</title>
+<style>body{font:16px/1.5 system-ui;margin:1rem;color:#17212d}main{display:grid;grid-template-columns:1fr 1fr;gap:1rem}
+section{min-width:0}pre{white-space:pre-wrap;overflow-wrap:anywhere;border:1px solid #adb7c4;padding:1rem}
+.removed{background:#fce2df}.added{background:#d8f0df}.report-diagnostics{border:1px solid #a9b4c1;padding:.5rem}
+@media(max-width:800px){main{grid-template-columns:1fr}}</style></head><body><h1>源码对比报告</h1>
+<p>结构解析整体失败。下方按文件保留两侧原始源码，着色行表示差异；不能作为结构化差异使用。</p>"""
+            + diagnostics_html + '<main><section><h2>修改前</h2><pre>' + "".join(before)
+            + '</pre></section><section><h2>修改后</h2><pre>' + "".join(after)
+            + '</pre></section></main></body></html>')
+    _write_managed(directory, Path("diff.json"), content=dumps(document).encode("utf-8"))
+    _write_managed(directory, Path("diagnostics.json"),
+                   content=dumps(DiagnosticsDocument(document.diagnostics)).encode("utf-8"))
+    _write_managed(directory, Path("report.html"), content=html.encode("utf-8"))
+    return ReportResult(directory, document)
+
+
+def write_failure_diagnostics(output_dir: Path, diagnostic: Diagnostic) -> None:
+    """无可信报告时仅留下本轮诊断，不保留差异或页面入口。"""
+    output_dir.mkdir(parents=True, exist_ok=True)
+    _write_managed(output_dir, Path("diagnostics.json"),
+                   content=dumps(DiagnosticsDocument((diagnostic,))).encode("utf-8"))

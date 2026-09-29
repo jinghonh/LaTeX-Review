@@ -176,3 +176,20 @@ def test_inline_details_jump_to_their_own_anchors(tmp_path: Path) -> None:
                          if node.parent_id == change.new_node_id and node.type == node_type)
         assert f'id="old-{old_child.id}"' in html and f'id="new-{new_child.id}"' in html
         assert f'class="detail-jump" data-old="{old_child.id}" data-new="{new_child.id}"' in html
+
+
+def test_svg_script_is_not_copied_or_linked(tmp_path: Path) -> None:
+    old, new = tmp_path / "old", tmp_path / "new"
+    for root in (old, new):
+        (root / "fig").mkdir(parents=True)
+        (root / "main.tex").write_text(
+            r"\begin{figure}\includegraphics{fig/attack.svg}\caption{safe}\end{figure}", encoding="utf-8")
+        (root / "fig/attack.svg").write_text(
+            '<svg xmlns="http://www.w3.org/2000/svg" onload="alert(1)"/>', encoding="utf-8")
+    with resolve_sources(entry="main.tex", old_dir=old, new_dir=new) as pair:
+        before, after = parse_project(pair.old.expand()), parse_project(pair.new.expand())
+        report = write_report(before, after, compare_projects(before, after), tmp_path / "out")
+    html = report.html.read_text()
+    assert "SVG 图未预览" in html and "alert(1)" not in html
+    assert not (report.directory / "assets/old/fig/attack.svg").exists()
+    assert any(item.code == "report_asset_unsupported" for item in report.document.diagnostics)

@@ -15,6 +15,22 @@ from .structure import ParsedNode, ParsedProject, _argument, _masked, _quiet_pla
 
 
 _MATHJAX_URL = "https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-chtml.js"
+_INLINE_SAFE = {
+    "textbf", "bfseries", "bf", "textit", "emph", "itshape", "it", "texttt", "tt", "underline",
+    "footnote", "newline", "linebreak", "cite", "citep", "citet", "ref", "eqref", "autoref",
+    "pageref", "label", "centering", "hfill", "noindent", "url", "math", "displaymath",
+    "alpha", "beta", "gamma", "delta", "epsilon", "theta", "lambda", "mu", "pi", "sigma",
+    "omega", "sum", "prod", "int", "frac", "sqrt", "left", "right", "mathrm", "mathbf",
+    "mathbb", "mathcal", "text", "cdot", "times", "leq", "geq", "infty", "partial",
+    "nabla", "ell", "operatorname", "overline", "hat", "bar", "tilde",
+}
+_UNSAFE_MATH = re.compile(r"\\(?:href|url|html\w*|class|style|cssId|cssClass)(?![A-Za-z@])|(?:javascript|data|vbscript)\s*:", re.I)
+_MATH_SAFE = {
+    "begin", "end", "label", "tag", "notag", "nonumber", "text", "mathrm", "mathbf", "mathbb", "mathcal",
+    "alpha", "beta", "gamma", "delta", "epsilon", "theta", "lambda", "mu", "pi", "sigma", "omega",
+    "sum", "prod", "int", "frac", "sqrt", "left", "right", "cdot", "times", "leq", "geq",
+    "infty", "partial", "nabla", "ell", "operatorname", "overline", "hat", "bar", "tilde",
+}
 
 
 @dataclass(frozen=True)
@@ -32,6 +48,9 @@ def _anchor(side: str, node_id: str) -> str:
 
 
 def _math(raw: str, display: bool) -> str:
+    if _UNSAFE_MATH.search(raw) or any(match.group(1) not in _MATH_SAFE
+                                       for match in re.finditer(r"\\([A-Za-z@]+)", raw)):
+        return f'<code class="math-unsafe" title="公式含不安全链接或 HTML 命令，显示原文">{_e(raw)}</code>'
     if raw.startswith("\\begin"):
         wrapped = raw  # MathJax 处理完整环境；不能再套一层展示公式定界符。
     elif raw.startswith("\\[") and raw.endswith("\\]"):
@@ -50,6 +69,8 @@ def _math(raw: str, display: bool) -> str:
 
 @lru_cache(maxsize=2048)
 def _parse_dom(raw: str):
+    if any(match.group(1) not in _INLINE_SAFE for match in re.finditer(r"\\([A-Za-z@]+)", raw)):
+        raise ValueError("片段含未允许的宏，已显示原文")
     tex = TeX()
     tex.input("\\begin{document}\n" + raw + "\n\\end{document}")
     with _quiet_plastex():
@@ -303,7 +324,7 @@ def render_preview(old: ParsedProject, new: ParsedProject, *,
                 continue
             for key in node.references:
                 if key not in project.labels:
-                    diagnostics.append(Diagnostic("unresolved_reference", "warning", f"交叉引用目标不存在：{key}",
+                    diagnostics.append(Diagnostic("unresolved_reference", "info", f"交叉引用目标不存在：{key}",
                                                   source_old=node.review.source if side == "old" else None,
                                                   source_new=node.review.source if side == "new" else None))
     extra = extra_nodes or {}
@@ -334,7 +355,7 @@ figcaption,.table-caption{{font-style:italic}}.asset,.fallback-label{{color:#755
 <main>{_side(old, "old", "修改前", diagnostics, figure_assets, extra.get("old", ()))}{_side(new, "new", "修改后", diagnostics, figure_assets, extra.get("new", ()))}</main>
 <script>
 (function(){{
- window.MathJax={{tex:{{processEnvironments:true}}}};
+ window.MathJax={{tex:{{processEnvironments:true}},options:{{ignoreHtmlClass:'math-unsafe'}}}};
  const status=document.getElementById('math-status');
  let settled=false;
  function failed(){{if(settled)return;settled=true;status.textContent='在线公式排版不可用；页面保留原始 TeX 公式供阅读。';status.dataset.state='failed';}}

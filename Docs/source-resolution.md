@@ -19,4 +19,4 @@ with resolve_sources(entry="main.tex", old_dir="paper-old", new_dir="paper-new")
 
 `SourceError` 提供稳定的 `code`、`side`、`message`、`path`。依赖层的非致命问题是 `SourceIssue`，包含 `code`、所属侧、原文件字符跨度和 `include_chain`。入口不存在、不可读或超出根目录时抛 `SourceError`；非入口依赖问题保留为诊断。目录越界和链接逃逸目前做基本边界校验，统一安全加固归后续安全票。
 
-在完整审阅流水线接入前，可用 `latex-review ... --inspect-sources` 输出双侧展开文本、依赖、映射段和诊断的 JSON。支持 `latex-review --old-dir A --new-dir B --entry main.tex --inspect-sources`、`latex-review old.tex new.tex --inspect-sources`、`latex-review main.tex [--old REV --new REV] --inspect-sources`。未加此选项的审阅命令仍提示尚未实现。
+可用 `latex-review ... --inspect-sources` 输出双侧展开文本、依赖、映射段和诊断的 JSON。支持 `latex-review --old-dir A --new-dir B --entry main.tex --inspect-sources`、`latex-review old.tex new.tex --inspect-sources`、`latex-review main.tex [--old REV --new REV] --inspect-sources`。不加此选项会生成完整报告。

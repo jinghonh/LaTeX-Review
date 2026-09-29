@@ -6,6 +6,7 @@ from contextlib import ExitStack, contextmanager
 from dataclasses import dataclass
 from pathlib import Path
 import os
+from fnmatch import fnmatch
 import re
 import shutil
 import stat
@@ -122,9 +123,11 @@ def _revision(root: Path, revision: str, side: str) -> str:
     return result.stdout.decode().strip()
 
 
-def _materialize_git(root: Path, sha: str, destination: Path) -> None:
+def _materialize_git(root: Path, sha: str, destination: Path, excluded_paths: tuple[Path, ...] = (),
+                     ignore_patterns: tuple[str, ...] = ()) -> None:
     """逐个物化对象树，不依赖当前索引或工作区文件。"""
     listing = _git(root, "ls-tree", "-rz", "--full-tree", sha).stdout
+    excluded = tuple(path.relative_to(root) for path in excluded_paths if path.is_relative_to(root))
     for record in listing.split(b"\0"):
         if not record:
             continue
@@ -133,6 +136,10 @@ def _materialize_git(root: Path, sha: str, destination: Path) -> None:
         relative = Path(os.fsdecode(name))
         if relative.is_absolute() or ".." in relative.parts:
             raise SourceError("invalid_git_path", None, "Git 对象树含非法路径")
+        if any(relative == path or path in relative.parents for path in excluded):
+            continue
+        if any(fnmatch(relative.as_posix(), pattern) for pattern in ignore_patterns):
+            continue
         target = destination / relative
         if kind == "commit":  # 外部子模块不自动初始化。
             continue
@@ -151,7 +158,8 @@ def _materialize_git(root: Path, sha: str, destination: Path) -> None:
                 target.chmod(0o755)
 
 
-def _materialize_worktree(root: Path, destination: Path) -> None:
+def _materialize_worktree(root: Path, destination: Path, excluded_paths: tuple[Path, ...] = (),
+                          ignore_patterns: tuple[str, ...] = ()) -> None:
     """索引用于找路径，内容一律取当前磁盘；补入未忽略的未跟踪文件。"""
     paths = _git(root, "ls-files", "-z", "--cached", "--others", "--exclude-standard").stdout
     for name in set(paths.split(b"\0")) - {b""}:
@@ -159,6 +167,12 @@ def _materialize_worktree(root: Path, destination: Path) -> None:
         if relative.is_absolute() or ".." in relative.parts:
             continue
         original = root / relative
+        if any(original == excluded or excluded in original.parents for excluded in excluded_paths):
+            continue
+        if any(fnmatch(relative.as_posix(), pattern) for pattern in ignore_patterns):
+            continue
+        if not _within(root, original):
+            continue
         if not original.is_file() and not original.is_symlink():
             continue  # 已删除的已跟踪文件保持缺失。
         target = destination / relative
@@ -178,13 +192,14 @@ def resolve_sources(
     new_dir: str | Path | None = None, old_file: str | Path | None = None,
     new_file: str | Path | None = None, old_revision: str | None = None,
     new_revision: str | None = None, cwd: str | Path | None = None,
+    excluded_paths: tuple[Path, ...] = (), ignore_patterns: tuple[str, ...] = (),
 ) -> Iterator[SourcePair]:
     """解析互斥的来源模式；返回值仅在 with 作用域内有效。"""
     current = Path(cwd or Path.cwd()).resolve()
     directory_mode = old_dir is not None or new_dir is not None
     file_mode = old_file is not None or new_file is not None
-    revision_mode = old_revision is not None or new_revision is not None
-    if sum((directory_mode, file_mode, revision_mode)) > 1:
+    revision_mode = new_revision not in (None, "worktree")
+    if sum((directory_mode, file_mode, old_revision is not None or new_revision is not None)) > 1:
         raise SourceError("conflicting_modes", None, "目录、独立文件和 Git 提交参数互斥")
     if directory_mode:
         if old_dir is None or new_dir is None or not entry:
@@ -216,8 +231,8 @@ def resolve_sources(
         return
     if not entry:
         raise SourceError("invalid_arguments", None, "Git 模式需要论文入口")
-    if revision_mode and (old_revision is None or new_revision is None):
-        raise SourceError("invalid_arguments", None, "指定 Git 提交时须同时提供 --old 和 --new")
+    if new_revision == "worktree" and old_revision == "worktree":
+        raise SourceError("invalid_arguments", None, "修改前不能是 worktree")
     entry_path = Path(entry).expanduser()
     entry_path = entry_path if entry_path.is_absolute() else current / entry_path
     probe = _git(entry_path.parent, "rev-parse", "--show-toplevel", check=False)
@@ -235,14 +250,14 @@ def resolve_sources(
         old_tmp = Path(stack.enter_context(tempfile.TemporaryDirectory(prefix="latex-review-old-"))).resolve()
         new_tmp = Path(stack.enter_context(tempfile.TemporaryDirectory(prefix="latex-review-new-"))).resolve()
         old_sha = _revision(root, old_revision or "HEAD", "old")
-        _materialize_git(root, old_sha, old_tmp)
+        _materialize_git(root, old_sha, old_tmp, excluded_paths, ignore_patterns)
         if revision_mode:
             new_sha = _revision(root, new_revision, "new")
-            _materialize_git(root, new_sha, new_tmp)
+            _materialize_git(root, new_sha, new_tmp, excluded_paths, ignore_patterns)
             new_identity = ComparisonSource("git", new_sha)
             new_origin = None
         else:
-            _materialize_worktree(root, new_tmp)
+            _materialize_worktree(root, new_tmp, excluded_paths, ignore_patterns)
             new_identity = ComparisonSource("worktree", "working-tree")
             new_origin = root
         old_entry = _entry(old_tmp, relative, "old")
@@ -419,12 +434,14 @@ def expand_project(source: ProjectSource) -> ExpandedProject:
         issues.append(SourceIssue(code, source.side, message, file, start, end, chain, certainty))
 
     def candidate_file(current_file: str, argument: str, extensions: tuple[str, ...], *, paths: tuple[str, ...] = ()) -> tuple[str | None, str | None]:
-        if not argument or argument.startswith("/") or "\\" in argument or "#" in argument:
+        if not argument or "\\" in argument or "#" in argument:
             return None, "uncertain_dependency"
         option = Path(argument)
         if option.is_absolute():
             return None, "dependency_outside_root"
         bases = [Path(current_file).parent, Path(".")]
+        if any(Path(path).is_absolute() for path in paths):
+            return None, "dependency_outside_root"
         bases.extend(Path(path) for path in paths)
         seen = set()
         in_root_candidate = False

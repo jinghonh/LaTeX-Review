@@ -117,6 +117,22 @@ def test_graphicspath_unreadable_and_link_boundary(tmp_path):
         assert result.origin_ranges(marker, marker + 18)[0].origin.confidence == "unknown"
 
 
+def test_traversal_and_resource_symlink_never_read_outside_root(tmp_path):
+    old, new = tmp_path / "old", tmp_path / "new"
+    write(tmp_path, "outside.tex", "SECRET")
+    write(tmp_path, "outside.svg", '<svg onload="alert(1)"/>')
+    for root in (old, new):
+        write(root, "main.tex", "\\input{../outside}\n\\includegraphics{fig/escape.svg}\n")
+        (root / "fig").mkdir()
+        (root / "fig/escape.svg").symlink_to(tmp_path / "outside.svg")
+    with resolve_sources(entry="main.tex", old_dir=old, new_dir=new) as pair:
+        expanded = pair.old.expand()
+        assert "SECRET" not in expanded.text
+        assert [item.code for item in expanded.diagnostics] == [
+            "dependency_outside_root", "dependency_outside_root"]
+        assert not expanded.dependencies
+
+
 def test_git_two_commits_and_current_disk_snapshot(tmp_path):
     root = tmp_path / "repo"
     root.mkdir()
