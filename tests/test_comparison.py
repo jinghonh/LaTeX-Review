@@ -4,6 +4,7 @@ import unicodedata
 from latex_review import (
     compare_projects, dumps, match_nodes, parse_project, resolve_sources, scan_latex, token_edits,
 )
+import latex_review.comparison as comparison_module
 
 
 def _projects(tmp_path: Path, old_text: str, new_text: str):
@@ -17,6 +18,23 @@ def _projects(tmp_path: Path, old_text: str, new_text: str):
 
 def _paragraphs(project):
     return [node for node in project.nodes if node.review.type == "paragraph"]
+
+
+def test_single_node_diff_failure_keeps_raw_and_other_changes(tmp_path, monkeypatch):
+    old, new = next(_projects(tmp_path, "Alpha FAIL.\n\nStable before.",
+                              "Alpha changed.\n\nStable after."))
+    original = comparison_module.token_edits
+    def fail_one(before, after):
+        if any(token.text == "FAIL" for token in before):
+            raise ValueError("broken token")
+        return original(before, after)
+    monkeypatch.setattr(comparison_module, "token_edits", fail_one)
+    result = compare_projects(old, new)
+    assert any(item.code == "node_diff_fallback" for item in result.document.diagnostics)
+    assert any("FAIL" in detail.old_text for change in result.document.changes
+               for detail in change.details if detail.old_text)
+    assert any("Stable" in (detail.old_text or "") for change in result.document.changes
+               for detail in change.details)
 
 
 def test_inserted_paragraph_numbered_heading_and_repeated_body_stay_one_to_one(tmp_path):

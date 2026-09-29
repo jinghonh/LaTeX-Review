@@ -182,6 +182,19 @@ def compare_projects(old: ParsedProject, new: ParsedProject, *, review_comments:
         return (node.type == "table" and node.parent_id is not None and
                 by_id[node.parent_id].review.type == "equation")
 
+    def compare_one(left: ReviewNode | None, right: ReviewNode | None, confidence: float, reason: str) -> None:
+        try:
+            (text_change if _is_text_node(right or left) else structured_change)(left, right, confidence, reason)
+        except Exception as exc:
+            kind = "modified" if left and right else "removed" if left else "added"
+            category = (right or left).type if (right or left).type in {"equation", "figure", "table"} else "text"
+            detail = ChangeDetail("detail-001", category, kind, left.raw_latex if left else None,
+                                  right.raw_latex if right else None, "节点比较失败；保留双侧 LaTeX 原文")
+            emit(kind, left, right, confidence, (category,), (detail,), "节点源码回退；" + reason)
+            diagnostics.append(Diagnostic("node_diff_fallback", "warning", f"节点比较失败，已保留原文：{exc}",
+                                          source_old=left.source if left else None,
+                                          source_new=right.source if right else None))
+
     # 配对及未配对节点均按旧侧文档顺序输出，末尾追加新侧新增。
     pairs = {pair.old_id: pair for pair in mapping.pairs}
     unmatched_old = {item.node_id: item for item in mapping.old_unmatched}
@@ -191,16 +204,16 @@ def compare_projects(old: ParsedProject, new: ParsedProject, *, review_comments:
         if nested_array(left, a) or not (_is_text_node(left) or left.type in {"equation", "figure", "table"}):
             continue
         if pair := pairs.get(left.id):
-            (text_change if _is_text_node(left) else structured_change)(left, b[pair.new_id].review, pair.confidence, pair.reason)
+            compare_one(left, b[pair.new_id].review, pair.confidence, pair.reason)
         elif item := unmatched_old.get(left.id):
-            (text_change if _is_text_node(left) else structured_change)(left, None, item.confidence, item.reason)
+            compare_one(left, None, item.confidence, item.reason)
             if item.confidence:
                 diagnostics.append(Diagnostic("low_confidence_match", "warning", "节点未可靠配对；按删除与新增处理：" + item.reason,
                                               source_old=left.source))
     for node in new.nodes:
         right = node.review
         if not nested_array(right, b) and (_is_text_node(right) or right.type in {"equation", "figure", "table"}) and (item := unmatched_new.get(right.id)):
-            (text_change if _is_text_node(right) else structured_change)(None, right, item.confidence, item.reason)
+            compare_one(None, right, item.confidence, item.reason)
             if item.confidence:
                 diagnostics.append(Diagnostic("low_confidence_match", "warning", "节点未可靠配对；按删除与新增处理：" + item.reason,
                                               source_new=right.source))
