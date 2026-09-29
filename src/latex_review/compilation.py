@@ -262,7 +262,8 @@ def compile_side(source: ProjectSource, output_dir: Path, *, engine: str = "pdfl
                         log = probe_log
                         raise _ToolUnavailable(f"无法在隔离环境中验证 {Path(program).name} 版本："
                                                f"{probe_reason or '版本输出不符或退出失败'}")
-                command = [latexmk, "-norc", _MODES[engine], "-interaction=nonstopmode", "-halt-on-error",
+                # BibTeX 直接处理 build/main.aux，避免 latexmk 为它切换目录后影响 TeX 重跑。
+                command = [latexmk, "-norc", "-nobibfudge", _MODES[engine], "-interaction=nonstopmode", "-halt-on-error",
                            "-file-line-error", "-latexoption=-no-shell-escape", "-latexoption=-synctex=1",
                            "-outdir=build", source.entry]
                 exit_code, log, reason = _run_bounded(command, project, env, timeout, output_limit,

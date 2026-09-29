@@ -108,6 +108,35 @@ def test_new_only_keeps_one_side_preview_and_explicit_status(tmp_path: Path) -> 
     assert "不可比较" in (output / "report.html").read_text()
 
 
+@pytest.mark.skipif(not _ready() or not shutil.which("bibtex"), reason="需要 macOS、TeX 与 BibTeX 工具")
+@pytest.mark.parametrize("sandbox", [False, True])
+def test_bibliography_reruns_both_sides_and_compares_pages(tmp_path: Path, sandbox: bool) -> None:
+    old, new = tmp_path / "old", tmp_path / "new"
+    for root, word in ((old, "Old"), (new, "New")):
+        _source(root, _tex(f"{word} citation \\cite{{demo}}.\n"
+                           "\\bibliographystyle{plain}\n\\bibliography{references}"),
+                "old" if root == old else "new")
+        (root / "references.bib").write_text(
+            "@article{demo, author={Ada Lovelace}, title={Demo}, journal={Example}, year={1843}}\n",
+            encoding="utf-8")
+    output = tmp_path / "output"
+    args = ["--entry", "main.tex", "--old-dir", str(old), "--new-dir", str(new),
+            "--output", str(output), "--compile"]
+    if sandbox:
+        args.append("--sandbox-render")
+    code = cli.main(args)
+    assert code in (0, 2)
+    for side in ("old", "new"):
+        status = json.loads((output / f"compiled/{side}/status.json").read_text())
+        log = (output / f"compiled/{side}/compile.log").read_text(errors="replace")
+        assert status["status"] == "success", (side, status, log[-1800:])
+        assert "Database file #1: references.bib" in log
+        assert "(build/main.bbl)" in log
+        assert "undefined" not in log.rsplit("--- TeX log ---", 1)[-1].lower()
+        assert (output / f"pages/{side}/0001.png").is_file()
+    assert json.loads((output / "pages/visual.json").read_text())["comparable"]
+
+
 @pytest.mark.skipif(not _ready(), reason="需要 macOS 与 TeX 工具")
 def test_advanced_sandbox_blocks_command_and_outside_write(tmp_path: Path) -> None:
     marker = tmp_path / "outside"
