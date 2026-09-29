@@ -428,6 +428,7 @@ button,select{{font:inherit}}button:focus-visible,select:focus-visible,a:focus-v
 @media(max-width:1000px){{main{{grid-template-columns:1fr}}.preview-side,.changes-side{{height:auto;max-height:none}}}}
 </style></head><body><header><h1>LaTeX 三栏审阅报告</h1>
 <p class="notice">内容预览供审阅，不代表最终编译版式；来源位置可能为近似值。</p>
+<p class="notice">参考文献元数据按两侧引用键展示；仅条目内容变化且引用键不变时，不生成独立语义主变更。</p>
 <p class="summary" id="report-summary" data-changes="{counts.changes}">主变更 {counts.changes} · 正文增加 {counts.added_words} 词 · 删除 {counts.removed_words} 词</p>
 <p class="summary-extra">{_e(category_counts)}</p>
 <div class="report-controls"><label><input type="checkbox" id="sync-scroll"> 同步滚动</label>

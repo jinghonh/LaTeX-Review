@@ -13,12 +13,14 @@ from plasTeX.TeX import TeX
 from .contract import Diagnostic, ReviewNode, SourceLocation
 from .structure import ParsedNode, ParsedProject, _argument, _masked, _quiet_plastex
 from .table_model import parse_table
+from .macros import expand_call
+from .text_diff import CITATION_COMMANDS
 
 
 _MATHJAX_URL = "https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-chtml.js"
 _INLINE_SAFE = {
     "textbf", "bfseries", "bf", "textit", "emph", "itshape", "it", "texttt", "tt", "underline",
-    "footnote", "newline", "linebreak", "cite", "citep", "citet", "ref", "eqref", "autoref",
+    "footnote", "newline", "linebreak", *CITATION_COMMANDS, "ref", "eqref", "autoref",
     "pageref", "label", "centering", "hfill", "noindent", "url", "math", "displaymath",
     "alpha", "beta", "gamma", "delta", "epsilon", "theta", "lambda", "mu", "pi", "sigma",
     "omega", "sum", "prod", "int", "frac", "sqrt", "left", "right", "mathrm", "mathbf",
@@ -68,6 +70,34 @@ def _math(raw: str, display: bool) -> str:
     return f'<{tag} class="math-tex" data-raw-tex="{_e(raw)}">{_e(wrapped)}</{tag}>'
 
 
+def _math_preview(raw: str, project: ParsedProject, side: str, source: SourceLocation,
+                  diagnostics: list[Diagnostic], display: bool) -> str:
+    expanded = raw
+    if project.macros:
+        pieces = []
+        cursor = 0
+        for match in re.finditer(r"\\([A-Za-z@]+)", raw):
+            if match.start() < cursor or match.group(1) not in project.macros:
+                continue
+            pieces.append(raw[cursor:match.start()])
+            replacement, end, problem = expand_call(raw, match.start(), match.group(1), project.macros)
+            if problem:
+                diagnostics.append(Diagnostic("preview_macro_fallback", "warning",
+                                              f"\\{match.group(1)}：{problem}；已显示原文",
+                                              source_old=source if side == "old" else None,
+                                              source_new=source if side == "new" else None))
+            pieces.append(replacement)
+            cursor = end
+        if pieces:
+            pieces.append(raw[cursor:])
+            expanded = "".join(pieces)
+    rendered = _math(expanded, display)
+    if expanded != raw:
+        return (f'<span class="macro-placeholder" title="宏占位预览；原始来源见 LaTeX 原文，展开位置近似" '
+                f'data-source-approximate="true" data-original="{_e(raw)}">{rendered}</span>')
+    return rendered
+
+
 @lru_cache(maxsize=2048)
 def _parse_dom(raw: str):
     if any(match.group(1) not in _INLINE_SAFE for match in re.finditer(r"\\([A-Za-z@]+)", raw)):
@@ -79,14 +109,15 @@ def _parse_dom(raw: str):
     return next((child for child in document.childNodes if getattr(child, "nodeName", "") == "document"), document)
 
 
-def _dom_html(node: object, project: ParsedProject, side: str, inline: list[ParsedNode], cursors: dict[str, int]) -> str:
+def _dom_html(node: object, project: ParsedProject, side: str, inline: list[ParsedNode], cursors: dict[str, int],
+              diagnostics: list[Diagnostic]) -> str:
     name = getattr(node, "nodeName", "")
     if name == "#text":
         return _e(str(node))
     if name in {"label", "centering", "hfill", "noindent"}:
         return ""
-    if name in {"cite", "citep", "citet", "ref", "eqref", "autoref", "pageref", "math", "displaymath"}:
-        kind = "citation" if name.startswith("cite") else "reference" if name.endswith("ref") else "inline_math"
+    if name in {*CITATION_COMMANDS, "ref", "eqref", "autoref", "pageref", "math", "displaymath"}:
+        kind = "citation" if name in CITATION_COMMANDS else "reference" if name.endswith("ref") else "inline_math"
         candidates = [item for item in inline if item.review.type == kind]
         index = cursors.get(kind, 0)
         item = candidates[index] if index < len(candidates) else None
@@ -94,15 +125,26 @@ def _dom_html(node: object, project: ParsedProject, side: str, inline: list[Pars
         raw = item.review.raw_latex if item else str(getattr(node, "source", ""))
         anchor = f' id="{_e(_anchor(side, item.review.id))}" data-node-id="{_e(item.review.id)}"' if item else ""
         if kind == "inline_math":
-            return f"<span{anchor}>{_math(raw, False)}</span>"
-        key_match = re.search(r"\{([^{}]+)\}", raw)
-        keys = key_match.group(1).split(",") if key_match else []
+            return f"<span{anchor}>{_math_preview(raw, project, side, item.review.source if item else SourceLocation(None, None, None, confidence=0, uncertainty_reason='公式来源不确定'), diagnostics, False)}</span>"
+        if item:
+            keys = item.citations if kind == "citation" else item.references
+        else:
+            command = re.match(r"\\[A-Za-z@]+", raw)
+            argument = _argument(_masked(raw), command.end()) if command else None
+            keys = tuple(part.strip() for part in argument[1].split(",")) if argument else ()
         if kind == "citation":
             parts = []
             for key in keys:
                 key = key.strip()
                 target = project.labels.get(f"bib:{key}")
-                parts.append(f'<a href="#{_e(_anchor(side, target))}">{_e(key)}</a>' if target else _e(key))
+                entry = project.bibliography.get(key)
+                label = f'<a href="#{_e(_anchor(side, target))}">{_e(key)}</a>' if target else _e(key)
+                if entry:
+                    metadata = "；".join((f"作者：{entry.author or '缺失'}", f"题目：{entry.title or '缺失'}",
+                                           f"年份：{entry.year or '缺失'}"))
+                    parts.append(f'{label}<small class="citation-metadata">{_e(metadata)}</small>')
+                else:
+                    parts.append(f'{label}<small class="citation-metadata">文献元数据未解析，保留引用键</small>')
             return f'<span class="citation"{anchor}>[{", ".join(parts)}]</span>'
         key = keys[0].strip() if keys else ""
         target = project.labels.get(key)
@@ -115,7 +157,7 @@ def _dom_html(node: object, project: ParsedProject, side: str, inline: list[Pars
         return f'<span class="unresolved-ref"{anchor}>?? ({_e(key)})</span>'
     if type(node).__module__ == "plasTeX.Context":
         return f'<span class="fallback-inline">未识别：<code>{_e(getattr(node, "source", ""))}</code></span>'
-    children = "".join(_dom_html(child, project, side, inline, cursors) for child in getattr(node, "childNodes", ()))
+    children = "".join(_dom_html(child, project, side, inline, cursors, diagnostics) for child in getattr(node, "childNodes", ()))
     if name in {"#document", "document", "par", "bgroup", "group"}:
         return children
     if name in {"textbf", "bfseries", "bf"}:
@@ -159,6 +201,56 @@ def _inline_html(raw: str, project: ParsedProject, side: str, inline: list[Parse
         pieces.append(_inline_html(raw[cursor:], project, side, suffix, diagnostics, source,
                                    None if base_start is None else base_start + cursor))
         return "".join(pieces)
+    macro_math = [item for item in inline if item.review.type == "inline_math" and
+                  any(match.group(1) in project.macros for match in re.finditer(r"\\([A-Za-z@]+)", item.review.raw_latex))]
+    if macro_math and base_start is not None:
+        pieces = []
+        cursor = 0
+        for item in macro_math:
+            start = item.expanded_start - base_start
+            prefix = [child for child in inline if child.expanded_start >= base_start + cursor and
+                      child.expanded_end <= base_start + start]
+            pieces.append(_inline_html(raw[cursor:start], project, side, prefix, diagnostics, source, base_start + cursor))
+            anchor = _anchor(side, item.review.id)
+            pieces.append(f'<span id="{_e(anchor)}" data-node-id="{_e(item.review.id)}">'
+                          + _math_preview(item.review.raw_latex, project, side, item.review.source,
+                                          diagnostics if diagnostics is not None else [], False) + "</span>")
+            cursor = item.expanded_end - base_start
+        suffix = [child for child in inline if child.expanded_start >= base_start + cursor]
+        pieces.append(_inline_html(raw[cursor:], project, side, suffix, diagnostics, source, base_start + cursor))
+        return "".join(pieces)
+    if project.macros:
+        mask = _masked(raw)
+        if any(match.group(1) in project.macros for match in re.finditer(r"\\([A-Za-z@]+)", mask)):
+            pieces = []
+            consumed = 0
+            search_at = 0
+            while (found := re.search(r"\\([A-Za-z@]+)", mask[search_at:])) is not None:
+                start = search_at + found.start()
+                name = found.group(1)
+                if name not in project.macros:
+                    search_at = start + len(name) + 1
+                    continue
+                prefix_nodes = [child for child in inline if base_start is not None and
+                                base_start + consumed <= child.expanded_start < base_start + start]
+                pieces.append(_inline_html(raw[consumed:start], project, side, prefix_nodes, diagnostics, source,
+                                           None if base_start is None else base_start + consumed))
+                rendered, end, problem = expand_call(raw, start, name, project.macros)
+                original = raw[start:end]
+                if problem and diagnostics is not None:
+                    location = source or SourceLocation(None, None, None, confidence=0, uncertainty_reason="宏调用位置不确定")
+                    diagnostics.append(Diagnostic("preview_macro_fallback", "warning", f"\\{name}：{problem}；已显示原文",
+                                                  source_old=location if side == "old" else None,
+                                                  source_new=location if side == "new" else None))
+                label = "宏原文" if project.macros[name].strategy == "raw" or problem else "宏占位预览"
+                pieces.append(f'<span class="macro-placeholder" title="{label}；原始来源见 LaTeX 原文，展开位置近似" '
+                              f'data-source-approximate="true" data-original="{_e(original)}">{_e(rendered)}</span>')
+                consumed = end
+                search_at = end
+            suffix_nodes = [child for child in inline if base_start is not None and child.expanded_start >= base_start + consumed]
+            pieces.append(_inline_html(raw[consumed:], project, side, suffix_nodes, diagnostics, source,
+                                       None if base_start is None else base_start + consumed))
+            return "".join(pieces)
     try:
         dom = _parse_dom(raw)
         if diagnostics is not None:
@@ -176,7 +268,7 @@ def _inline_html(raw: str, project: ParsedProject, side: str, inline: list[Parse
                 diagnostics.append(Diagnostic("preview_unknown_macro", "warning", f"预览无法解释宏 \\{name}；已显示原文",
                                               source_old=location if side == "old" else None,
                                               source_new=location if side == "new" else None))
-        return _dom_html(dom, project, side, inline, {})
+        return _dom_html(dom, project, side, inline, {}, diagnostics if diagnostics is not None else [])
     except Exception as exc:
         if diagnostics is not None and raw.strip():
             location = source or SourceLocation(None, None, None, confidence=0, uncertainty_reason="预览片段无法定位")
@@ -239,7 +331,7 @@ def _body(node: ParsedNode, project: ParsedProject, side: str, by_id: dict[str, 
     if kind == "equation":
         arrays = "".join(_render_node(child, project, side, by_id, diagnostics, figure_assets)
                          for child in children if child.review.type == "table")
-        return _math(node.review.raw_latex, True) + arrays + _embedded_fallbacks(children, side)
+        return _math_preview(node.review.raw_latex, project, side, node.review.source, diagnostics, True) + arrays + _embedded_fallbacks(children, side)
     if kind == "list":
         tag = "ol" if node.review.raw_latex.startswith("\\begin{enumerate}") else "ul"
         return f"<{tag}>" + "".join(_render_node(child, project, side, by_id, diagnostics, figure_assets) for child in children) + f"</{tag}>"
@@ -312,7 +404,18 @@ def render_preview(old: ParsedProject, new: ParsedProject, *,
     diagnostics = [*old.diagnostics, *new.diagnostics]
     for project, side in ((old, "old"), (new, "new")):
         by_id = project.by_id()
+        seen_citations: set[str] = set()
         for node in project.nodes:
+            if node.review.type == "citation":
+                for key in node.citations:
+                    if key not in project.bibliography and key not in seen_citations:
+                        seen_citations.add(key)
+                        handmade = f"bib:{key}" in project.labels
+                        diagnostics.append(Diagnostic("bibliography_unsupported" if handmade else "bibliography_key_unresolved",
+                                                      "warning", f"引用键 {key} 的手写文献格式未提供结构化元数据；已保留引用键" if handmade else
+                                                      f"引用键 {key} 无法解析文献元数据；已保留引用键",
+                                                      source_old=node.review.source if side == "old" else None,
+                                                      source_new=node.review.source if side == "new" else None))
             if any(by_id[child].references and by_id[child].expanded_start >= node.expanded_start
                    and by_id[child].expanded_end <= node.expanded_end for child in node.review.child_ids):
                 continue
@@ -342,6 +445,7 @@ figcaption,.table-caption{{font-style:italic}}.asset,.fallback-label{{color:#755
 .latex-source{{font-size:.75rem;color:#6b6356;margin:.4rem 0}}.latex-source pre,.fallback-raw,.table-source{{white-space:pre-wrap;overflow-wrap:anywhere;background:#f6f4ef;padding:.7rem;text-align:left}}
 .node-warning{{color:#9b3c26;background:#fff1e8;padding:.35rem .55rem}}.fallback-inline{{background:#fff1e8;color:#8d3320}}
 .citation,.cross-ref{{color:#315c86}}.unresolved-ref{{color:#9b3c26}}
+.citation-metadata{{display:inline;color:#374151;margin-left:.25rem}}.macro-placeholder{{background:#edf4ed;border-bottom:1px dotted #48734b}}
 @media(max-width:800px){{main{{grid-template-columns:1fr}}.preview-side{{max-height:none}}}}
 </style></head><body>
 <header><h1>LaTeX 内容预览</h1><p class="notice">用于审阅正文内容，不代表最终编译版式。</p>

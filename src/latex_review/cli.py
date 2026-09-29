@@ -17,6 +17,7 @@ from .contract import Diagnostic, SourceLocation
 from .report import ReportPathError, write_failure_diagnostics, write_report, write_source_fallback
 from .sources import SourceError, resolve_sources
 from .structure import parse_project
+from .macros import validate_macros
 
 
 class ReviewArgumentParser(argparse.ArgumentParser):
@@ -36,7 +37,7 @@ def _config(path: Path, explicit: bool) -> dict:
             data = tomllib.load(stream)
     except (OSError, tomllib.TOMLDecodeError) as exc:
         raise ConfigurationError(f"配置文件 {path} 无法读取或解析：{exc}") from exc
-    allowed = {"entry", "ignore", "render", "diff", "git", "output"}
+    allowed = {"entry", "ignore", "render", "diff", "git", "output", "macros"}
     if extra := set(data) - allowed:
         raise ConfigurationError(f"配置含未知字段：{', '.join(sorted(extra))}")
     for key in ("entry", "output"):
@@ -64,6 +65,10 @@ def _config(path: Path, explicit: bool) -> dict:
     for section, key, expected in fixed:
         if data.get(section, {}).get(key, expected) != expected:
             raise ConfigurationError(f"首版不支持 [{section}].{key} 的该值")
+    try:
+        validate_macros(data.get("macros", {}))
+    except ValueError as exc:
+        raise ConfigurationError(str(exc)) from exc
     return data
 
 
@@ -213,11 +218,12 @@ def main(argv: list[str] | None = None) -> int:
         output_ready = True
         with resolve_sources(**options, excluded_paths=(output,), ignore_patterns=tuple(config.get("ignore", ()))) as pair:
             old_expanded, new_expanded = pair.old.expand(), pair.new.expand()
+            macros = validate_macros(config.get("macros", {}))
             failures = []
             parsed = []
             for expanded in (old_expanded, new_expanded):
                 try:
-                    parsed.append(parse_project(expanded))
+                    parsed.append(parse_project(expanded, macros=macros))
                 except Exception as exc:
                     parsed.append(None)
                     failures.append((expanded.source.side, str(exc)))
