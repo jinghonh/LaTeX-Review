@@ -15,3 +15,5 @@ with resolve_sources(entry="main.tex", old_dir="old", new_dir="new") as pair:
 ```
 
 解析通过静态扫描识别未知宏和环境，字符扫描构建有精确原文跨度的结构树；只有允许的行内排版宏进入 plasTeX DOM 预览。节点原文、来源片段与公共位置都以 Unicode 字符零起始半开跨度和一基行列为准。未知宏、未知环境和未能静态展开的依赖局部回退；复杂宏或自定义类可能降级。解析阶段不运行本地 TeX 引擎，也不载入论文指定的包或执行宏定义。完整三栏报告、统一诊断文件和退出码由命令行流水线提供。
+
+第一点五版的 `ParsedProject.bibliography` 保存本侧可静态读取的引用键元数据，`ParsedProject.macros` 保存受控占位配置；`parse_project(expanded, macros=validate_macros(...))` 可直接用于程序接口。详情见[参考文献与宏占位预览](bibliography-macros.md)。
