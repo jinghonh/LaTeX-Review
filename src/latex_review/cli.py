@@ -152,11 +152,11 @@ def _clear_cache(directory: Path, options: dict, *, managed_default: bool) -> No
            for entry in stages):
         raise ConfigurationError("缓存暂存目录含无法确认归属的文件，拒绝清理")
     entries = tuple(directory.iterdir()) if directory.exists() else ()
-    if any(entry.is_symlink() or not entry.is_file() or
-           not (entry.name == OWNER_FILE and secret is not None or
-                (re.fullmatch(r"[0-9a-f]{64}\.json", entry.name) and is_managed_cache_file(entry)) or
-                (re.fullmatch(r"\.write-[A-Za-z0-9_-]+(?:\.tmp)?", entry.name) and
-                 is_managed_cache_file(entry, temporary=True))) for entry in entries):
+    if any((secret is None or not (entry.is_symlink() or entry.is_file())) if entry.name == OWNER_FILE else
+           (entry.is_symlink() or not entry.is_file() or
+            not ((re.fullmatch(r"[0-9a-f]{64}\.json", entry.name) and is_managed_cache_file(entry)) or
+                 (re.fullmatch(r"\.write-[A-Za-z0-9_-]+(?:\.tmp)?", entry.name) and
+                  is_managed_cache_file(entry, temporary=True)))) for entry in entries):
         raise ConfigurationError("缓存目录含非缓存文件，拒绝清理")
     for entry in (*entries, *stages):
         entry.unlink()

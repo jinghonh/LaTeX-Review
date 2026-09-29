@@ -11,7 +11,6 @@ import os
 from pathlib import Path
 import re
 import secrets
-from time import sleep
 
 from .contract import Diagnostic, ReviewNode, SourceLocation
 from .source_map import MappedRange, OriginRange
@@ -42,10 +41,8 @@ def stage_prefix(directory: Path) -> str:
 
 def read_owner_secret(directory: Path) -> bytes | None:
     marker = directory / OWNER_FILE
-    if marker.is_symlink():
-        raise ValueError("缓存所有权标记不可为链接")
     try:
-        content = marker.read_text(encoding="ascii")
+        content = os.readlink(marker) if marker.is_symlink() else marker.read_text(encoding="ascii")
     except FileNotFoundError:
         return None
     if re.fullmatch(r"[0-9a-f]{64}", content) is None:
@@ -54,26 +51,18 @@ def read_owner_secret(directory: Path) -> bytes | None:
 
 
 def _ensure_owner_secret(directory: Path) -> bytes:
-    for _ in range(50):
-        try:
-            existing = read_owner_secret(directory)
-        except ValueError:
-            sleep(.005)  # 另一写入者可能刚创建标记、尚未写完。
-            continue
-        if existing is not None:
-            return existing
-        value = secrets.token_hex(32)
-        try:
-            fd = os.open(directory / OWNER_FILE, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
-        except FileExistsError:
-            sleep(.005)
-            continue
-        with os.fdopen(fd, "w", encoding="ascii") as stream:
-            stream.write(value)
-            stream.flush()
-            os.fsync(stream.fileno())
-        return bytes.fromhex(value)
-    raise OSError("缓存所有权标记无法读取")
+    existing = read_owner_secret(directory)
+    if existing is not None:
+        return existing
+    value = secrets.token_hex(32)
+    try:
+        os.symlink(value, directory / OWNER_FILE)  # 单次原子发布，不覆盖并发写入者。
+    except FileExistsError:
+        existing = read_owner_secret(directory)
+        if existing is None:
+            raise OSError("缓存所有权标记无法读取")
+        return existing
+    return bytes.fromhex(value)
 
 
 def _stage_signature(secret: bytes, nonce: str) -> str:
@@ -93,7 +82,9 @@ def is_owned_stage(directory: Path, path: Path, secret: bytes | None) -> bool:
 
 
 def _write_stage(path: Path, content: bytes) -> None:
-    with path.open("xb") as stream:
+    fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
+    os.fchmod(fd, 0o600)
+    with os.fdopen(fd, "wb") as stream:
         stream.write(content)
         stream.flush()
         os.fsync(stream.fileno())
@@ -245,7 +236,7 @@ class ParseCache:
                     pending = self.directory / f".write-{secrets.token_hex(16)}.tmp"
                     os.replace(staging, pending)
                     os.replace(pending, path)
-                except OSError:
+                except (OSError, ValueError):
                     state = "unavailable"
                 finally:
                     for temporary in (staging, pending):

@@ -2,6 +2,7 @@ import json
 import os
 from pathlib import Path
 import shutil
+import stat
 import subprocess
 import sys
 import tempfile
@@ -260,7 +261,9 @@ from latex_review.structure import ParsedProject
 phase = sys.argv[3]
 if phase == 'during':
     def stop_during_write(path, content):
-        with path.open('xb') as stream:
+        fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
+        os.fchmod(fd, 0o600)
+        with os.fdopen(fd, 'wb') as stream:
             stream.write(content[:113])
             stream.flush()
             os.fsync(stream.fileno())
@@ -288,6 +291,7 @@ with resolve_sources(entry='main.tex', old_dir=sys.argv[1], new_dir=sys.argv[1])
         owned = (list(tmp_path.glob(cache_module.stage_prefix(cache_dir) + "*.tmp")) if phase != "after"
                  else list(cache_dir.glob(".write-*.tmp")))
         assert len(owned) == 1 and owned[0].is_file()
+        assert stat.S_IMODE(owned[0].stat().st_mode) == 0o600
         if phase == "during":
             foreign = tmp_path / (cache_module.stage_prefix(cache_dir) + "user.tmp")
             foreign.write_text("普通暂存文件", encoding="utf-8")
@@ -296,7 +300,41 @@ with resolve_sources(entry='main.tex', old_dir=sys.argv[1], new_dir=sys.argv[1])
             foreign.unlink()
         assert run(paper, "--cache-dir", str(cache_dir), "--clear-cache").returncode == 0
         assert not owned[0].exists()
+        final_entries = list(cache_dir.glob("*.json"))
+        assert len(final_entries) == 2
+        assert all(stat.S_IMODE(path.stat().st_mode) == 0o600 for path in final_entries)
         assert other_stage.is_file()
+
+
+def test_owner_marker_is_complete_if_creation_process_exits(tmp_path):
+    paper = tmp_path / "paper"
+    paper.mkdir()
+    fixture(paper)
+    cache_dir = tmp_path / "custom-cache"
+    child = """
+import os
+from pathlib import Path
+import sys
+import latex_review.cache as cache
+from latex_review.sources import resolve_sources
+from latex_review.structure import ParsedProject
+
+symlink = os.symlink
+def stop_after_marker(target, link):
+    symlink(target, link)
+    os._exit(94)
+cache.os.symlink = stop_after_marker
+with resolve_sources(entry='main.tex', old_dir=sys.argv[1], new_dir=sys.argv[1]) as pair:
+    cache.ParseCache(Path(sys.argv[2])).parse(pair.old.expand(),
+        parser=lambda expanded: ParsedProject(expanded, (), (), {}))
+"""
+    killed = subprocess.run([sys.executable, "-c", child, str(paper), str(cache_dir)],
+                            env=dict(os.environ, PYTHONPATH=str(ROOT / "src")), capture_output=True, text=True)
+    assert killed.returncode == 94, killed.stderr
+    marker = cache_dir / cache_module.OWNER_FILE
+    assert marker.is_symlink() and len(os.readlink(marker)) == 64
+    assert run(paper, "--cache-dir", str(cache_dir), "--clear-cache", "--no-cache").returncode == 0
+    assert not marker.is_symlink()
 
 
 def test_clear_cache_rejects_hex_named_foreign_file_without_partial_delete(tmp_path):
