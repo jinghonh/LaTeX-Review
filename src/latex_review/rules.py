@@ -14,6 +14,7 @@ from .text_diff import CITATION_COMMANDS
 _REF_COMMANDS = {"ref", "eqref", "autoref", "pageref"}
 _VERBATIM = re.compile(r"\\begin\s*\{(verbatim\*?|Verbatim|lstlisting|minted)\}.*?\\end\s*\{\1\}", re.S)
 _BIB_COMMAND = re.compile(r"\\(?:bibliography|addbibresource)(?![A-Za-z@])")
+_INCLUDE_COMMAND = re.compile(r"\\(?:input|include)(?![A-Za-z@])")
 _RULE_NAMES = {
     "bibliography_key_unresolved": "引用键无法解析",
     "unresolved_reference": "交叉引用目标不存在",
@@ -105,10 +106,19 @@ def _sites(project: ParsedProject) -> tuple[dict[str, list[_Site]], dict[str, li
 def _bibliography_reliable(project: ParsedProject) -> bool:
     if any(item.code in {"bibliography_unreadable", "bibliography_unsupported"} for item in project.diagnostics):
         return False
+    bibliography_nodes = tuple(node for node in project.nodes if node.review.type == "bibliography")
     for issue in project.expanded.diagnostics:
         source = project.expanded.source_map.files.get(issue.file, "")
-        if _BIB_COMMAND.search(source[issue.start:issue.end]):
+        command = source[issue.start:issue.end]
+        if _BIB_COMMAND.search(command):
             return False
+        if _INCLUDE_COMMAND.match(command):
+            for segment in project.expanded.source_map.segments:
+                if (segment.file == issue.file and segment.source_start <= issue.start and
+                        issue.end <= segment.source_end):
+                    offset = segment.expanded_start + issue.start - segment.source_start
+                    if any(node.expanded_start <= offset < node.expanded_end for node in bibliography_nodes):
+                        return False
     return True
 
 

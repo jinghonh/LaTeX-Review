@@ -217,3 +217,42 @@ def test_unrelated_missing_graphic_does_not_hide_known_missing_citation(tmp_path
         citation = next(item for item in check_rules(before, after)
                         if item.code == "bibliography_key_unresolved")
     assert citation.rule_status == "existing"
+
+
+@pytest.mark.parametrize("command", ["input", "include"])
+def test_missing_handwritten_bibliography_dependency_cannot_prove_new_missing_key(tmp_path, command):
+    source = ("\\begin{document}\\cite{known}"
+              f"\\begin{{thebibliography}}{{9}}\\{command}{{refs}}"
+              "\\end{thebibliography}\\end{document}")
+    old, new = _pair(tmp_path, source, source)
+    (old / "refs.tex").write_text("\\bibitem{known} Old source.\n", encoding="utf-8")
+    with resolve_sources(entry="main.tex", old_dir=old, new_dir=new) as pair:
+        before, after = parse_project(pair.old.expand()), parse_project(pair.new.expand())
+        assert "bib:known" in before.labels
+        assert any(item.code == "missing_dependency" for item in after.diagnostics)
+        assert not any(item.code == "bibliography_key_unresolved" for item in check_rules(before, after))
+        report = write_report(before, after, compare_projects(before, after), tmp_path / "report")
+    diff = json.loads(report.diff_json.read_text(encoding="utf-8"))["diagnostics"]
+    separate = json.loads((report.directory / "diagnostics.json").read_text(encoding="utf-8"))["diagnostics"]
+    assert diff == separate
+    assert "missing_dependency" in {item["code"] for item in diff}
+    assert not any(item["code"] == "bibliography_key_unresolved" for item in diff)
+    cli_output = tmp_path / "cli-report"
+    cli = subprocess.run([sys.executable, "-m", "latex_review.cli", "--old-dir", str(old),
+                          "--new-dir", str(new), "--entry", "main.tex", "--output", str(cli_output)],
+                         cwd=tmp_path, env=dict(os.environ, PYTHONPATH=str(ROOT / "src")),
+                         capture_output=True, text=True)
+    assert cli.returncode == 2, cli.stderr
+    cli_diagnostics = json.loads((cli_output / "diagnostics.json").read_text(encoding="utf-8"))["diagnostics"]
+    assert "missing_dependency" in {item["code"] for item in cli_diagnostics}
+    assert not any(item["code"] == "bibliography_key_unresolved" for item in cli_diagnostics)
+
+
+def test_missing_input_outside_bibliography_does_not_hide_citation_rule(tmp_path):
+    source = "\\begin{document}\\cite{missing}\\input{unrelated}\\end{document}"
+    old, new = _pair(tmp_path, source, source)
+    with resolve_sources(entry="main.tex", old_dir=old, new_dir=new) as pair:
+        before, after = parse_project(pair.old.expand()), parse_project(pair.new.expand())
+        citation = next(item for item in check_rules(before, after)
+                        if item.code == "bibliography_key_unresolved")
+    assert citation.rule_status == "existing"
