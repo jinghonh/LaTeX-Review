@@ -27,6 +27,8 @@ python -m pip install '.[test]'
 
 `latex-review main.tex` 默认比较 Git `HEAD` 与当前磁盘工作区，写入 `.latex-review/latest/report.html`、`diff.json`、`diagnostics.json`。可用 `--old`、`--new` 指定两个提交，或用 `--old-dir A --new-dir B --entry main.tex` 比较目录，也可直接提供两个独立文件。工作区快照包含暂存及未暂存内容、未忽略的未跟踪依赖；输出目录不参与快照。`--inspect-sources` 仅输出来源展开 JSON。用法与程序接口见[比较来源与展开接口](Docs/source-resolution.md)。
 
+GitHub 拉取请求的报告产物与评论发布须由仓库维护者按[工作流启用说明](Docs/github-actions.md)显式配置。模板默认不在本仓库运行。
+
 配置从当前目录的 `.latex-review.toml` 读取，也可用 `--config` 指定；显式命令行选项覆盖配置，配置覆盖默认值。支持 `entry`、`output`、`ignore`、`[git].default_old/default_new` 与 `[diff].comments`；`--no-comments` 可覆盖配置中的注释审阅开关。首版的 `--math` 仅支持 `mathjax`，`--format` 仅支持 `html,json`；其他渲染与差异开关只接受首版固定值，未知或不支持的配置会报错。首版不支持 `--compile`。完整报告返回 0，降级报告返回 2，来源不可读取返回 4，内部错误返回 8；一般提示不改变成功状态。无效参数或配置返回 64。
 
 第一点五版可在 `[macros.名称]` 中设置受控宏占位预览；两侧引用会各自显示 `.bib` 作者、题目和年份。支持范围、配置样例和参考文献语义边界见[参考文献与宏占位预览](Docs/bibliography-macros.md)。
