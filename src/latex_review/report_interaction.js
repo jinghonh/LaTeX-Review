@@ -185,22 +185,6 @@
     status.textContent = messages.join('；');
   }
   document.getElementById('changes-side').addEventListener('click', event => {
-    const copy = event.target.closest('.copy-source');
-    if (copy) {
-      const value = copy.dataset.location;
-      function legacyCopy() {
-        const input = document.createElement('textarea');
-        input.value = value; input.style.position = 'fixed'; input.style.opacity = '0';
-        document.body.appendChild(input); input.select();
-        const done = document.execCommand('copy'); input.remove();
-        status.textContent = done ? '已复制：' + value : '无法自动复制，请从卡片位置文字复制。';
-      }
-      if (navigator.clipboard && navigator.clipboard.writeText) {
-        navigator.clipboard.writeText(value).then(
-          () => { status.textContent = '已复制：' + value; }, legacyCopy);
-      } else legacyCopy();
-      return;
-    }
     const button = event.target.closest('button[data-old][data-new]');
     if (!button) return;
     const card = button.closest('.change-card');

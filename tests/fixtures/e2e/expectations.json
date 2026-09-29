@@ -10,5 +10,5 @@
     {"kind": "added", "node_type": "figure", "category": "figure", "old": null, "new": ["sections/results.tex", 7]}
   ],
   "diagnostics": ["missing_dependency", "unknown_latex"],
-  "bib_only_changes": 0
+  "bib_only_changes": 1
 }

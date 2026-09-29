@@ -162,13 +162,13 @@ def test_warm_cache_restores_macro_preview_and_refreshes_bibliography(tmp_path):
     cold = diff(tmp_path)
     assert states(tmp_path) == ["miss", "miss"]
     report = (tmp_path / ".latex-review/latest/report.html").read_text()
-    assert "【Cached】" in report and "题目：Old" in report
+    assert "【Cached】" in report and "题目：Old" not in report
 
     assert run(tmp_path, "--config", ".latex-review.toml").returncode in (0, 2)
     assert states(tmp_path) == ["hit", "hit"]
     assert diff(tmp_path) == cold
     report = (tmp_path / ".latex-review/latest/report.html").read_text()
-    assert "【Cached】" in report and "题目：Old" in report
+    assert "【Cached】" in report and "题目：Old" not in report
     before_bibliography_change = meta(tmp_path)
 
     write(tmp_path, "refs.bib", "@article{a,title={Fresh}}\n")
@@ -180,7 +180,8 @@ def test_warm_cache_restores_macro_preview_and_refreshes_bibliography(tmp_path):
     assert (after_bibliography_change["sides"][1]["review_key"] !=
             before_bibliography_change["sides"][1]["review_key"])
     report = (tmp_path / ".latex-review/latest/report.html").read_text()
-    assert "【Cached】" in report and "题目：Old" in report and "题目：Fresh" in report
+    assert "【Cached】" in report and "题目：Old" not in report and "题目：Fresh" not in report
+    assert "引用键 a：作者、题名、年份变化" in report
 
 
 def test_concurrent_cache_writers_produce_complete_results(tmp_path):

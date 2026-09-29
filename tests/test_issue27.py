@@ -40,16 +40,16 @@ def test_bibliography_two_sides_missing_duplicate_and_no_semantic_change(tmp_pat
         comparison = compare_projects(before, after)
         report = write_report(before, after, comparison, tmp_path / "report", pdf_converter="")
     html = report.html.read_text(encoding="utf-8")
-    assert "旧作者" in html and "旧题目" in html and "2020" in html
-    assert "新作者" in html and "新题目" in html and "2025" in html
-    assert "partial" in html and "作者：缺失" in html and "年份：缺失" in html
-    assert "absent" in html and "文献元数据未解析，保留引用键" in html
-    assert comparison.document.summary.changes == 0
+    assert all(value not in html for value in ("旧作者", "旧题目", "2020", "新作者", "新题目", "2025"))
+    assert "partial" in html and "absent" in html
+    assert comparison.document.summary.changes == 1
+    assert comparison.document.summary.category_hits == {"citation": 1}
+    assert "引用键 same：作者、题名、年份变化" in html
     codes = [item.code for item in report.document.diagnostics]
     assert "bibliography_duplicate_key" in codes
     assert "bibliography_missing_field" in codes
     assert "bibliography_key_unresolved" in codes
-    assert json.loads(report.diff_json.read_text(encoding="utf-8"))["summary"]["changes"] == 0
+    assert json.loads(report.diff_json.read_text(encoding="utf-8"))["summary"]["changes"] == 1
 
 
 def test_citation_optional_note_braces_do_not_replace_the_citation_key(tmp_path):
@@ -60,7 +60,8 @@ def test_citation_optional_note_braces_do_not_replace_the_citation_key(tmp_path)
         before, after = parse_project(pair.old.expand()), parse_project(pair.new.expand())
         result = render_preview(before, after)
     assert next(node.citations for node in before.nodes if node.review.type == "citation") == ("ref",)
-    assert "实际作者" in result.html and "实际题目" in result.html
+    assert "实际作者" not in result.html and "实际题目" not in result.html
+    assert result.html.count(">ref</span>") == 0
     assert "KeyA<small class=\"citation-metadata\"" not in result.html
     assert not any(item.code == "bibliography_key_unresolved" for item in result.diagnostics)
 
@@ -79,7 +80,7 @@ def test_parenthesized_bibtex_entry_ignores_protected_closing_parentheses(tmp_pa
     assert before.bibliography["braced"].year == "2024"
     assert before.bibliography["quoted"].title == "A closing ) inside a quoted field"
     assert before.bibliography["quoted"].year == "2025"
-    assert "A closing ) inside a braced field" in result.html
+    assert "A closing ) inside a braced field" not in result.html
     assert not any(item.code == "bibliography_missing_field" for item in result.diagnostics)
 
 
@@ -93,7 +94,7 @@ def test_braced_bibtex_field_treats_unpaired_quote_as_literal(tmp_path):
         result = render_preview(before, after)
     assert before.bibliography["ref"].title == 'A 5" monitor'
     assert before.bibliography["ref"].year == "2024"
-    assert 'A 5&quot; monitor' in result.html
+    assert 'A 5&quot; monitor' not in result.html
     assert not any(item.code == "bibliography_missing_field" for item in result.diagnostics)
 
 
@@ -108,7 +109,7 @@ def test_table_cells_render_citations_and_configured_macros_with_coordinates(tmp
     with resolve_sources(entry="main.tex", old_dir=old, new_dir=new) as pair:
         before, after = parse_project(pair.old.expand(), macros=macros), parse_project(pair.new.expand(), macros=macros)
         result = render_preview(before, after)
-    assert re.search(r'<td data-row="1" data-column="1">.*?作者：作者；题目：题目；年份：2024', result.html)
+    assert re.search(r'<td data-row="1" data-column="1">.*?\[ref\]</span>', result.html)
     assert 'KeyA<small class="citation-metadata"' not in result.html
     assert re.search(r'<td data-row="1" data-column="2">.*?【重点】', result.html)
     assert not any(item.code == "preview_table_fallback" for item in result.diagnostics)
@@ -125,7 +126,7 @@ def test_table_cell_with_missing_reference_key_keeps_key_and_diagnostic(tmp_path
     old, new = _roots(tmp_path, r"\begin{document}\begin{tabular}{c}\cite{absent}\end{tabular}\end{document}")
     with resolve_sources(entry="main.tex", old_dir=old, new_dir=new) as pair:
         result = render_preview(parse_project(pair.old.expand()), parse_project(pair.new.expand()))
-    assert re.search(r'<td data-row="1" data-column="1">.*?absent.*?文献元数据未解析', result.html)
+    assert re.search(r'<td data-row="1" data-column="1">.*?\[absent\]</span>', result.html)
     assert any(item.code == "bibliography_key_unresolved" and item.source_old for item in result.diagnostics)
 
 
@@ -139,7 +140,7 @@ def test_nested_table_citation_missing_key_reaches_report_diagnostics(tmp_path):
     html = report.html.read_text(encoding="utf-8")
     diff = json.loads(report.diff_json.read_text(encoding="utf-8"))
     diagnostics = json.loads(report.directory.joinpath("diagnostics.json").read_text(encoding="utf-8"))
-    assert re.search(r'<td data-row="1" data-column="1">.*?absent.*?文献元数据未解析', html)
+    assert re.search(r'<td data-row="1" data-column="1">.*?\[absent\]</span>', html)
     assert any(item["code"] == "bibliography_key_unresolved" for item in diff["diagnostics"])
     assert any(item["code"] == "bibliography_key_unresolved" for item in diagnostics["diagnostics"])
 
@@ -149,7 +150,8 @@ def test_unsupported_bibliography_keeps_key_and_preview(tmp_path):
                       r"\bibitem{handmade} 原始条目。\end{thebibliography}\end{document}")
     with resolve_sources(entry="main.tex", old_dir=old, new_dir=new) as pair:
         result = render_preview(parse_project(pair.old.expand()), parse_project(pair.new.expand()))
-    assert "handmade" in result.html and "文献元数据未解析" in result.html
+    assert "原始条目" in result.html and "文献元数据未解析" not in result.html
+    assert re.search(r'class="citation"[^>]*>\[<a[^>]*>1</a>\]</span>', result.html)
     assert any(item.code == "bibliography_unsupported" for item in result.diagnostics)
 
 
@@ -165,8 +167,9 @@ def test_macro_placeholder_replace_raw_mismatch_recursion_and_original(tmp_path)
     with resolve_sources(entry="main.tex", old_dir=old, new_dir=new) as pair:
         before, after = parse_project(pair.old.expand(), macros=macros), parse_project(pair.new.expand(), macros=macros)
         result = render_preview(before, after)
-    assert "【重点】" in result.html and "data-source-approximate" in result.html
-    assert r"\rawbox{原词}" in result.html and "查看 LaTeX 原文" in result.html
+    assert "【重点】" in result.html and "data-source-approximate" not in result.html
+    assert r"\rawbox{原词}" not in result.html and "查看 LaTeX 原文" not in result.html
+    assert "此处暂无法预览" in result.html
     assert "宏调用参数数量不匹配" in " ".join(d.message for d in result.diagnostics)
     assert "递归宏定义" in " ".join(d.message for d in result.diagnostics)
     assert any(d.code == "preview_macro_fallback" and d.source_old for d in result.diagnostics)
@@ -218,4 +221,4 @@ def test_macro_placeholder_in_inline_and_display_math(tmp_path):
         result = render_preview(parse_project(pair.old.expand(), macros=macros),
                                 parse_project(pair.new.expand(), macros=macros))
     assert "\\(x\\)" in result.html and "\\[y\\]" in result.html
-    assert result.html.count('data-source-approximate="true"') >= 4
+    assert 'data-source-approximate="true"' not in result.html

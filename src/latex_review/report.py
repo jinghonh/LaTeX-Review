@@ -32,7 +32,6 @@ _IMAGE_SUFFIXES = {".png", ".jpg", ".jpeg", ".webp", ".gif"}
 _LINKABLE_ASSET_SUFFIXES = _IMAGE_SUFFIXES | {".pdf"}
 _KIND_LABELS = {"added": "新增", "removed": "删除", "modified": "修改", "moved": "移动"}
 _CATEGORY_LABELS = {"text": "正文", "equation": "公式", "figure": "图", "table": "表格", "citation": "引用", "comment": "注释", "move": "移动"}
-_SEVERITY_LABELS = {"info": "提示", "warning": "警告", "error": "错误"}
 _MAX_EMBEDDED_ASSET = 25 * 1024 * 1024
 _MAX_EMBEDDED_TOTAL = 100 * 1024 * 1024
 
@@ -58,36 +57,6 @@ class ReportResult:
 
 def _e(value: object) -> str:
     return escape(str(value), quote=True)
-
-
-def _editor_link(project: ParsedProject, location: SourceLocation | None,
-                 template: str | None) -> str | None:
-    if not template or not location or not location.file or not location.start_line:
-        return None
-    source = project.expanded.source
-    if source.identity.kind == "git":
-        return None
-    root = source.worktree_origin or source.root
-    path = (root / location.file).resolve()
-    if not path.is_relative_to(root.resolve()) or not path.is_file():
-        return None
-    return template.format(path=quote(str(path), safe="/"), line=location.start_line,
-                           column=location.start_column or 1)
-
-
-def _source_actions(old: ParsedProject, new: ParsedProject,
-                    old_location: SourceLocation | None, new_location: SourceLocation | None,
-                    template: str | None) -> str:
-    parts = []
-    for side, label, project, location in (("old", "旧", old, old_location), ("new", "新", new, new_location)):
-        if location is None:
-            continue
-        copy = f'<button type="button" class="copy-source" data-location="{_e(_location(location))}">复制{label}侧位置</button>'
-        link = _editor_link(project, location, template)
-        if link:
-            copy += f'<a class="editor-link" href="{_e(link)}" title="在编辑器中打开{label}侧源码">在编辑器打开{label}侧</a>'
-        parts.append(copy)
-    return '<div class="source-actions">' + " ".join(parts) + '</div>' if parts else ""
 
 
 def _validate_editor_template(template: str | None) -> None:
@@ -337,22 +306,6 @@ def _detail_target(document: ReviewDocument, change: PrimaryChange, detail: Chan
     return parent or ""
 
 
-def _diagnostics_html(document: ReviewDocument) -> str:
-    items = []
-    for diagnostic in sorted(document.diagnostics, key=lambda item: (item.code, item.message)):
-        rule = ""
-        if diagnostic.rule_status:
-            status = {"existing": "既有", "new": "新增", "resolved": "已解决"}[diagnostic.rule_status]
-            evidence = "".join(f"<li>{_e(item)}</li>" for item in diagnostic.evidence)
-            rule = f'<small>规则状态：{status}；证据：</small><ul>{evidence}</ul>'
-        items.append(f'<li><strong>{_e(_SEVERITY_LABELS.get(diagnostic.severity, diagnostic.severity))} · '
-                     f'{_e(diagnostic.code)}</strong>：{_e(diagnostic.message)}'
-                     f'<small>旧：{_e(_location(diagnostic.source_old))}；新：{_e(_location(diagnostic.source_new))}</small>{rule}</li>')
-    body = f'<ul>{"".join(items)}</ul>' if items else '<p>无诊断。</p>'
-    return f'<section class="report-diagnostics" aria-label="诊断" data-count="{len(items)}">' \
-           f'<h3>诊断 {len(items)}</h3>{body}</section>'
-
-
 def _change_cards(document: ReviewDocument, anchors: set[str], old: ParsedProject,
                   new: ParsedProject, editor_template: str | None,
                   rendering: dict | None = None) -> str:
@@ -373,9 +326,8 @@ def _change_cards(document: ReviewDocument, anchors: set[str], old: ParsedProjec
                            f'data-old-row="{detail.row_old or ""}" data-old-column="{detail.column_old or ""}" '
                            f'data-new-row="{detail.row_new or ""}" data-new-column="{detail.column_new or ""}">'
                            f'{_e(_CATEGORY_LABELS.get(detail.category, detail.category))} · '
-                           f'{_e(_KIND_LABELS.get(detail.kind, detail.kind))}：{_e(detail.summary)}</button>'
-                           f'<small>{_e(detail.old_text or "∅")} → {_e(detail.new_text or "∅")}</small>'
-                           f'{_source_actions(old, new, old_source, new_source, editor_template)}</li>')
+                           f'{_e(_KIND_LABELS.get(detail.kind, detail.kind))}：'
+                           f'{_e(detail.summary if detail.category in {"citation", "figure"} else "内容变化")}</button></li>')
         page_links = []
         if rendering:
             for side, label in (("old", "旧"), ("new", "新")):
@@ -393,9 +345,7 @@ def _change_cards(document: ReviewDocument, anchors: set[str], old: ParsedProjec
                      f'data-new-location="{_e(_location(change.source_new))}">'
                      f'<span class="kind kind-{_e(change.kind)}">{_e(_KIND_LABELS.get(change.kind, change.kind))}</span> '
                      f'<strong>{_e(change.summary)}</strong></button>'
-                     f'<p class="card-meta">{badges} · 匹配置信度 {change.matching_confidence:.2f}</p>'
-                     f'<p class="card-source">旧：{_e(_location(change.source_old))}<br>新：{_e(_location(change.source_new))}</p>'
-                     f'{_source_actions(old, new, change.source_old, change.source_new, editor_template)}'
+                     f'<p class="card-meta">{badges}</p>'
                      f'{page_meta}'
                      f'<ul class="detail-list">{"".join(details)}</ul></article>')
     return "".join(cards) or '<p class="empty-list">没有检测到主变更。</p>'
@@ -407,11 +357,7 @@ def _rendering_html(rendering: dict | None, statuses: tuple | None) -> str:
     items = []
     for status in statuses:
         label = "修改前" if status.side == "old" else "修改后"
-        document_link = f'<a href="{_e(status.pdf)}">编译文档</a>' if status.pdf else "无编译文档"
-        log_link = f'<a href="{_e(status.log)}">编译日志</a>' if status.log else "无编译日志"
-        items.append(f'<li>{label}：{_e(status.status)}；{document_link}；'
-                     f'{log_link}'
-                     f'{"；" + _e(status.reason) if status.reason else ""}</li>')
+        items.append(f'<li>{label}：{"页面预览可用" if status.pdf else "此处暂无法预览"}</li>')
     cards = []
     if rendering["comparable"]:
         pairs = rendering["pairs"]
@@ -485,10 +431,8 @@ def _report_html(document: ReviewDocument, preview_html: str, old: ParsedProject
     category_counts = " · ".join(f"{_CATEGORY_LABELS.get(key, key)} {value}" for key, value in counts.category_hits.items())
     anchors = set(re.findall(r'\bid="([^"]+)"', main.group(1)))
     cards = _change_cards(document, anchors, old, new, editor_template, rendering)
-    diagnostics_html = _diagnostics_html(document)
     interaction = files("latex_review").joinpath("report_interaction.js").read_text(encoding="utf-8")
     pairs_json = json.dumps(pairs, ensure_ascii=False).replace("<", "\\u003c")
-    document_json = dumps(document).replace("<", "\\u003c")
     return f'''<!doctype html>
 <html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>LaTeX 三栏审阅报告</title><style>{style.group(1)}
@@ -496,8 +440,10 @@ body{{background:#f3f4f6;color:#17212d}}header{{padding:.8rem 1.2rem}}header h1{
 .summary{{margin:.3rem 0;font-weight:650}}.summary-extra{{margin:.2rem 0;color:#374151}}
 main{{grid-template-columns:repeat(3,minmax(0,1fr));gap:.7rem;padding:.7rem;align-items:start}}
 .preview-side,.changes-side{{height:calc(100vh - 16rem);min-height:20rem;max-height:none;overflow:auto;background:white;border:1px solid #b8c0ca;border-radius:.35rem;padding:1rem}}
-.changes-side h2{{margin:0 0 .8rem}}.preview-side .is-highlighted{{outline:3px solid #9a5700;outline-offset:3px;background:#fff5d9}}
-.preview-side td.is-cell-highlighted{{outline:3px solid #9a5700;outline-offset:-3px;background:#ffdf93}}
+.changes-side h2{{margin:0 0 .8rem}}.preview-side[data-side="old"] .is-highlighted{{outline:3px solid #a74236;outline-offset:3px;background:#fce2df}}
+.preview-side[data-side="new"] .is-highlighted{{outline:3px solid #287446;outline-offset:3px;background:#d8f0df}}
+.preview-side[data-side="old"] td.is-cell-highlighted{{outline:3px solid #a74236;outline-offset:-3px;background:#f8c5c0}}
+.preview-side[data-side="new"] td.is-cell-highlighted{{outline:3px solid #287446;outline-offset:-3px;background:#b9e4c5}}
 .change-card{{border:1px solid #adb7c4;border-radius:.35rem;margin:.6rem 0;padding:.7rem;background:#fff}}
 .change-card[hidden]{{display:none}}.change-card:focus-within{{outline:2px solid #244e9b}}
 button,select{{font:inherit}}button:focus-visible,select:focus-visible,a:focus-visible{{outline:3px solid #1d4ed8;outline-offset:2px}}
@@ -515,11 +461,7 @@ button,select{{font:inherit}}button:focus-visible,select:focus-visible,a:focus-v
 .asset-card{{border:1px solid #9caaba;padding:.5rem;margin:.5rem 0;background:#f8fafc;overflow-wrap:anywhere}}
 .asset-card img{{max-width:100%;height:auto;display:block}}.asset-missing{{border-color:#a33427;background:#fff0ed}}
 .asset-card p{{margin:.2rem 0}}.asset-fallback{{color:#783f14}}
-.report-diagnostics{{border:1px solid #a9b4c1;background:#f8fafc;padding:.5rem;margin:.6rem 0}}
-.report-diagnostics h3{{margin:.1rem 0}}.report-diagnostics ul{{margin:.3rem 0;padding-left:1.2rem}}
-.report-diagnostics li{{margin:.4rem 0;overflow-wrap:anywhere}}.report-diagnostics small{{display:block;color:#374151}}
-.report-controls{{display:flex;gap:1rem;flex-wrap:wrap;margin:.4rem 0}}.source-actions{{display:flex;gap:.45rem;flex-wrap:wrap;margin:.25rem 0}}
-.source-actions button,.source-actions a{{font-size:.8rem}}.context-hidden{{display:none!important}}
+.report-controls{{display:flex;gap:1rem;flex-wrap:wrap;margin:.4rem 0}}.context-hidden{{display:none!important}}
 .rendered-pages{{padding:1rem;background:white;margin:1rem;border:1px solid #b8c0ca}}
 .page-pair{{border-top:1px solid #b8c0ca;padding:.7rem 0;display:flex;gap:1rem;flex-wrap:wrap;align-items:start}}
 .page-pair h3{{width:100%;margin:.2rem 0}}.page-pair figure{{margin:0;max-width:31%;min-width:230px}}
@@ -527,20 +469,20 @@ button,select{{font:inherit}}button:focus-visible,select:focus-visible,a:focus-v
 @media(max-width:1000px){{main{{grid-template-columns:1fr}}.preview-side,.changes-side{{height:auto;max-height:none}}}}
 </style></head><body><header><h1>LaTeX 三栏审阅报告</h1>
 <p class="notice">内容预览供审阅，不代表最终编译版式；来源位置可能为近似值。</p>
-<p class="notice">参考文献元数据按两侧引用键展示；仅条目内容变化且引用键不变时，不生成独立语义主变更。</p>
+<p class="notice">修改前使用浅红色，修改后使用浅绿色；颜色用于定位所选变更。</p>
+<p class="notice">同键文献字段变化单独计入引用主变更，不累计为正文变化。</p>
 <p class="summary" id="report-summary" data-changes="{counts.changes}">主变更 {counts.changes} · 正文增加 {counts.added_words} 词 · 删除 {counts.removed_words} 词</p>
 <p class="summary-extra">{_e(category_counts)}</p>
 <div class="report-controls"><label><input type="checkbox" id="sync-scroll"> 同步滚动</label>
 <label>阅读范围 <select id="reading-mode"><option value="full">完整文档</option><option value="context">变更上下文</option></select></label>
 <button type="button" id="previous-change">上一变更</button><button type="button" id="next-change">下一变更</button></div>
 <p class="notice">按 Alt+↑ / Alt+↓ 可跳到上一项 / 下一项；输入时快捷键不生效。公式排版可能需要联网。</p>
-<p id="math-status" role="status">正在加载在线公式排版；原始 TeX 可直接阅读。</p></header>
+<p id="math-status" role="status">正在加载在线公式排版。</p></header>
 <main>{main.group(1)}<section class="changes-side" aria-label="变更" id="changes-side"><h2>变更</h2>
 <div class="filters"><label>操作 <select id="kind-filter"><option value="all">全部</option><option value="added">新增</option><option value="removed">删除</option><option value="modified">修改</option><option value="moved">移动</option></select></label>
 <label>类别 <select id="category-filter"><option value="all">全部</option><option value="text">正文</option><option value="equation">公式</option><option value="figure">图</option><option value="table">表格</option><option value="citation">引用</option><option value="comment">注释</option><option value="move">移动</option></select></label></div>
-<p id="filter-count" role="status"></p><p id="jump-status" class="jump-status" role="status"></p>{diagnostics_html}{cards}</section></main>
+<p id="filter-count" role="status"></p><p id="jump-status" class="jump-status" role="status"></p>{cards}</section></main>
 {_rendering_html(rendering, statuses)}
-<script type="application/json" id="review-data">{document_json}</script>
 <script>window.reviewNodePairs={pairs_json};</script><script>{interaction}</script>
 {scripts.group(1)}
 </body></html>'''
@@ -592,7 +534,6 @@ def write_source_fallback(old: ExpandedProject, new: ExpandedProject, output_dir
                           extra_diagnostics: tuple[Diagnostic, ...] = (), rendering: dict | None = None,
                           statuses: tuple | None = None) -> ReportResult:
     """结构解析整体失败时，保留两侧逐文件原始源码及逐行差异。"""
-    from difflib import SequenceMatcher
 
     directory = Path(output_dir)
     if directory.is_symlink():
@@ -606,7 +547,7 @@ def write_source_fallback(old: ExpandedProject, new: ExpandedProject, output_dir
     old_node = ReviewNode("source-old", "source_fallback", old_raw, None, (), (), unknown)
     new_node = ReviewNode("source-new", "source_fallback", new_raw, None, (), (), unknown)
     changes = ((PrimaryChange("source-change-1", "modified", "source_fallback", old_node.id, new_node.id,
-                              unknown, unknown, 0, ("text",), (), "结构解析失败；按展开源码对比"),)
+                              unknown, unknown, 0, ("text",), (), "结构解析失败；阅读界面使用占位"),)
                if old_raw != new_raw else ())
     diagnostics = [*(parsed[0].diagnostics if parsed[0] else ()),
                    *(parsed[1].diagnostics if parsed[1] else ())]
@@ -624,28 +565,18 @@ def write_source_fallback(old: ExpandedProject, new: ExpandedProject, output_dir
             diagnostics.append(Diagnostic(issue.code, "warning", issue.message,
                                           source_old=location if issue.side == "old" else None,
                                           source_new=location if issue.side == "new" else None))
-    diagnostics.append(Diagnostic("source_fallback", "warning", "结构解析整体失败；已生成源码对比报告，原始内容完整保留"))
+    diagnostics.append(Diagnostic("source_fallback", "warning", "结构解析整体失败；机器数据保留来源，阅读界面使用占位"))
     diagnostics.extend(extra_diagnostics)
     document = ReviewDocument(old.source.entry, old.source.identity, new.source.identity,
                               (old_node,), (new_node,), changes, tuple(dict.fromkeys(diagnostics)),
                               build_summary(changes))
-    old_lines, new_lines = old_raw.splitlines(keepends=True), new_raw.splitlines(keepends=True)
-    before, after = [], []
-    for op, i, j, k, l in SequenceMatcher(None, old_lines, new_lines, autojunk=False).get_opcodes():
-        before.extend(f'<span class="{("removed" if op != "equal" else "same")}">{_e(line)}</span>'
-                      for line in old_lines[i:j])
-        after.extend(f'<span class="{("added" if op != "equal" else "same")}">{_e(line)}</span>'
-                     for line in new_lines[k:l])
-    diagnostics_html = _diagnostics_html(document)
-    html = ("""<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><title>源码对比报告</title>
+    html = ("""<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><title>内容预览</title>
 <style>body{font:16px/1.5 system-ui;margin:1rem;color:#17212d}main{display:grid;grid-template-columns:1fr 1fr;gap:1rem}
-section{min-width:0}pre{white-space:pre-wrap;overflow-wrap:anywhere;border:1px solid #adb7c4;padding:1rem}
-.removed{background:#fce2df}.added{background:#d8f0df}.report-diagnostics{border:1px solid #a9b4c1;padding:.5rem}
-@media(max-width:800px){main{grid-template-columns:1fr}}</style></head><body><h1>源码对比报告</h1>
-<p>结构解析整体失败。下方按文件保留两侧原始源码，着色行表示差异；不能作为结构化差异使用。</p>"""
-            + diagnostics_html + '<main><section><h2>修改前</h2><pre>' + "".join(before)
-            + '</pre></section><section><h2>修改后</h2><pre>' + "".join(after)
-            + '</pre></section></main>' + _rendering_html(rendering, statuses) + '</body></html>')
+section{min-width:0;border:1px solid #adb7c4;padding:1rem}.old{background:#fce2df}.new{background:#d8f0df}
+@media(max-width:800px){main{grid-template-columns:1fr}}</style></head><body><h1>内容预览</h1>
+<main><section class="old"><h2>修改前</h2><p>此处暂无法预览</p></section>
+<section class="new"><h2>修改后</h2><p>此处暂无法预览</p></section></main>"""
+            + _rendering_html(rendering, statuses) + '</body></html>')
     _write_managed(directory, Path("diff.json"), content=dumps(document).encode("utf-8"))
     _write_managed(directory, Path("diagnostics.json"),
                    content=dumps(DiagnosticsDocument(document.diagnostics)).encode("utf-8"))

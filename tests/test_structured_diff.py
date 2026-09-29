@@ -141,7 +141,7 @@ def test_figure_fields_combine_and_missing_asset_keeps_preview(tmp_path):
     assert any(d.code == "missing_dependency" for d in result.document.diagnostics)
     preview = render_preview(old, new)
     assert "old.pdf" in preview.html and "new.pdf" in preview.html
-    assert "missing_dependency" in preview.html
+    assert "missing_dependency" not in preview.html and "此处暂无法预览" in preview.html
 
 
 @pytest.mark.parametrize(("old_asset", "new_asset", "old_caption", "new_caption", "old_label", "new_label", "field"), [
@@ -169,7 +169,8 @@ def test_tables_whole_change_and_complex_source_fallback(tmp_path):
     detail = result.document.changes[0].details[0]
     assert "单元格定位" in detail.summary
     assert r"\multicolumn" in detail.new_text and r"\nested" in detail.new_text
-    assert r"\multicolumn" in render_preview(old, new).html
+    assert r"\multicolumn" not in render_preview(old, new).html
+    assert "此处暂无法预览" in render_preview(old, new).html
 
 
 def test_table_row_insert_is_one_whole_change(tmp_path):
