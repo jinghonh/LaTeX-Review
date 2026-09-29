@@ -4,7 +4,7 @@ LaTeX Review 是独立命令行工具。Codex 技能只负责在改稿后调用 
 
 ## 安装
 
-首版正式支持 macOS，要求 Python 3.11 或更新版本。不需要安装 LaTeX 引擎。联网安装时，在 LaTeX Review 工具仓库内创建虚拟环境并安装：
+正式支持 macOS，要求 Python 3.11 或更新版本。默认结构审阅不需要 LaTeX 引擎；显式编译需用户自行安装 `latexmk` 和所选引擎。联网安装时，在 LaTeX Review 工具仓库内创建虚拟环境并安装：
 
 ```sh
 python3 -m venv .venv
@@ -75,9 +75,16 @@ comments = false
 
 [render]
 math = "mathjax"
+
+[compile]
+enabled = false
+new_only = false
+engine = "pdflatex"
+timeout = 90
+sandbox_render = false
 ```
 
-可调整的设置为 `entry`、`output`、`ignore`、`[git].default_old`、`[git].default_new`、`[diff].comments` 和 `[render].math`；`math` 首版仅支持 `mathjax`。`[render].copy_assets` 固定为 `true`、`[render].show_unknown_macros` 固定为 `true`、`[diff].move_detection` 固定为 `false`、`[diff].citation_semantics` 固定为 `true`、`[diff].formula_token_diff` 固定为 `true`。`--comments`、`--no-comments` 可覆盖注释审阅配置。默认忽略源码注释；启用后注释变化独立计入主变更总数，但不计入正文增删词数。首版不支持自定义公式渲染器、单元格差异、同路径图片内容检测或真实编译。
+可调整的设置为 `entry`、`output`、`ignore`、`[git].default_old`、`[git].default_new`、`[diff].comments`、`[render].math` 与上述 `[compile]` 选项；`math` 仅支持 `mathjax`。`[render].copy_assets` 固定为 `true`、`[render].show_unknown_macros` 固定为 `true`、`[diff].move_detection` 固定为 `false`、`[diff].citation_semantics` 固定为 `true`、`[diff].formula_token_diff` 固定为 `true`。`--comments`、`--no-comments` 可覆盖注释审阅配置。默认忽略源码注释；启用后注释变化独立计入主变更总数，但不计入正文增删词数。默认也不编译；命令行 `--compile` 或配置 `enabled = true` 才启用双侧真实编译，`--compile-new-only` 可只编译新侧，`--tex-engine` 可指定引擎，`--sandbox-render` 须与编译同时启用。编译产物、限制和沙箱要求见[编译说明](compiled-rendering.md)。
 
 `--inspect-sources` 仅输出双侧来源展开 JSON，不生成审阅报告。
 
@@ -95,10 +102,10 @@ math = "mathjax"
 | 退出码 | 含义 | 处理 |
 | --- | --- | --- |
 | `0` | 完整报告已生成 | 仍须人工核对变更和诊断；不代表审阅通过 |
-| `2` | 报告已生成，但有警告或错误诊断；也可能是降级源码对比报告 | 检查 `diff.json` 和 `diagnostics.json`，说明解析或定位限制 |
+| `2` | 报告已生成，但有警告或错误诊断；也可能是降级源码对比报告或显式编译失败 | 检查 `diff.json` 和 `diagnostics.json`，说明解析、编译或定位限制 |
 | `4` | 输入来源无法读取 | 修复入口、提交或依赖问题；可能只留下失败诊断 |
 | `8` | CLI 内部错误 | 保存错误输出并报告未能完成审阅 |
-| `64` | 参数、配置无效或使用不支持的选项 | 修正命令/配置；首版 `--compile` 不受支持 |
+| `64` | 参数或配置无效 | 修正命令/配置；仅新侧编译及沙箱渲染须同时启用编译 |
 
 CLI 输出的 HTML 路径只是报告入口，不是审阅结论。不要将报告生成说成内容正确、范围符合或编译成功。
 

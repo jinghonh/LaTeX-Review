@@ -13,11 +13,13 @@ import sys
 import tomllib
 
 from .comparison import compare_projects
+from .compilation import _program, _safe_path, compile_side, skipped_side
 from .contract import Diagnostic, SourceLocation
 from .report import ReportPathError, write_failure_diagnostics, write_report, write_source_fallback
 from .sources import SourceError, resolve_sources
 from .structure import parse_project
 from .macros import validate_macros
+from .visual import build_visual
 
 
 class ReviewArgumentParser(argparse.ArgumentParser):
@@ -37,7 +39,7 @@ def _config(path: Path, explicit: bool) -> dict:
             data = tomllib.load(stream)
     except (OSError, tomllib.TOMLDecodeError) as exc:
         raise ConfigurationError(f"配置文件 {path} 无法读取或解析：{exc}") from exc
-    allowed = {"entry", "ignore", "render", "diff", "git", "output", "macros"}
+    allowed = {"entry", "ignore", "render", "diff", "git", "output", "macros", "compile"}
     if extra := set(data) - allowed:
         raise ConfigurationError(f"配置含未知字段：{', '.join(sorted(extra))}")
     for key in ("entry", "output"):
@@ -49,7 +51,9 @@ def _config(path: Path, explicit: bool) -> dict:
     sections = {"render": {"math": str, "copy_assets": bool, "show_unknown_macros": bool},
                 "diff": {"comments": bool, "move_detection": bool, "citation_semantics": bool,
                          "formula_token_diff": bool},
-                "git": {"default_old": str, "default_new": str}}
+                "git": {"default_old": str, "default_new": str},
+                "compile": {"enabled": bool, "new_only": bool, "engine": str,
+                            "timeout": int, "sandbox_render": bool}}
     for section, fields in sections.items():
         values = data.get(section, {})
         if not isinstance(values, dict):
@@ -176,8 +180,8 @@ def _known_output_after_config_error(args) -> Path | None:
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = ReviewArgumentParser(prog="latex-review", description="比较论文并生成无编译审阅报告。",
-                                  epilog="默认比较 Git HEAD 与磁盘工作区；--compile 尚未支持。")
+    parser = ReviewArgumentParser(prog="latex-review", description="比较论文并生成结构化审阅报告。",
+                                  epilog="默认比较 Git HEAD 与磁盘工作区；仅显式 --compile 才运行 TeX。")
     parser.add_argument("paths", nargs="*", help="Git 模式入口，或两个独立源文件")
     parser.add_argument("--entry", dest="entry_option", help="双目录模式共同的相对入口")
     parser.add_argument("--old-dir", help="修改前项目目录")
@@ -191,11 +195,13 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--comments", action=argparse.BooleanOptionalAction, default=None,
                         help="审阅源码注释变化；--no-comments 可覆盖配置")
     parser.add_argument("--inspect-sources", action="store_true", help="仅输出双侧展开来源 JSON")
-    parser.add_argument("--compile", action="store_true", help="保留选项；真实编译将在第二版支持")
+    parser.add_argument("--compile", action="store_true", help="在隔离副本中用 latexmk 编译双侧论文")
+    parser.add_argument("--compile-new-only", action="store_true", help="仅编译修改后版本，须同时启用编译")
+    parser.add_argument("--tex-engine", choices=("pdflatex", "xelatex", "lualatex"), help="真实编译引擎")
+    parser.add_argument("--compile-timeout", type=int, help="每侧编译超时秒数，默认 90")
+    parser.add_argument("--sandbox-render", action="store_true", help="在可验证的 macOS 沙箱中执行复杂宏编译")
     parser.add_argument("--version", action="version", version=f"%(prog)s {version('latex-review')}")
     args = parser.parse_args(argv)
-    if args.compile:
-        parser.error("--compile 尚未支持，不能执行真实编译")
     if not args.paths and not args.entry_option and not args.old_dir and not args.new_dir and not args.config and not Path(".latex-review.toml").exists():
         parser.print_help()
         return 0
@@ -203,6 +209,16 @@ def main(argv: list[str] | None = None) -> int:
     output_ready = False
     try:
         config = _config(Path(args.config).expanduser() if args.config else Path(".latex-review.toml"), bool(args.config))
+        compile_config = config.get("compile", {})
+        compile_enabled = args.compile or compile_config.get("enabled", False)
+        new_only = args.compile_new_only or compile_config.get("new_only", False)
+        sandbox = args.sandbox_render or compile_config.get("sandbox_render", False)
+        engine = args.tex_engine or compile_config.get("engine", "pdflatex")
+        timeout = args.compile_timeout if args.compile_timeout is not None else compile_config.get("timeout", 90)
+        if engine not in {"pdflatex", "xelatex", "lualatex"} or not 1 <= timeout <= 600:
+            raise ConfigurationError("编译引擎或超时无效")
+        if (new_only or sandbox) and not compile_enabled:
+            raise ConfigurationError("仅编译新版本及沙箱渲染须启用 --compile 或 [compile].enabled")
         if (args.math if args.math is not None else config.get("render", {}).get("math", "mathjax")) != "mathjax":
             raise ConfigurationError("首版仅支持 mathjax 公式排版")
         if args.format is not None and args.format != "html,json":
@@ -216,6 +232,8 @@ def main(argv: list[str] | None = None) -> int:
         _check_output_separate(output, options)
         _prepare_output(output)
         output_ready = True
+        if compile_enabled:
+            output.mkdir(parents=True, exist_ok=True)
         with resolve_sources(**options, excluded_paths=(output,), ignore_patterns=tuple(config.get("ignore", ()))) as pair:
             old_expanded, new_expanded = pair.old.expand(), pair.new.expand()
             macros = validate_macros(config.get("macros", {}))
@@ -227,13 +245,40 @@ def main(argv: list[str] | None = None) -> int:
                 except Exception as exc:
                     parsed.append(None)
                     failures.append((expanded.source.side, str(exc)))
-            if failures or any(item and any(d.code == "plastex_parse_error" for d in item.diagnostics) for item in parsed):
-                report = write_source_fallback(old_expanded, new_expanded, output, parse_failures=failures,
-                                               parsed=tuple(parsed))
-            else:
+            source_fallback = bool(failures or any(item and any(d.code == "plastex_parse_error" for d in item.diagnostics) for item in parsed))
+            comparison = None
+            if not source_fallback:
                 comments = args.comments if args.comments is not None else config.get("diff", {}).get("comments", False)
-                result = compare_projects(parsed[0], parsed[1], review_comments=comments)
-                report = write_report(parsed[0], parsed[1], result, output)
+                comparison = compare_projects(parsed[0], parsed[1], review_comments=comments)
+            statuses = None
+            rendering = None
+            compile_diagnostics: tuple[Diagnostic, ...] = ()
+            if compile_enabled:
+                built = []
+                for source in (pair.old, pair.new):
+                    if source.side == "old" and new_only:
+                        built.append(skipped_side(output, engine))
+                        continue
+                    peer = pair.new if source.side == "old" else pair.old
+                    status, issues = compile_side(source, output, engine=engine, timeout=timeout, sandbox=sandbox,
+                                                  related_sources=(peer,))
+                    built.append(status)
+                    compile_diagnostics += issues
+                statuses = tuple(built)
+                rendering, visual_issues = build_visual(statuses[0], statuses[1], output,
+                                                        comparison.document if comparison else None,
+                                                        sources=(pair.old, pair.new))
+                compile_diagnostics += visual_issues
+            if source_fallback:
+                report = write_source_fallback(old_expanded, new_expanded, output, parse_failures=failures,
+                                               parsed=tuple(parsed), extra_diagnostics=compile_diagnostics,
+                                               rendering=rendering, statuses=statuses)
+            else:
+                safe_path, forbidden = _safe_path((pair.old, pair.new), output)
+                pdf_converter = _program("pdftoppm", safe_path, forbidden) or ""
+                report = write_report(parsed[0], parsed[1], comparison, output,
+                                      pdf_converter=pdf_converter, extra_diagnostics=compile_diagnostics,
+                                      rendering=rendering, statuses=statuses)
         print(report.html)
         return 2 if any(d.severity in {"warning", "error"} for d in report.document.diagnostics) else 0
     except ConfigurationError as exc:

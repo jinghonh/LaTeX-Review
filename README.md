@@ -29,7 +29,9 @@ python -m pip install '.[test]'
 
 GitHub 拉取请求的报告产物与评论发布须由仓库维护者按[工作流启用说明](Docs/github-actions.md)显式配置。模板默认不在本仓库运行。
 
-配置从当前目录的 `.latex-review.toml` 读取，也可用 `--config` 指定；显式命令行选项覆盖配置，配置覆盖默认值。支持 `entry`、`output`、`ignore`、`[git].default_old/default_new` 与 `[diff].comments`；`--no-comments` 可覆盖配置中的注释审阅开关。首版的 `--math` 仅支持 `mathjax`，`--format` 仅支持 `html,json`；其他渲染与差异开关只接受首版固定值，未知或不支持的配置会报错。首版不支持 `--compile`。完整报告返回 0，降级报告返回 2，来源不可读取返回 4，内部错误返回 8；一般提示不改变成功状态。无效参数或配置返回 64。
+需要查看实际版式时，显式传入 `--compile`。命令会在两个私有副本中调用已安装的 `latexmk`，保留各侧编译文档、日志、状态及页面预览；`--compile-new-only` 只编译修改后版本。`--tex-engine` 可选 `pdflatex`、`xelatex` 或 `lualatex`。复杂宏和绘图可再加 `--sandbox-render`，要求 macOS 的隔离机制通过自检，否则拒绝高级执行。工具不会自动安装 TeX；缺少工具或某侧编译失败时，结构报告仍会保留。详细用法和产物见[真实编译、页面对比与沙箱渲染](Docs/compiled-rendering.md)。
+
+配置从当前目录的 `.latex-review.toml` 读取，也可用 `--config` 指定；显式命令行选项覆盖配置，配置覆盖默认值。支持 `entry`、`output`、`ignore`、`[git].default_old/default_new`、`[diff].comments`、`[compile]` 和 `[macros.名称]`；`--no-comments` 可覆盖配置中的注释审阅开关。`--math` 仅支持 `mathjax`，`--format` 仅支持 `html,json`；其他渲染与差异开关只接受既定值，未知或不支持的配置会报错。默认不编译；命令行 `--compile` 或配置 `[compile].enabled = true` 才启用编译。完整报告返回 0，降级或编译失败报告返回 2，来源不可读取返回 4，内部错误返回 8；一般提示不改变成功状态。无效参数或配置返回 64。
 
 第一点五版可在 `[macros.名称]` 中设置受控宏占位预览；两侧引用会各自显示 `.bib` 作者、题目和年份。支持范围、配置样例和参考文献语义边界见[参考文献与宏占位预览](Docs/bibliography-macros.md)。
 
