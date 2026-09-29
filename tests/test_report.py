@@ -3,9 +3,12 @@
 from __future__ import annotations
 
 import json
+import base64
+from dataclasses import replace
 from html import escape
 from pathlib import Path
 import shutil
+import subprocess
 import struct
 import sys
 import time
@@ -15,6 +18,7 @@ import pytest
 
 from latex_review import compare_projects, parse_project, resolve_sources, write_report
 from latex_review.report import ReportPathError
+from latex_review.contract import ComparisonSource
 
 
 def _png(rgb: tuple[int, int, int]) -> bytes:
@@ -193,3 +197,58 @@ def test_svg_script_is_not_copied_or_linked(tmp_path: Path) -> None:
     assert "图资源格式未支持" in html and "alert(1)" not in html
     assert not (report.directory / "assets/old/fig/attack.svg").exists()
     assert any(item.code == "report_asset_unsupported" for item in report.document.diagnostics)
+
+
+def test_single_file_embeds_both_images_and_editor_links_only_for_live_sources(tmp_path: Path) -> None:
+    old, new = tmp_path / "old", tmp_path / "new"
+    _project(old, r"\begin{figure}\includegraphics{fig/same.png}\caption{Old}\end{figure}", (255, 0, 0))
+    _project(new, r"\begin{figure}\includegraphics{fig/same.png}\caption{New}\end{figure}", (0, 0, 255))
+    with resolve_sources(entry="main.tex", old_dir=old, new_dir=new) as pair:
+        before, after = parse_project(pair.old.expand()), parse_project(pair.new.expand())
+        comparison = compare_projects(before, after)
+        report = write_report(before, after, comparison, tmp_path / "output", pdf_converter="",
+                              editor_url_template="vscode://file/{path}:{line}:{column}", single_file=True)
+        assert report.single_html is not None
+        html = report.single_html.read_text(encoding="utf-8")
+        assert html.count('src="data:image/png;base64,') == 2
+        assert 'src="assets/' not in html and 'href="assets/' not in html
+        assert base64.b64encode((old / "fig/same.png").read_bytes()).decode() in html
+        assert base64.b64encode((new / "fig/same.png").read_bytes()).decode() in html
+        assert 'id="review-data"' in html
+        assert 'vscode://file/' in html and 'class="copy-source"' in html
+        assert '{path}' not in html
+        historical = replace(before, expanded=replace(before.expanded,
+                             source=replace(before.expanded.source,
+                                            identity=ComparisonSource("git", "a" * 40))))
+        historical_report = write_report(historical, after, comparison, tmp_path / "historical", pdf_converter="",
+                                         editor_url_template="vscode://file/{path}:{line}:{column}")
+        historical_html = historical_report.html.read_text(encoding="utf-8")
+        assert '在编辑器打开旧侧' not in historical_html
+        assert '在编辑器打开新侧' in historical_html
+    moved = tmp_path / "moved-single.html"
+    shutil.copyfile(report.single_html, moved)
+    shutil.rmtree(report.directory)
+    assert 'data:image/png;base64,' in moved.read_text(encoding="utf-8")
+
+
+@pytest.mark.parametrize("template", ["javascript:{path}", "vscode://file/{path}:$(touch /tmp/pwn)",
+                                      "vscode://file/{path}:{line}?command=evil"])
+def test_editor_template_rejects_unsafe_forms(tmp_path: Path, template: str) -> None:
+    old, new = tmp_path / "old", tmp_path / "new"
+    _project(old, "Old text.", (1, 2, 3)); _project(new, "New text.", (3, 2, 1))
+    with resolve_sources(entry="main.tex", old_dir=old, new_dir=new) as pair:
+        before, after = parse_project(pair.old.expand()), parse_project(pair.new.expand())
+        with pytest.raises(ValueError, match="编辑器模板"):
+            write_report(before, after, compare_projects(before, after), tmp_path / "output",
+                         editor_url_template=template)
+
+
+def test_nested_context_and_sync_anchor() -> None:
+    node = shutil.which("node")
+    if node is None:
+        pytest.skip("缺少 JavaScript 运行时")
+    root = Path(__file__).resolve().parents[1]
+    result = subprocess.run((node, str(root / "tests/report_interaction_smoke.cjs"),
+                             str(root / "src/latex_review/report_interaction.js")),
+                            capture_output=True, text=True, check=False)
+    assert result.returncode == 0, result.stderr

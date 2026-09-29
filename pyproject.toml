@@ -20,7 +20,7 @@ latex-review = "latex_review.cli:main"
 where = ["src"]
 
 [tool.setuptools.package-data]
-latex_review = ["schemas/*.json"]
+latex_review = ["schemas/*.json", "report_interaction.js"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
