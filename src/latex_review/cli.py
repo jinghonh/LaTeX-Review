@@ -146,7 +146,7 @@ def _clear_cache(directory: Path, options: dict, *, managed_default: bool) -> No
     entries = tuple(directory.iterdir())
     if any(entry.is_symlink() or not entry.is_file() or
            not (re.fullmatch(r"[0-9a-f]{64}\.json", entry.name) or
-                re.fullmatch(r"\.write-[A-Za-z0-9_-]+\.tmp", entry.name)) for entry in entries):
+                re.fullmatch(r"\.write-[A-Za-z0-9_-]+(?:\.tmp)?", entry.name)) for entry in entries):
         raise ConfigurationError("缓存目录含非缓存文件，拒绝清理")
     for entry in entries:
         entry.unlink()

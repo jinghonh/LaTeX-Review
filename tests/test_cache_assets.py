@@ -3,6 +3,7 @@ import os
 from pathlib import Path
 import subprocess
 import sys
+import tempfile
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -204,6 +205,32 @@ def test_clear_cache_rejects_source_directory_and_keeps_files(tmp_path):
     assert run(git_root, "--cache-dir", str(git_root), "--clear-cache").returncode == 64
     assert (git_root / "main.tex").is_file()
     assert (git_root / "chapters/one.tex").is_file()
+
+
+def test_clear_cache_removes_interrupted_writes_but_keeps_foreign_files(tmp_path):
+    fixture(tmp_path)
+    assert run(tmp_path).returncode == 0
+    cache_dir = tmp_path / ".latex-review/cache"
+    orphans = []
+    for suffix in ("", ".tmp"):
+        with tempfile.NamedTemporaryFile("wb", dir=cache_dir, prefix=".write-", suffix=suffix,
+                                         delete=False) as stream:
+            stream.write(b"interrupted")
+            orphans.append(Path(stream.name))
+    assert all(path.is_file() for path in orphans)
+    assert run(tmp_path, "--clear-cache").returncode == 0
+    assert all(not path.exists() for path in orphans)
+    foreign = cache_dir / "notes.txt"
+    foreign.write_text("source data", encoding="utf-8")
+    assert run(tmp_path, "--clear-cache").returncode == 64
+    assert foreign.read_text(encoding="utf-8") == "source data"
+    foreign.unlink()
+    outside = tmp_path / "outside.txt"
+    outside.write_text("keep", encoding="utf-8")
+    link = cache_dir / ".write-symlink.tmp"
+    link.symlink_to(outside)
+    assert run(tmp_path, "--clear-cache").returncode == 64
+    assert link.is_symlink() and outside.read_text(encoding="utf-8") == "keep"
 
 
 def test_graphicspath_changes_resolved_path_with_same_bytes(tmp_path):

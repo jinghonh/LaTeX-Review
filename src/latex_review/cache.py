@@ -149,7 +149,8 @@ class ParseCache:
                 temporary = None
                 try:
                     self.directory.mkdir(parents=True, exist_ok=True)
-                    with tempfile.NamedTemporaryFile("wb", dir=self.directory, prefix=".write-", delete=False) as stream:
+                    with tempfile.NamedTemporaryFile("wb", dir=self.directory, prefix=".write-", suffix=".tmp",
+                                                     delete=False) as stream:
                         temporary = Path(stream.name)
                         stream.write(_json(envelope))
                         stream.flush()
