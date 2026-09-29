@@ -74,7 +74,9 @@
         "new_text": {"type": ["string", "null"]}, "summary": {"type": "string"},
         "source_old": {"$ref": "#/$defs/location"}, "source_new": {"$ref": "#/$defs/location"},
         "row_old": {"type": "integer", "minimum": 1}, "column_old": {"type": "integer", "minimum": 1},
-        "row_new": {"type": "integer", "minimum": 1}, "column_new": {"type": "integer", "minimum": 1}
+        "row_new": {"type": "integer", "minimum": 1}, "column_new": {"type": "integer", "minimum": 1},
+        "old_sentences": {"type": "array", "items": {"type": "integer", "minimum": 1}, "uniqueItems": true},
+        "new_sentences": {"type": "array", "items": {"type": "integer", "minimum": 1}, "uniqueItems": true}
       }
     },
     "category": {"enum": ["text", "equation", "figure", "table", "citation", "comment", "move"]},

@@ -22,11 +22,12 @@ from urllib.parse import quote
 from .comparison import ComparisonResult
 from .contract import (ChangeDetail, Diagnostic, DiagnosticsDocument, PrimaryChange, ReviewDocument,
                        ReviewNode, SourceLocation, build_summary, dumps)
-from .preview import _UNSAFE_MATH, render_preview
+from .preview import _INLINE_SAFE, _UNSAFE_MATH, _inline_html, render_preview
 from .rules import check_rules
 from .structure import ParsedNode, ParsedProject
 from .sources import ExpandedProject
 from .table_model import display_tables
+from .text_diff import split_sentences
 from .latex_commands import MATH_COMMANDS
 
 
@@ -59,6 +60,35 @@ class ReportResult:
 
 def _e(value: object) -> str:
     return escape(str(value), quote=True)
+
+
+def _sentence_card_html(raw: str | None, project: ParsedProject, side: str,
+                        node_id: str | None, numbers: tuple[int, ...]) -> str:
+    if raw is None:
+        return "该侧无内容"
+    if (re.search(r"<[^>]+>|(?:javascript|data|vbscript)\s*:", raw, re.I) or
+            _UNSAFE_MATH.search(raw) or
+            any(match.group(1) not in _INLINE_SAFE and match.group(1) not in {"paragraph", "subparagraph"}
+                and match.group(1) not in project.macros
+                for match in re.finditer(r"\\([A-Za-z@]+)", raw))):
+        return "此处暂无法预览"
+    parent = project.by_id().get(node_id) if node_id else None
+    if parent is None or not numbers:
+        return "此处暂无法预览"
+    children = [project.by_id()[child] for child in parent.review.child_ids]
+    sentences = split_sentences(parent.review.raw_latex)
+    rendered_parts = []
+    for number in numbers:
+        if number > len(sentences):
+            return "此处暂无法预览"
+        sentence = sentences[number - 1]
+        contained = [child for child in children if parent.expanded_start + sentence.start <= child.expanded_start
+                     and child.expanded_end <= parent.expanded_start + sentence.end]
+        rendered_parts.append(_inline_html(sentence.text, project, side, contained, source=parent.review.source,
+                                           base_start=parent.expanded_start + sentence.start))
+    rendered = " ".join(rendered_parts)
+    # 明细本身是按钮，行内引用在这里保留文字但不嵌套交互链接。
+    return re.sub(r"<a\b[^>]*>", "<span>", rendered).replace("</a>", "</span>").strip()
 
 
 def _validate_editor_template(template: str | None) -> None:
@@ -371,14 +401,31 @@ def _change_cards(document: ReviewDocument, anchors: set[str], old: ParsedProjec
             new_source = detail.source_new or change.source_new
             detail_old_id = _detail_target(document, change, detail, "old", anchors)
             detail_new_id = _detail_target(document, change, detail, "new", anchors)
+            old_sentence_ids = " ".join(f"{old_id}-sentence-{number}" for number in detail.old_sentences)
+            new_sentence_ids = " ".join(f"{new_id}-sentence-{number}" for number in detail.new_sentences)
+            if detail.old_sentences or detail.new_sentences:
+                if not detail.old_sentences:
+                    detail_old_id = ""
+                    old_source = None
+                if not detail.new_sentences:
+                    detail_new_id = ""
+                    new_source = None
+            sentence_text = (f'<span class="sentence-pair">'
+                             f'<span class="sentence-before">修改前：{_sentence_card_html(detail.old_text, old, "old", change.old_node_id, detail.old_sentences)}</span>'
+                             f'<span class="sentence-after">修改后：{_sentence_card_html(detail.new_text, new, "new", change.new_node_id, detail.new_sentences)}</span>'
+                             f'</span>') if detail.old_sentences or detail.new_sentences else ""
+            old_location = "所属段落；" + _location(old_source) if detail.old_sentences else _location(old_source)
+            new_location = "所属段落；" + _location(new_source) if detail.new_sentences else _location(new_source)
             details.append(f'<li><button type="button" class="detail-jump" data-old="{_e(detail_old_id)}" '
-                           f'data-new="{_e(detail_new_id)}" data-old-location="{_e(_location(old_source))}" '
-                           f'data-new-location="{_e(_location(new_source))}" '
+                           f'data-new="{_e(detail_new_id)}" data-old-location="{_e(old_location)}" '
+                           f'data-new-location="{_e(new_location)}" '
+                           f'data-old-sentences="{_e(old_sentence_ids)}" data-new-sentences="{_e(new_sentence_ids)}" '
                            f'data-old-row="{detail.row_old or ""}" data-old-column="{detail.column_old or ""}" '
                            f'data-new-row="{detail.row_new or ""}" data-new-column="{detail.column_new or ""}">'
                            f'{_e(_CATEGORY_LABELS.get(detail.category, detail.category))} · '
                            f'{_e(_KIND_LABELS.get(detail.kind, detail.kind))}：'
-                           f'{_e(detail.summary if detail.category in {"citation", "figure"} else "内容变化")}</button></li>')
+                           f'{_e(detail.summary if detail.category in {"citation", "figure", "text"} else "内容变化")}'
+                           f'{sentence_text}</button></li>')
         page_links = []
         if rendering:
             for side, label in (("old", "旧"), ("new", "新")):
@@ -493,6 +540,9 @@ main{{grid-template-columns:repeat(3,minmax(0,1fr));gap:.7rem;padding:.7rem;alig
 .preview-side,.changes-side{{height:calc(100vh - 16rem);min-height:20rem;max-height:none;overflow:auto;background:white;border:1px solid #b8c0ca;border-radius:.35rem;padding:1rem}}
 .changes-side h2{{margin:0 0 .8rem}}.preview-side[data-side="old"] .is-highlighted{{outline:3px solid #a74236;outline-offset:3px;background:#fce2df}}
 .preview-side[data-side="new"] .is-highlighted{{outline:3px solid #287446;outline-offset:3px;background:#d8f0df}}
+.review-sentence{{scroll-margin-top:1rem}}.preview-side[data-side="old"] .sentence-changed{{background:#fce2df}}
+.preview-side[data-side="new"] .sentence-changed{{background:#d8f0df}}
+.preview-side .review-sentence.is-highlighted{{outline:2px solid currentColor;outline-offset:2px}}
 .preview-side[data-side="old"] td.is-cell-highlighted{{outline:3px solid #a74236;outline-offset:-3px;background:#f8c5c0}}
 .preview-side[data-side="new"] td.is-cell-highlighted{{outline:3px solid #287446;outline-offset:-3px;background:#b9e4c5}}
 .change-card{{border:1px solid #adb7c4;border-radius:.35rem;margin:.6rem 0;padding:.7rem;background:#fff}}
@@ -501,6 +551,9 @@ button,select{{font:inherit}}button:focus-visible,select:focus-visible,a:focus-v
 .change-jump,.detail-jump{{cursor:pointer;border:0;background:transparent;text-align:left;color:#12233b;padding:.15rem}}
 .change-jump:hover,.detail-jump:hover{{text-decoration:underline}}.detail-list{{padding-left:1.3rem;margin:.35rem 0}}
 .detail-list li{{margin:.3rem 0}}.detail-list small{{display:block;color:#374151;overflow-wrap:anywhere}}
+.sentence-pair{{display:block;margin:.25rem 0 .3rem .5rem;line-height:1.5}}
+.sentence-before,.sentence-after{{display:block;overflow-wrap:anywhere}}
+.sentence-before{{background:#fce2df}}.sentence-after{{background:#d8f0df}}
 .kind{{display:inline-block;border-radius:.2rem;padding:.1rem .3rem;font-weight:700;border:1px solid #53657a}}
 .kind-added{{background:#d8f0df}}.kind-removed{{background:#fce2df}}.kind-modified{{background:#fff0c9}}.kind-moved{{background:#dce9ff}}
 .badge{{display:inline-block;background:#e7edf7;padding:.05rem .25rem;border-radius:.2rem;margin-right:.2rem}}
@@ -517,7 +570,8 @@ button,select{{font:inherit}}button:focus-visible,select:focus-visible,a:focus-v
 .page-pair{{border-top:1px solid #b8c0ca;padding:.7rem 0;display:flex;gap:1rem;flex-wrap:wrap;align-items:start}}
 .page-pair h3{{width:100%;margin:.2rem 0}}.page-pair figure{{margin:0;max-width:31%;min-width:230px}}
 .page-pair img{{max-width:100%;height:auto;border:1px solid #b8c0ca}}
-@media(max-width:1000px){{main{{grid-template-columns:1fr}}.preview-side,.changes-side{{height:auto;max-height:none}}}}
+@media(max-width:1000px){{main{{grid-template-columns:repeat(2,minmax(0,1fr))}}.preview-side{{height:60vh;min-height:22rem}}.changes-side{{grid-column:1/-1;height:35vh;min-height:14rem}}}}
+@media(max-width:600px){{.preview-side{{padding:.55rem}}main{{gap:.35rem;padding:.35rem}}}}
 </style></head><body><header><h1>LaTeX 三栏审阅报告</h1>
 <p class="notice">内容预览供审阅，不代表最终编译版式；来源位置可能为近似值。</p>
 <p class="notice">修改前使用浅红色，修改后使用浅绿色；颜色用于定位所选变更。</p>
@@ -594,7 +648,15 @@ def write_report(old: ParsedProject, new: ParsedProject, comparison: ComparisonR
         "old": tuple(node for node in comparison.document.nodes_old if node.id not in parsed_ids["old"]),
         "new": tuple(node for node in comparison.document.nodes_new if node.id not in parsed_ids["new"]),
     }
-    preview = render_preview(old, new, figure_assets=figure_html, extra_nodes=extra_nodes)
+    sentence_highlights: dict[tuple[str, str], set[int]] = {}
+    for change in comparison.document.changes:
+        for detail in change.details:
+            for side, node_id, numbers in (("old", change.old_node_id, detail.old_sentences),
+                                           ("new", change.new_node_id, detail.new_sentences)):
+                if node_id and numbers:
+                    sentence_highlights.setdefault((side, node_id), set()).update(numbers)
+    preview = render_preview(old, new, figure_assets=figure_html, extra_nodes=extra_nodes,
+                             sentence_highlights={key: frozenset(value) for key, value in sentence_highlights.items()})
     preview_diagnostics = (item for item in preview.diagnostics
                            if item.code not in {"bibliography_key_unresolved", "unresolved_reference"})
     diagnostics = tuple(dict.fromkeys((*comparison.document.diagnostics, *preview_diagnostics,

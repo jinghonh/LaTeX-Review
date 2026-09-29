@@ -72,6 +72,8 @@ class ChangeDetail:
     column_old: int | None = None
     row_new: int | None = None
     column_new: int | None = None
+    old_sentences: tuple[int, ...] = ()
+    new_sentences: tuple[int, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -189,6 +191,9 @@ def _ordered(value: object) -> object:
                 for coordinate in ("row_old", "column_old", "row_new", "column_new"):
                     if detail_data[coordinate] is None:
                         del detail_data[coordinate]
+                for sentence_side in ("old_sentences", "new_sentences"):
+                    if not detail_data[sentence_side]:
+                        del detail_data[sentence_side]
                 item["details"].append(detail_data)
             item["categories"] = sorted(set(change.categories))
             result["changes"].append(item)

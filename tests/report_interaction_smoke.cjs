@@ -91,7 +91,7 @@ const document = {
 };
 const window = {reviewNodePairs: [['section-old','section-new'], ...Array.from({length:6}, (_,i)=>['p'+(i+1)+'-old','p'+(i+1)+'-new'])], matchMedia:()=>({matches:false})};
 let script = fs.readFileSync(process.argv[2], 'utf8');
-script = script.replace(/\}\)\(\);\s*$/, 'window.hooks={context,filter,nearestAnchor,align};})();');
+script = script.replace(/\}\)\(\);\s*$/, 'window.hooks={context,filter,nearestAnchor,align,jump};})();');
 let now = 1000;
 vm.runInNewContext(script, {document, window, navigator:{}, performance:{now:()=>now}, requestAnimationFrame: fn=>fn(), console});
 
@@ -157,4 +157,20 @@ assert(!oldOtherCell.classes.has('is-cell-highlighted'), '旧侧其他单元格�
 assert(newTargetCell.classes.has('is-cell-highlighted'), '新侧应定位到对应单元格');
 assert(!newOtherCell.classes.has('is-cell-highlighted'), '新侧其他单元格不应高亮');
 
-console.log('嵌套折叠、相邻锚点以及仅新增或仅删除的双侧上下文校验通过');
+const oldSentence = register(oldParagraphs[3].append(new Element('old-p4-old-sentence-2', 'review-sentence', {}, 600, 20)));
+const newSentence = register(newParagraphs[3].append(new Element('new-p4-new-sentence-2', 'review-sentence', {}, 750, 20)));
+const sentenceJump = card.append(new Element('sentence-detail', 'detail-jump', {
+  old:'p4-old', new:'p4-new', oldSentences:'p4-old-sentence-2', newSentences:'p4-new-sentence-2',
+  oldLocation:'旧段落', newLocation:'新段落'
+}));
+window.hooks.jump(sentenceJump);
+assert(oldSentence.classes.has('is-highlighted') && newSentence.classes.has('is-highlighted'), '应高亮双侧对应句子');
+assert(!oldParagraphs[3].classes.has('is-highlighted') && !newParagraphs[3].classes.has('is-highlighted'), '不应把整段当作句子定位');
+assert(ids.get('jump-status').textContent.includes('已定位完整句子'), '应报告精确句子定位');
+
+sentenceJump.dataset.oldSentences = 'p4-old-sentence-missing';
+window.hooks.jump(sentenceJump);
+assert(!oldParagraphs[3].classes.has('is-highlighted'), '无法定位时不可回退高亮整段');
+assert(ids.get('jump-status').textContent.includes('句子定位不可确认'), '应报告定位不确定');
+
+console.log('上下文、双侧滚动、表格与句子定位校验通过');

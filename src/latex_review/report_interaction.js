@@ -154,11 +154,16 @@
     document.querySelectorAll('.preview-side .is-highlighted').forEach(node => node.classList.remove('is-highlighted'));
     document.querySelectorAll('.preview-side .is-cell-highlighted').forEach(node => node.classList.remove('is-cell-highlighted'));
     const messages = [];
+    const sentenceJump = button.classList.contains('detail-jump') &&
+      (button.dataset.oldSentences || button.dataset.newSentences);
     for (const [side, label] of [['old', '修改前'], ['new', '修改后']]) {
       const panel = panels[side];
       const empty = panel.querySelector('.side-empty');
       const id = button.dataset[side];
-      const node = id ? document.getElementById(side + '-' + id) : null;
+      const sentenceIds = sentenceJump ? (button.dataset[side + 'Sentences'] || '').split(' ').filter(Boolean) : [];
+      const sentenceNodes = sentenceIds.map(value => document.getElementById(side + '-' + value));
+      const precise = sentenceIds.length > 0 && sentenceNodes.every(Boolean);
+      const node = precise ? sentenceNodes[0] : !sentenceJump && id ? document.getElementById(side + '-' + id) : null;
       if (node) {
         if (mode.value === 'context') {
           const target = reviewNode(node, side);
@@ -166,6 +171,7 @@
         }
         empty.classList.remove('is-visible');
         node.classList.add('is-highlighted');
+        if (precise) sentenceNodes.slice(1).forEach(sentence => sentence.classList.add('is-highlighted'));
         panel.scrollTop += node.getBoundingClientRect().top - panel.getBoundingClientRect().top - panel.clientHeight / 3;
         const row = button.dataset[side + 'Row'];
         const column = button.dataset[side + 'Column'];
@@ -177,9 +183,10 @@
           });
         }
       } else {
-        empty.textContent = label + '侧无对应节点'; empty.classList.add('is-visible');
+        empty.textContent = sentenceJump ? label + '侧无可精确定位的对应句子' : label + '侧无对应节点';
+        empty.classList.add('is-visible');
       }
-      messages.push(label + '：' + button.dataset[side + 'Location']);
+      messages.push(label + '：' + (precise ? '已定位完整句子；' : sentenceJump ? '句子定位不可确认；' : '') + button.dataset[side + 'Location']);
     }
     mutedUntil = performance.now() + 350;
     status.textContent = messages.join('；');
