@@ -119,7 +119,9 @@ def test_unsupported_table_cell_has_local_diagnostic(tmp_path):
     old, new = _roots(tmp_path, r"\begin{document}\begin{tabular}{c}\mystery{A}\end{tabular}\end{document}")
     with resolve_sources(entry="main.tex", old_dir=old, new_dir=new) as pair:
         result = render_preview(parse_project(pair.old.expand()), parse_project(pair.new.expand()))
-    assert any(item.code == "preview_table_fallback" and item.source_old for item in result.diagnostics)
+    assert '<table class="table-preview">' in result.html
+    assert "此处暂无法预览" in result.html
+    assert any(item.code == "preview_fallback" and item.source_old for item in result.diagnostics)
 
 
 def test_table_cell_with_missing_reference_key_keeps_key_and_diagnostic(tmp_path):
@@ -220,5 +222,5 @@ def test_macro_placeholder_in_inline_and_display_math(tmp_path):
     with resolve_sources(entry="main.tex", old_dir=old, new_dir=new) as pair:
         result = render_preview(parse_project(pair.old.expand(), macros=macros),
                                 parse_project(pair.new.expand(), macros=macros))
-    assert "\\(x\\)" in result.html and "\\[y\\]" in result.html
+    assert 'data-display="false">x</span>' in result.html and 'data-display="true">y</div>' in result.html
     assert 'data-source-approximate="true"' not in result.html

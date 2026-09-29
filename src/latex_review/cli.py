@@ -16,7 +16,7 @@ import tomllib
 
 from .cache import OWNER_FILE, ParseCache, is_managed_cache_file, is_owned_stage, read_owner_secret, stage_prefix
 from .comparison import compare_projects
-from .compilation import _program, _safe_path, compile_side, skipped_side
+from .compilation import compile_side, skipped_side
 from .contract import Diagnostic, SourceLocation
 from .report import ReportPathError, write_cache_metadata, write_failure_diagnostics, write_report, write_source_fallback
 from .sources import SourceError, resolve_sources
@@ -339,10 +339,8 @@ def main(argv: list[str] | None = None) -> int:
                                                parsed=tuple(parsed), extra_diagnostics=compile_diagnostics,
                                                rendering=rendering, statuses=statuses)
             else:
-                safe_path, forbidden = _safe_path((pair.old, pair.new), output)
-                pdf_converter = _program("pdftoppm", safe_path, forbidden) or ""
                 report = write_report(parsed[0], parsed[1], comparison, output,
-                                      pdf_converter=pdf_converter, extra_diagnostics=compile_diagnostics,
+                                      extra_diagnostics=compile_diagnostics,
                                       rendering=rendering, statuses=statuses)
             write_cache_metadata(output, cache.metadata())
         print(report.html)

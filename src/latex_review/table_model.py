@@ -48,6 +48,145 @@ class TableEdit:
     column_new: int | None = None
 
 
+@dataclass(frozen=True)
+class DisplayCell:
+    text: str
+    colspan: int = 1
+    rowspan: int = 1
+
+
+_DISPLAY_OPEN = re.compile(r"\\begin\{(tabular\*?|longtable)\}")
+_DISPLAY_RULE = re.compile(
+    r"\s*\\(?:hline|toprule|midrule|bottomrule|addlinespace)(?![A-Za-z@])"
+    r"|\s*\\(?:c?midrule|cline)\s*(?:\([^)]*\))?\s*\{[^{}]*\}"
+)
+
+
+def _braced(text: str, start: int) -> tuple[str, int] | None:
+    start += len(text[start:]) - len(text[start:].lstrip())
+    if start >= len(text) or text[start] != "{":
+        return None
+    depth = 0
+    for index in range(start, len(text)):
+        if text[index] == "{" and (index == 0 or text[index - 1] != "\\"):
+            depth += 1
+        elif text[index] == "}" and (index == 0 or text[index - 1] != "\\"):
+            depth -= 1
+            if depth == 0:
+                return text[start + 1:index], index + 1
+    return None
+
+
+def _display_parts(body: str) -> tuple[tuple[str, ...], ...] | None:
+    scan = _masked(body)
+    rows: list[tuple[str, ...]] = []
+    cells: list[str] = []
+    depth = 0
+    start = index = 0
+    math = ""
+    while index < len(scan):
+        if scan.startswith(r"\\", index) and depth == 0 and not math:
+            cells.append(body[start:index].strip())
+            if any(cells):
+                rows.append(tuple(cells))
+            cells = []
+            index += 2
+            optional = re.match(r"\s*\[[^\]]*\]", scan[index:])
+            if optional:
+                index += optional.end()
+            start = index
+            continue
+        if scan.startswith((r"\(", r"\["), index):
+            math = scan[index:index + 2]
+            index += 2
+            continue
+        if math and scan.startswith(r"\)" if math == r"\(" else r"\]", index):
+            math = ""
+            index += 2
+            continue
+        char = scan[index]
+        if char == "\\":
+            index += 2
+            continue
+        if char == "$":
+            math = "" if math == "$" else "$"
+        elif char == "{":
+            depth += 1
+        elif char == "}":
+            depth -= 1
+            if depth < 0:
+                return None
+        elif char == "&" and depth == 0 and not math:
+            cells.append(body[start:index].strip())
+            start = index + 1
+        index += 1
+    if depth or math:
+        return None
+    cells.append(body[start:].strip())
+    if any(cells):
+        rows.append(tuple(cells))
+    return tuple(rows) if rows else None
+
+
+def _display_cell(raw: str) -> DisplayCell | None:
+    cell = raw
+    while match := _DISPLAY_RULE.match(cell):
+        cell = cell[match.end():]
+    colspan = rowspan = 1
+    for command in ("multicolumn", "multirow"):
+        match = re.match(r"\s*\\" + command + r"(?![A-Za-z@])", cell)
+        if not match:
+            continue
+        first = _braced(cell, match.end())
+        second = _braced(cell, first[1]) if first else None
+        third = _braced(cell, second[1]) if second else None
+        if not third or not first[0].strip().isdigit():
+            return None
+        span = int(first[0].strip())
+        if not 1 <= span <= 100:
+            return None
+        if command == "multicolumn":
+            colspan = span
+        else:
+            rowspan = span
+        cell = third[0] + cell[third[1]:]
+    return DisplayCell(cell.strip(), colspan, rowspan)
+
+
+def display_tables(raw: str) -> tuple[tuple[tuple[DisplayCell, ...], ...], ...]:
+    """只提取可显示的表体；坐标差异仍由保守的 parse_table 决定。"""
+    tables = []
+    for opening in _DISPLAY_OPEN.finditer(_masked(raw)):
+        environment = opening.group(1)
+        cursor = opening.end()
+        if environment == "tabular*":
+            width = _braced(raw, cursor)
+            if width is None:
+                continue
+            cursor = width[1]
+        specification = _braced(raw, cursor)
+        if specification is None:
+            continue
+        cursor = specification[1]
+        closing = re.search(r"\\end\{" + re.escape(environment) + r"\}", _masked(raw)[cursor:])
+        if closing is None:
+            continue
+        parts = _display_parts(raw[cursor:cursor + closing.start()])
+        if parts is None:
+            continue
+        rows = []
+        for row in parts:
+            cells = tuple(_display_cell(cell) for cell in row)
+            if any(cell is None for cell in cells):
+                rows = []
+                break
+            rows.append(cells)
+        rows = [row for row in rows if any(cell.text for cell in row)]
+        if rows:
+            tables.append(tuple(rows))
+    return tuple(tables)
+
+
 def parse_table(raw: str, *, allowed_commands: Collection[str] = ()) -> tuple[TableGrid | None, str]:
     # 占位宏仅供预览调用方放行；差异引擎保持默认的保守命令集合。
     opening = _OPEN.search(_masked(raw))
