@@ -8,14 +8,17 @@ from importlib.metadata import version
 import json
 import os
 from pathlib import Path
+import re
 import shutil
+import subprocess
 import sys
 import tomllib
 
+from .cache import OWNER_FILE, ParseCache, is_managed_cache_file, is_owned_stage, read_owner_secret, stage_prefix
 from .comparison import compare_projects
 from .compilation import _program, _safe_path, compile_side, skipped_side
 from .contract import Diagnostic, SourceLocation
-from .report import ReportPathError, write_failure_diagnostics, write_report, write_source_fallback
+from .report import ReportPathError, write_cache_metadata, write_failure_diagnostics, write_report, write_source_fallback
 from .sources import SourceError, resolve_sources
 from .structure import parse_project
 from .macros import validate_macros
@@ -124,6 +127,52 @@ def _check_output_separate(path: Path, options: dict) -> None:
         raise ConfigurationError("输出目录不能覆盖论文来源目录或其上级目录")
 
 
+def _source_roots(options: dict) -> tuple[Path, ...]:
+    if "old_dir" in options:
+        return tuple(Path(options[key]).expanduser().resolve() for key in ("old_dir", "new_dir"))
+    if "old_file" in options:
+        return tuple(Path(options[key]).expanduser().resolve().parent for key in ("old_file", "new_file"))
+    entry = Path(options["entry"]).expanduser().resolve()
+    try:
+        probe = subprocess.run(("git", "-C", str(entry.parent), "rev-parse", "--show-toplevel"),
+                               capture_output=True, check=False)
+    except OSError:
+        return (entry.parent,)
+    return (Path(os.fsdecode(probe.stdout.strip())).resolve() if probe.returncode == 0 else entry.parent,)
+
+
+def _clear_cache(directory: Path, options: dict, *, managed_default: bool) -> None:
+    """只删除缓存格式文件；任何来源根目录或非缓存内容都拒绝递归清理。"""
+    roots = _source_roots(options)
+    if any(directory == root or directory in root.parents for root in roots):
+        raise ConfigurationError("缓存清理目录不能覆盖论文来源目录")
+    if not managed_default and any(root in directory.parents for root in roots):
+        raise ConfigurationError("指定缓存目录位于论文来源内，拒绝清理")
+    if directory.exists() and not directory.is_dir():
+        raise ConfigurationError("缓存路径已存在且不是目录")
+    try:
+        secret = read_owner_secret(directory)
+    except (OSError, UnicodeError, ValueError) as exc:
+        raise ConfigurationError(f"缓存所有权标记无效：{exc}") from exc
+    prefix = stage_prefix(directory)
+    stages = tuple(entry for entry in directory.parent.iterdir() if entry.name.startswith(prefix)
+                   and entry.name.endswith(".tmp")) if directory.parent.is_dir() else ()
+    if any(entry.is_symlink() or not entry.is_file() or not is_owned_stage(directory, entry, secret)
+           for entry in stages):
+        raise ConfigurationError("缓存暂存目录含无法确认归属的文件，拒绝清理")
+    entries = tuple(directory.iterdir()) if directory.exists() else ()
+    if any((secret is None or not (entry.is_symlink() or entry.is_file())) if entry.name == OWNER_FILE else
+           (entry.is_symlink() or not entry.is_file() or
+            not ((re.fullmatch(r"[0-9a-f]{64}\.json", entry.name) and is_managed_cache_file(entry)) or
+                 (re.fullmatch(r"\.write-[A-Za-z0-9_-]+(?:\.tmp)?", entry.name) and
+                  is_managed_cache_file(entry, temporary=True)))) for entry in entries):
+        raise ConfigurationError("缓存目录含非缓存文件，拒绝清理")
+    for entry in (*entries, *stages):
+        entry.unlink()
+    if directory.exists():
+        directory.rmdir()
+
+
 def _inspect(options: dict) -> int:
     with resolve_sources(**options) as pair:
         def view(source):
@@ -189,6 +238,9 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--old", dest="old_revision", help="修改前 Git 提交")
     parser.add_argument("--new", dest="new_revision", help="修改后 Git 提交或 worktree")
     parser.add_argument("--output", help="报告目录，默认 .latex-review/latest")
+    parser.add_argument("--cache-dir", help="解析缓存目录，默认位于报告目录旁")
+    parser.add_argument("--no-cache", action="store_true", help="本次绕过解析缓存")
+    parser.add_argument("--clear-cache", action="store_true", help="本次运行前清理解析缓存")
     parser.add_argument("--math", help="公式排版依赖，首版仅支持 mathjax")
     parser.add_argument("--format", help="输出格式，首版仅支持 html,json")
     parser.add_argument("--config", help="配置文件，默认当前目录 .latex-review.toml")
@@ -230,18 +282,31 @@ def main(argv: list[str] | None = None) -> int:
         if output in (Path.cwd(), Path("/")):
             raise ConfigurationError("输出目录不能是当前目录或文件系统根目录")
         _check_output_separate(output, options)
+        cache_dir = Path(os.path.abspath(Path(args.cache_dir).expanduser())) if args.cache_dir else output.parent / (
+            "cache" if output.name == "latest" else ".latex-review-cache")
+        if cache_dir == output or cache_dir in output.parents or output in cache_dir.parents:
+            raise ConfigurationError("缓存目录不能与报告目录重叠")
+        if cache_dir.is_symlink() or any(parent.is_symlink() for parent in cache_dir.parents):
+            raise ConfigurationError("缓存路径不能包含符号链接")
+        if args.clear_cache:
+            _clear_cache(cache_dir, options, managed_default=args.cache_dir is None)
         _prepare_output(output)
         output_ready = True
         if compile_enabled:
             output.mkdir(parents=True, exist_ok=True)
-        with resolve_sources(**options, excluded_paths=(output,), ignore_patterns=tuple(config.get("ignore", ()))) as pair:
+        cache = ParseCache(cache_dir, enabled=not args.no_cache,
+                           config={"config": config, "math": args.math or "mathjax",
+                                   "comments": args.comments if args.comments is not None else config.get("diff", {}).get("comments", False)})
+        with resolve_sources(**options, excluded_paths=(output, cache_dir), ignore_patterns=tuple(config.get("ignore", ()))) as pair:
             old_expanded, new_expanded = pair.old.expand(), pair.new.expand()
             macros = validate_macros(config.get("macros", {}))
             failures = []
             parsed = []
             for expanded in (old_expanded, new_expanded):
                 try:
-                    parsed.append(parse_project(expanded, macros=macros))
+                    parsed.append(cache.parse(expanded, parser=lambda source: parse_project(source, macros=macros)))
+                except SourceError:
+                    raise
                 except Exception as exc:
                     parsed.append(None)
                     failures.append((expanded.source.side, str(exc)))
@@ -279,6 +344,7 @@ def main(argv: list[str] | None = None) -> int:
                 report = write_report(parsed[0], parsed[1], comparison, output,
                                       pdf_converter=pdf_converter, extra_diagnostics=compile_diagnostics,
                                       rendering=rendering, statuses=statuses)
+            write_cache_metadata(output, cache.metadata())
         print(report.html)
         return 2 if any(d.rule_status is None and d.severity in {"warning", "error"}
                         for d in report.document.diagnostics) else 0

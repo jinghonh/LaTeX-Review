@@ -25,7 +25,7 @@ python -m pip install '.[test]'
 
 安装、目录/文件/Git 来源模式、配置、Codex 技能和报告解读见[使用指南](Docs/user-guide.md)。
 
-`latex-review main.tex` 默认比较 Git `HEAD` 与当前磁盘工作区，写入 `.latex-review/latest/report.html`、`diff.json`、`diagnostics.json`。可用 `--old`、`--new` 指定两个提交，或用 `--old-dir A --new-dir B --entry main.tex` 比较目录，也可直接提供两个独立文件。工作区快照包含暂存及未暂存内容、未忽略的未跟踪依赖；输出目录不参与快照。`--inspect-sources` 仅输出来源展开 JSON。用法与程序接口见[比较来源与展开接口](Docs/source-resolution.md)。
+`latex-review main.tex` 默认比较 Git `HEAD` 与当前磁盘工作区，写入 `.latex-review/latest/report.html`、`diff.json`、`diagnostics.json`、`cache-meta.json`。可用 `--old`、`--new` 指定两个提交，或用 `--old-dir A --new-dir B --entry main.tex` 比较目录，也可直接提供两个独立文件。工作区快照包含暂存及未暂存内容、未忽略的未跟踪依赖；输出目录不参与快照。`--inspect-sources` 仅输出来源展开 JSON。用法与程序接口见[比较来源与展开接口](Docs/source-resolution.md)。
 
 GitHub 拉取请求的报告产物与评论发布须由仓库维护者按[工作流启用说明](Docs/github-actions.md)显式配置。模板默认不在本仓库运行。
 
@@ -35,4 +35,6 @@ GitHub 拉取请求的报告产物与评论发布须由仓库维护者按[工作
 
 第一点五版可在 `[macros.名称]` 中设置受控宏占位预览；两侧引用会各自显示 `.bib` 作者、题目和年份。支持范围、配置样例和参考文献语义边界见[参考文献与宏占位预览](Docs/bibliography-macros.md)。
 
-契约结构、兼容性和使用样例见 [公共数据契约](Docs/data-contract.md)。解析和预览接口见 [结构解析与内容预览](Docs/structure-preview.md)，比较接口见[结构化内容差异](Docs/structured-content.md)。首版只比较图资源路径，不检测同一路径下的图片内容变化；表格只做整体差异，不定位单元格。运行时依赖包含 `jsonschema` 和 `plasTeX`；`pytest` 属于可选测试依赖。
+解析缓存默认放在报告目录旁，可用 `--cache-dir` 指定位置，`--no-cache` 绕过，`--clear-cache` 清理。缓存元信息包含两侧命中状态、依赖内容指纹和依赖关系；修改章节或宏会重新解析受影响的比较版本，图片或文献内容变化会更新审阅依赖指纹。详见[缓存与资源变化](Docs/cache-assets.md)。
+
+契约结构、兼容性和使用样例见 [公共数据契约](Docs/data-contract.md)。解析和预览接口见 [结构解析与内容预览](Docs/structure-preview.md)，比较接口见[结构化内容差异](Docs/structured-content.md)。同路径图片内容变化按文件字节指纹产生图明细；可确定的表格单元格和行列变化会标记坐标。运行时依赖包含 `jsonschema` 和 `plasTeX`；`pytest` 属于可选测试依赖。

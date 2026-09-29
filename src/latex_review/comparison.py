@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from difflib import SequenceMatcher
+from hashlib import sha256
 from types import MappingProxyType
 from typing import Mapping
 
@@ -28,6 +29,31 @@ class ComparisonResult:
     mapping: NodeMapping
     document: ReviewDocument
     token_changes: Mapping[str, tuple[TokenEdit, ...]]
+
+
+def _figure_fingerprints(project: ParsedProject, node: ParsedNode | None) -> dict[str, tuple[str, str]]:
+    if node is None:
+        return {}
+    result = {}
+    root = project.expanded.source.root.resolve()
+    for asset in node.assets:
+        candidates = {dep.file for dep in project.expanded.dependencies
+                      if dep.kind == "graphic" and dep.argument == asset and dep.source_start is not None
+                      and any(dep.referenced_from == origin.origin.file
+                              and dep.include_instance == origin.origin.include_instance
+                              and origin.origin.start <= dep.source_start < origin.origin.end
+                              for origin in node.origins)}
+        if len(candidates) != 1:
+            continue
+        relative = candidates.pop()
+        path = (root / relative).resolve()
+        if not path.is_relative_to(root):
+            continue
+        try:
+            result[asset] = (relative, sha256(path.read_bytes()).hexdigest())
+        except OSError:
+            continue  # 缺失仍由来源和报告诊断，不能伪装成内容变化。
+    return result
 
 
 def _comment_nodes(project: ParsedProject, side: str) -> tuple[ReviewNode, ...]:
@@ -180,7 +206,8 @@ def compare_projects(old: ParsedProject, new: ParsedProject, *, review_comments:
                                                 detail.source_old, detail.source_new,
                                                 detail.row_old, detail.column_old, detail.row_new, detail.column_new))
         elif kind == "figure":
-            details = figure_details(left_node, right_node)
+            details = figure_details(left_node, right_node,
+                                     _figure_fingerprints(old, left_node), _figure_fingerprints(new, right_node))
         else:
             details = table_details(left_node, right_node)
         if moved and left and right:

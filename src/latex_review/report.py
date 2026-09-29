@@ -212,6 +212,12 @@ def _write_managed(directory: Path, relative: Path, *, content: bytes | None = N
         os.close(parent_fd)
 
 
+def write_cache_metadata(directory: Path, metadata: dict) -> None:
+    """缓存运行信息独立于语义差异写入，避免冷热运行改变 diff.json。"""
+    _write_managed(directory, Path("cache-meta.json"),
+                   content=(json.dumps(metadata, ensure_ascii=False, sort_keys=True, indent=2) + "\n").encode("utf-8"))
+
+
 def _copy_asset(project: ParsedProject, relative: str, directory: Path, side: str) -> tuple[Path, str]:
     root = project.expanded.source.root.resolve()
     source = (root / relative).resolve()
