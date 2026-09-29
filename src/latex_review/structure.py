@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field, replace
 from hashlib import sha1
 import logging
 import re
@@ -11,6 +11,8 @@ from .contract import Diagnostic, ReviewNode, SourceLocation
 from .source_map import MappedRange
 from .sources import ExpandedProject, SourceIssue
 from .text_diff import CITATION_COMMANDS
+from .bibliography import BibliographyEntry, read_bibliography
+from .macros import MacroPlaceholder
 
 
 _COMMAND = re.compile(r"\\([A-Za-z@]+|.)")
@@ -53,6 +55,8 @@ class ParsedProject:
     nodes: tuple[ParsedNode, ...]
     diagnostics: tuple[Diagnostic, ...]
     labels: dict[str, str]
+    bibliography: dict[str, BibliographyEntry] = field(default_factory=dict)
+    macros: dict[str, MacroPlaceholder] = field(default_factory=dict)
 
     @property
     def review_nodes(self) -> tuple[ReviewNode, ...]:
@@ -522,9 +526,10 @@ class _Builder:
         return ParsedProject(self.project, tuple(nodes), tuple(self.diagnostics), labels)
 
 
-def parse_project(project: ExpandedProject) -> ParsedProject:
+def parse_project(project: ExpandedProject, *, macros: dict[str, MacroPlaceholder] | None = None) -> ParsedProject:
     """解析一侧已展开项目；节点保留精确原文和全部来源片段。"""
     unknown, error = _plastex_unknown(_safe_plastex_input(project))
+    unknown.difference_update(macros or {})
     theorem_envs = set(_THEOREM_ENV)
     theorem_envs.update(re.findall(r"\\newtheorem\*?\s*\{([^{}]+)\}", _masked(project.text)))
     if error:
@@ -543,4 +548,7 @@ def parse_project(project: ExpandedProject) -> ParsedProject:
         builder.scan(document.end(), extent[0] if extent else len(builder.mask))
     else:
         builder.scan(0, len(project.text))
-    return builder.finish()
+    parsed = builder.finish()
+    bibliography, diagnostics = read_bibliography(project)
+    return replace(parsed, bibliography=bibliography, macros=dict(macros or {}),
+                   diagnostics=(*parsed.diagnostics, *diagnostics))
