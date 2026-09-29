@@ -13,6 +13,7 @@ from .text_diff import CITATION_COMMANDS
 
 _REF_COMMANDS = {"ref", "eqref", "autoref", "pageref"}
 _VERBATIM = re.compile(r"\\begin\s*\{(verbatim\*?|Verbatim|lstlisting|minted)\}.*?\\end\s*\{\1\}", re.S)
+_BIB_COMMAND = re.compile(r"\\(?:bibliography|addbibresource)(?![A-Za-z@])")
 _RULE_NAMES = {
     "bibliography_key_unresolved": "引用键无法解析",
     "unresolved_reference": "交叉引用目标不存在",
@@ -101,12 +102,22 @@ def _sites(project: ParsedProject) -> tuple[dict[str, list[_Site]], dict[str, li
     return labels, citations, references
 
 
+def _bibliography_reliable(project: ParsedProject) -> bool:
+    if any(item.code in {"bibliography_unreadable", "bibliography_unsupported"} for item in project.diagnostics):
+        return False
+    for issue in project.expanded.diagnostics:
+        source = project.expanded.source_map.files.get(issue.file, "")
+        if _BIB_COMMAND.search(source[issue.start:issue.end]):
+            return False
+    return True
+
+
 def _findings(project: ParsedProject) -> dict[tuple[str, str], list[_Site]]:
     labels, citations, references = _sites(project)
     findings: dict[tuple[str, str], list[_Site]] = {}
-    bibliography_unreadable = any(item.code == "bibliography_unreadable" for item in project.diagnostics)
+    bibliography_reliable = _bibliography_reliable(project)
     for key, sites in citations.items():
-        if not bibliography_unreadable and key not in project.bibliography and f"bib:{key}" not in project.labels:
+        if bibliography_reliable and key not in project.bibliography and f"bib:{key}" not in project.labels:
             findings[("bibliography_key_unresolved", key)] = sites
     for key, sites in references.items():
         if key not in labels:
@@ -171,8 +182,10 @@ def _equations(project: ParsedProject) -> dict[str, tuple[int, ParsedNode, str |
 def check_rules(old: ParsedProject, new: ParsedProject) -> tuple[Diagnostic, ...]:
     """合并两侧规则命中；只有显式单值标签可证明公式显示编号变化。"""
     before, after = _findings(old), _findings(new)
+    bibliography_comparable = _bibliography_reliable(old) and _bibliography_reliable(new)
     diagnostics = [_rule_diagnostic(code, key, before.get((code, key), []), after.get((code, key), []))
-                   for code, key in sorted(before.keys() | after.keys())]
+                   for code, key in sorted(before.keys() | after.keys())
+                   if code != "bibliography_key_unresolved" or bibliography_comparable]
     old_equations, new_equations = _equations(old), _equations(new)
     for key in sorted(old_equations.keys() & new_equations.keys()):
         old_index, old_node, old_tag = old_equations[key]

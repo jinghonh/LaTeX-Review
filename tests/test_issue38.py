@@ -4,6 +4,8 @@ from pathlib import Path
 import subprocess
 import sys
 
+import pytest
+
 from latex_review import compare_projects, parse_project, resolve_sources, write_report
 from latex_review.rules import check_rules
 
@@ -169,3 +171,49 @@ def test_comma_is_only_a_separator_for_citation_keys(tmp_path):
     assert keys == {("unresolved_reference", "键：missing,a"),
                     ("bibliography_key_unresolved", "键：first"),
                     ("bibliography_key_unresolved", "键：second")}
+
+
+@pytest.mark.parametrize("unavailable_side,resource_code", [
+    ("old", "bibliography_unreadable"),
+    ("new", "bibliography_unreadable"),
+    ("new", "missing_dependency"),
+])
+def test_unavailable_bibliography_cannot_prove_rule_status(tmp_path, unavailable_side, resource_code):
+    source = "\\bibliography{refs}\n\\begin{document}\\cite{missing}\\end{document}"
+    old, new = _pair(tmp_path, source, source)
+    unavailable = old if unavailable_side == "old" else new
+    reliable = new if unavailable_side == "old" else old
+    (reliable / "refs.bib").write_text("@article{other, title={Other}}\n", encoding="utf-8")
+    if resource_code == "bibliography_unreadable":
+        (unavailable / "refs.bib").write_bytes(b"\xff\xfe")
+    with resolve_sources(entry="main.tex", old_dir=old, new_dir=new) as pair:
+        before, after = parse_project(pair.old.expand()), parse_project(pair.new.expand())
+        assert not any(item.code == "bibliography_key_unresolved" for item in check_rules(before, after))
+        report = write_report(before, after, compare_projects(before, after), tmp_path / "report")
+    diff = json.loads(report.diff_json.read_text(encoding="utf-8"))["diagnostics"]
+    separate = json.loads((report.directory / "diagnostics.json").read_text(encoding="utf-8"))["diagnostics"]
+    assert diff == separate
+    assert resource_code in {item["code"] for item in diff}
+    assert not any(item["code"] == "bibliography_key_unresolved" for item in diff)
+    output = tmp_path / "cli-report"
+    cli = subprocess.run([sys.executable, "-m", "latex_review.cli", "--old-dir", str(old),
+                          "--new-dir", str(new), "--entry", "main.tex", "--output", str(output)],
+                         cwd=tmp_path, env=dict(os.environ, PYTHONPATH=str(ROOT / "src")),
+                         capture_output=True, text=True)
+    assert cli.returncode == 2, cli.stderr
+    cli_diagnostics = json.loads((output / "diagnostics.json").read_text(encoding="utf-8"))["diagnostics"]
+    assert resource_code in {item["code"] for item in cli_diagnostics}
+    assert not any(item["code"] == "bibliography_key_unresolved" for item in cli_diagnostics)
+
+
+def test_unrelated_missing_graphic_does_not_hide_known_missing_citation(tmp_path):
+    source = ("\\bibliography{refs}\n\\begin{document}\\cite{missing}"
+              "\\begin{figure}\\includegraphics{absent.png}\\end{figure}\\end{document}")
+    old, new = _pair(tmp_path, source, source)
+    for root in old, new:
+        (root / "refs.bib").write_text("@article{other, title={Other}}\n", encoding="utf-8")
+    with resolve_sources(entry="main.tex", old_dir=old, new_dir=new) as pair:
+        before, after = parse_project(pair.old.expand()), parse_project(pair.new.expand())
+        citation = next(item for item in check_rules(before, after)
+                        if item.code == "bibliography_key_unresolved")
+    assert citation.rule_status == "existing"
