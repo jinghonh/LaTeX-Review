@@ -12,9 +12,10 @@ import shutil
 import sys
 import tomllib
 
+from .cache import ParseCache
 from .comparison import compare_projects
 from .contract import Diagnostic, SourceLocation
-from .report import ReportPathError, write_failure_diagnostics, write_report, write_source_fallback
+from .report import ReportPathError, write_cache_metadata, write_failure_diagnostics, write_report, write_source_fallback
 from .sources import SourceError, resolve_sources
 from .structure import parse_project
 
@@ -180,6 +181,9 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--old", dest="old_revision", help="修改前 Git 提交")
     parser.add_argument("--new", dest="new_revision", help="修改后 Git 提交或 worktree")
     parser.add_argument("--output", help="报告目录，默认 .latex-review/latest")
+    parser.add_argument("--cache-dir", help="解析缓存目录，默认位于报告目录旁")
+    parser.add_argument("--no-cache", action="store_true", help="本次绕过解析缓存")
+    parser.add_argument("--clear-cache", action="store_true", help="本次运行前清理解析缓存")
     parser.add_argument("--math", help="公式排版依赖，首版仅支持 mathjax")
     parser.add_argument("--format", help="输出格式，首版仅支持 html,json")
     parser.add_argument("--config", help="配置文件，默认当前目录 .latex-review.toml")
@@ -209,15 +213,30 @@ def main(argv: list[str] | None = None) -> int:
         if output in (Path.cwd(), Path("/")):
             raise ConfigurationError("输出目录不能是当前目录或文件系统根目录")
         _check_output_separate(output, options)
+        cache_dir = Path(os.path.abspath(Path(args.cache_dir).expanduser())) if args.cache_dir else output.parent / (
+            "cache" if output.name == "latest" else ".latex-review-cache")
+        if cache_dir == output or cache_dir in output.parents or output in cache_dir.parents:
+            raise ConfigurationError("缓存目录不能与报告目录重叠")
+        if cache_dir.is_symlink() or any(parent.is_symlink() for parent in cache_dir.parents):
+            raise ConfigurationError("缓存路径不能包含符号链接")
+        if args.clear_cache and cache_dir.exists():
+            if not cache_dir.is_dir():
+                raise ConfigurationError("缓存路径已存在且不是目录")
+            shutil.rmtree(cache_dir)
         _prepare_output(output)
         output_ready = True
-        with resolve_sources(**options, excluded_paths=(output,), ignore_patterns=tuple(config.get("ignore", ()))) as pair:
+        cache = ParseCache(cache_dir, enabled=not args.no_cache,
+                           config={"config": config, "math": args.math or "mathjax",
+                                   "comments": args.comments if args.comments is not None else config.get("diff", {}).get("comments", False)})
+        with resolve_sources(**options, excluded_paths=(output, cache_dir), ignore_patterns=tuple(config.get("ignore", ()))) as pair:
             old_expanded, new_expanded = pair.old.expand(), pair.new.expand()
             failures = []
             parsed = []
             for expanded in (old_expanded, new_expanded):
                 try:
-                    parsed.append(parse_project(expanded))
+                    parsed.append(cache.parse(expanded, parser=parse_project))
+                except SourceError:
+                    raise
                 except Exception as exc:
                     parsed.append(None)
                     failures.append((expanded.source.side, str(exc)))
@@ -228,6 +247,7 @@ def main(argv: list[str] | None = None) -> int:
                 comments = args.comments if args.comments is not None else config.get("diff", {}).get("comments", False)
                 result = compare_projects(parsed[0], parsed[1], review_comments=comments)
                 report = write_report(parsed[0], parsed[1], result, output)
+            write_cache_metadata(output, cache.metadata())
         print(report.html)
         return 2 if any(d.severity in {"warning", "error"} for d in report.document.diagnostics) else 0
     except ConfigurationError as exc:

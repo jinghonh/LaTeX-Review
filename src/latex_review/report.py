@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, replace
 from html import escape
+import json
 import os
 from pathlib import Path
 import re
@@ -141,6 +142,12 @@ def _write_managed(directory: Path, relative: Path, *, content: bytes | None = N
             except FileNotFoundError:
                 pass
         os.close(parent_fd)
+
+
+def write_cache_metadata(directory: Path, metadata: dict) -> None:
+    """缓存运行信息独立于语义差异写入，避免冷热运行改变 diff.json。"""
+    _write_managed(directory, Path("cache-meta.json"),
+                   content=(json.dumps(metadata, ensure_ascii=False, sort_keys=True, indent=2) + "\n").encode("utf-8"))
 
 
 def _copy_asset(project: ParsedProject, relative: str, directory: Path, side: str) -> tuple[Path, str]:
