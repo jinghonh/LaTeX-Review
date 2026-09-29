@@ -19,6 +19,8 @@ with resolve_sources(entry="main.tex", old_dir="old", new_dir="new") as pair:
 
 命令行现已接入该接口；`latex-review main.tex` 默认比较 Git HEAD 与磁盘工作区，将报告写到 `.latex-review/latest/`。结构解析整体失败时另生成明确标识的源码对比报告，仍保留 `diff.json` 和 `diagnostics.json`。
 
+结构解析成功的报告还会显示[论文规则诊断](paper-rules.md)的双版本状态、证据和源码位置；规则诊断本身不影响命令退出码。
+
 ## 阅读交互与单文件交付（#24）
 
 `write_report` 可额外传入 `single_file=True`，返回值的 `single_html` 指向 `report-single.html`。该文件内嵌完整审阅数据、样式、脚本、双侧图片及 PDF 图片预览，可以单独搬运；原有报告目录仍照常生成。图片和 PDF 原件按 MIME 类型编码为数据地址，缺失、路径逃逸或不能内嵌的资源会明确报错。单项本地资源上限为 25 MiB，累计上限为 100 MiB；生成文件因 Base64 编码通常约为原资源体积的 4/3，实际体积以文件大小为准。在线 MathJax 是唯一的展示外链：断网或加载失败时，页面保留原始 TeX 并显示失败提示。

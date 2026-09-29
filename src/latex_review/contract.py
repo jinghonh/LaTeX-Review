@@ -106,6 +106,10 @@ class Diagnostic:
     message: str
     source_old: SourceLocation | None = None
     source_new: SourceLocation | None = None
+    rule_status: Literal["existing", "new", "resolved"] | None = None
+    evidence: tuple[str, ...] = ()
+    related_sources_old: tuple[SourceLocation, ...] = ()
+    related_sources_new: tuple[SourceLocation, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -151,6 +155,13 @@ def build_summary(changes: tuple[PrimaryChange, ...], *, added_words: int = 0, r
 
 
 def _ordered(value: object) -> object:
+    def diagnostic_data(item: Diagnostic) -> dict:
+        data = asdict(item)
+        if data["rule_status"] is None:
+            for key in ("rule_status", "evidence", "related_sources_old", "related_sources_new"):
+                del data[key]
+        return data
+
     if isinstance(value, ReviewDocument):
         result = {
             "schema_version": value.schema_version,
@@ -181,10 +192,10 @@ def _ordered(value: object) -> object:
                 item["details"].append(detail_data)
             item["categories"] = sorted(set(change.categories))
             result["changes"].append(item)
-        result["diagnostics"] = [asdict(d) for d in sorted(value.diagnostics, key=lambda d: (d.code, d.message))]
+        result["diagnostics"] = [diagnostic_data(d) for d in sorted(value.diagnostics, key=lambda d: (d.code, d.message))]
         return result
     if isinstance(value, DiagnosticsDocument):
-        return {"schema_version": value.schema_version, "diagnostics": [asdict(d) for d in sorted(value.diagnostics, key=lambda d: (d.code, d.message))]}
+        return {"schema_version": value.schema_version, "diagnostics": [diagnostic_data(d) for d in sorted(value.diagnostics, key=lambda d: (d.code, d.message))]}
     if is_dataclass(value):
         return asdict(value)
     return value
