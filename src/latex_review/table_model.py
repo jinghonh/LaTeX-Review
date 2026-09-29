@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from difflib import SequenceMatcher
 import re
+from typing import Collection
 
 from .structure import _masked
 
@@ -47,7 +48,8 @@ class TableEdit:
     column_new: int | None = None
 
 
-def parse_table(raw: str) -> tuple[TableGrid | None, str]:
+def parse_table(raw: str, *, allowed_commands: Collection[str] = ()) -> tuple[TableGrid | None, str]:
+    # 占位宏仅供预览调用方放行；差异引擎保持默认的保守命令集合。
     opening = _OPEN.search(_masked(raw))
     if not opening:
         return None, "未找到受支持的简单表格环境"
@@ -76,7 +78,7 @@ def parse_table(raw: str) -> tuple[TableGrid | None, str]:
     if _COMPLEX.search(mask):
         return None, "跨行跨列、嵌套环境或复杂宏无法可靠对齐"
     for command in re.finditer(r"(?<!\\)\\([A-Za-z@]+)", mask):
-        if command.group(1) not in _SAFE and not _RULE.match(mask, command.start()):
+        if command.group(1) not in _SAFE and command.group(1) not in allowed_commands and not _RULE.match(mask, command.start()):
             return None, "单元格含未支持的复杂宏"
     # 横线命令不占单元格，保留等长位置以便扫描分隔符。
     cleaned = list(body)

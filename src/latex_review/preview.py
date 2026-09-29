@@ -50,6 +50,31 @@ def _anchor(side: str, node_id: str) -> str:
     return f"{side}-{node_id}"
 
 
+def _citation_html(keys: tuple[str, ...], project: ParsedProject, side: str, anchor: str = "") -> str:
+    parts = []
+    for key in keys:
+        key = key.strip()
+        target = project.labels.get(f"bib:{key}")
+        entry = project.bibliography.get(key)
+        label = f'<a href="#{_e(_anchor(side, target))}">{_e(key)}</a>' if target else _e(key)
+        if entry:
+            metadata = "；".join((f"作者：{entry.author or '缺失'}", f"题目：{entry.title or '缺失'}",
+                                   f"年份：{entry.year or '缺失'}"))
+            parts.append(f'{label}<small class="citation-metadata">{_e(metadata)}</small>')
+        else:
+            parts.append(f'{label}<small class="citation-metadata">文献元数据未解析，保留引用键</small>')
+    return f'<span class="citation"{anchor}>[{", ".join(parts)}]</span>'
+
+
+def _missing_bibliography(key: str, project: ParsedProject, side: str, source: SourceLocation) -> Diagnostic:
+    handmade = f"bib:{key}" in project.labels
+    return Diagnostic("bibliography_unsupported" if handmade else "bibliography_key_unresolved", "warning",
+                      f"引用键 {key} 的手写文献格式未提供结构化元数据；已保留引用键" if handmade else
+                      f"引用键 {key} 无法解析文献元数据；已保留引用键",
+                      source_old=source if side == "old" else None,
+                      source_new=source if side == "new" else None)
+
+
 def _math(raw: str, display: bool) -> str:
     if _UNSAFE_MATH.search(raw) or any(match.group(1) not in _MATH_SAFE
                                        for match in re.finditer(r"\\([A-Za-z@]+)", raw)):
@@ -133,19 +158,7 @@ def _dom_html(node: object, project: ParsedProject, side: str, inline: list[Pars
             argument = _argument(_masked(raw), command.end()) if command else None
             keys = tuple(part.strip() for part in argument[1].split(",")) if argument else ()
         if kind == "citation":
-            parts = []
-            for key in keys:
-                key = key.strip()
-                target = project.labels.get(f"bib:{key}")
-                entry = project.bibliography.get(key)
-                label = f'<a href="#{_e(_anchor(side, target))}">{_e(key)}</a>' if target else _e(key)
-                if entry:
-                    metadata = "；".join((f"作者：{entry.author or '缺失'}", f"题目：{entry.title or '缺失'}",
-                                           f"年份：{entry.year or '缺失'}"))
-                    parts.append(f'{label}<small class="citation-metadata">{_e(metadata)}</small>')
-                else:
-                    parts.append(f'{label}<small class="citation-metadata">文献元数据未解析，保留引用键</small>')
-            return f'<span class="citation"{anchor}>[{", ".join(parts)}]</span>'
+            return _citation_html(tuple(keys), project, side, anchor)
         key = keys[0].strip() if keys else ""
         target = project.labels.get(key)
         label = key
@@ -301,14 +314,48 @@ def _embedded_fallbacks(children: list[ParsedNode], side: str) -> str:
     )
 
 
-def _table_preview(raw: str) -> str | None:
+def _table_cell_html(cell: str, project: ParsedProject, side: str, diagnostics: list[Diagnostic],
+                     source: SourceLocation) -> str:
+    mask = _masked(cell)
+    command = re.compile(r"\\(?:" + "|".join(CITATION_COMMANDS) + r")(?![A-Za-z@])")
+    depth = 0
+    index = 0
+    while index < len(mask):
+        if mask[index] == "\\":
+            match = command.match(mask, index) if depth == 0 else None
+            if match:
+                argument = _argument(mask, match.end())
+                if argument:
+                    keys = tuple(part.strip() for part in argument[1].split(",") if part.strip())
+                    diagnostics.extend(_missing_bibliography(key, project, side, source)
+                                       for key in keys if key not in project.bibliography)
+                    return (_inline_html(cell[:index], project, side, diagnostics=diagnostics, source=source)
+                            + _citation_html(keys, project, side)
+                            + _table_cell_html(cell[argument[0]:], project, side, diagnostics, source))
+            index += 2 if index + 1 < len(mask) else 1
+            continue
+        if mask[index] == "{":
+            depth += 1
+        elif mask[index] == "}" and depth:
+            depth -= 1
+        index += 1
+    return _inline_html(cell, project, side, diagnostics=diagnostics, source=source)
+
+
+def _table_preview(node: ParsedNode, project: ParsedProject, side: str,
+                   diagnostics: list[Diagnostic]) -> str | None:
     """预览和差异使用相同的保守表格边界。"""
-    grid, _ = parse_table(raw)
+    grid, reason = parse_table(node.review.raw_latex, allowed_commands=project.macros)
     if grid is None:
+        diagnostics.append(Diagnostic("preview_table_fallback", "warning",
+                                      f"表格预览无法可靠解析：{reason}；已显示原文",
+                                      source_old=node.review.source if side == "old" else None,
+                                      source_new=node.review.source if side == "new" else None))
         return None
     rows = []
     for row_index, row in enumerate(grid.rows, 1):
-        cells = "".join(f'<td data-row="{row_index}" data-column="{column_index}">{_e(cell)}</td>'
+        cells = "".join(f'<td data-row="{row_index}" data-column="{column_index}">'
+                        f'{_table_cell_html(cell, project, side, diagnostics, node.review.source)}</td>'
                         for column_index, cell in enumerate(row, 1))
         rows.append(f"<tr>{cells}</tr>")
     return '<table class="table-preview"><tbody>' + "".join(rows) + "</tbody></table>"
@@ -357,7 +404,7 @@ def _body(node: ParsedNode, project: ParsedProject, side: str, by_id: dict[str, 
         caption = _caption(node.review.raw_latex)
         caption_children = [child for child in children if child.review.type != "fallback"]
         return ((f'<p class="table-caption">{_inline_html(caption[0], project, side, caption_children, diagnostics, node.review.source, node.expanded_start + caption[1])}</p>' if caption else "")
-                + (_table_preview(node.review.raw_latex) or '<p class="node-warning">复杂表格预览使用原始 LaTeX。</p>')
+                + (_table_preview(node, project, side, diagnostics) or '<p class="node-warning">复杂表格预览使用原始 LaTeX。</p>')
                 + f'<pre class="table-source">{_e(node.review.raw_latex)}</pre>' + _embedded_fallbacks(children, side))
     if kind == "bibliography":
         return '<h3>参考文献</h3>' + ("<ol>" + "".join(_render_node(child, project, side, by_id, diagnostics, figure_assets) for child in children) + "</ol>" if children else '<p>参考文献资源见源码。</p>')
@@ -410,12 +457,7 @@ def render_preview(old: ParsedProject, new: ParsedProject, *,
                 for key in node.citations:
                     if key not in project.bibliography and key not in seen_citations:
                         seen_citations.add(key)
-                        handmade = f"bib:{key}" in project.labels
-                        diagnostics.append(Diagnostic("bibliography_unsupported" if handmade else "bibliography_key_unresolved",
-                                                      "warning", f"引用键 {key} 的手写文献格式未提供结构化元数据；已保留引用键" if handmade else
-                                                      f"引用键 {key} 无法解析文献元数据；已保留引用键",
-                                                      source_old=node.review.source if side == "old" else None,
-                                                      source_new=node.review.source if side == "new" else None))
+                        diagnostics.append(_missing_bibliography(key, project, side, node.review.source))
             if any(by_id[child].references and by_id[child].expanded_start >= node.expanded_start
                    and by_id[child].expanded_end <= node.expanded_end for child in node.review.child_ids):
                 continue

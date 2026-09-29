@@ -1,6 +1,7 @@
 import json
 import os
 from pathlib import Path
+import re
 import subprocess
 import sys
 
@@ -10,6 +11,7 @@ from latex_review import compare_projects, parse_project, render_preview, resolv
 from latex_review.cli import ConfigurationError, _config
 from latex_review.macros import validate_macros
 from latex_review.macros import expand_call
+from latex_review.table_model import parse_table
 
 
 def _write(root: Path, file: str, content: str) -> None:
@@ -79,6 +81,52 @@ def test_parenthesized_bibtex_entry_ignores_protected_closing_parentheses(tmp_pa
     assert before.bibliography["quoted"].year == "2025"
     assert "A closing ) inside a braced field" in result.html
     assert not any(item.code == "bibliography_missing_field" for item in result.diagnostics)
+
+
+def test_braced_bibtex_field_treats_unpaired_quote_as_literal(tmp_path):
+    source = r"\begin{document}\cite{ref}\bibliography{refs}\end{document}"
+    old, new = _roots(tmp_path, source)
+    for root in (old, new):
+        _write(root, "refs.bib", '@article{ref, author={作者}, title={A 5" monitor}, year=2024}')
+    with resolve_sources(entry="main.tex", old_dir=old, new_dir=new) as pair:
+        before, after = parse_project(pair.old.expand()), parse_project(pair.new.expand())
+        result = render_preview(before, after)
+    assert before.bibliography["ref"].title == 'A 5" monitor'
+    assert before.bibliography["ref"].year == "2024"
+    assert 'A 5&quot; monitor' in result.html
+    assert not any(item.code == "bibliography_missing_field" for item in result.diagnostics)
+
+
+def test_table_cells_render_citations_and_configured_macros_with_coordinates(tmp_path):
+    source = (r"\begin{document}\begin{tabular}{cc}"
+              r"\citep[compare {KeyA}]{ref}&\badge{重点}\end{tabular}\bibliography{refs}\end{document}")
+    old, new = _roots(tmp_path, source)
+    for root in (old, new):
+        _write(root, "refs.bib", "@article{ref, author={作者}, title={题目}, year={2024}}")
+    macros = validate_macros({"badge": {"arguments": 1, "strategy": "replace", "template": "【#1】"}})
+    assert parse_table(r"\begin{tabular}{c}\badge{重点}\end{tabular}")[0] is None
+    with resolve_sources(entry="main.tex", old_dir=old, new_dir=new) as pair:
+        before, after = parse_project(pair.old.expand(), macros=macros), parse_project(pair.new.expand(), macros=macros)
+        result = render_preview(before, after)
+    assert re.search(r'<td data-row="1" data-column="1">.*?作者：作者；题目：题目；年份：2024', result.html)
+    assert 'KeyA<small class="citation-metadata"' not in result.html
+    assert re.search(r'<td data-row="1" data-column="2">.*?【重点】', result.html)
+    assert not any(item.code == "preview_table_fallback" for item in result.diagnostics)
+
+
+def test_unsupported_table_cell_has_local_diagnostic(tmp_path):
+    old, new = _roots(tmp_path, r"\begin{document}\begin{tabular}{c}\mystery{A}\end{tabular}\end{document}")
+    with resolve_sources(entry="main.tex", old_dir=old, new_dir=new) as pair:
+        result = render_preview(parse_project(pair.old.expand()), parse_project(pair.new.expand()))
+    assert any(item.code == "preview_table_fallback" and item.source_old for item in result.diagnostics)
+
+
+def test_table_cell_with_missing_reference_key_keeps_key_and_diagnostic(tmp_path):
+    old, new = _roots(tmp_path, r"\begin{document}\begin{tabular}{c}\cite{absent}\end{tabular}\end{document}")
+    with resolve_sources(entry="main.tex", old_dir=old, new_dir=new) as pair:
+        result = render_preview(parse_project(pair.old.expand()), parse_project(pair.new.expand()))
+    assert re.search(r'<td data-row="1" data-column="1">.*?absent.*?文献元数据未解析', result.html)
+    assert any(item.code == "bibliography_key_unresolved" and item.source_old for item in result.diagnostics)
 
 
 def test_unsupported_bibliography_keeps_key_and_preview(tmp_path):

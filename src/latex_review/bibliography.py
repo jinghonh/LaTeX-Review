@@ -24,7 +24,7 @@ def _location(file: str, text: str, offset: int) -> SourceLocation:
                           offset - text.rfind("\n", 0, offset), 1.0)
 
 
-def _group(text: str, start: int, opening: str, closing: str) -> int | None:
+def _group(text: str, start: int, opening: str, closing: str, *, protect_quotes: bool = True) -> int | None:
     depth = 1
     braces = 0
     quoted = False
@@ -34,7 +34,7 @@ def _group(text: str, start: int, opening: str, closing: str) -> int | None:
         if char == "\\":
             index += 2
             continue
-        if char == '"' and ((opening == "{" and depth == 1) or (opening == "(" and braces == 0)):
+        if protect_quotes and char == '"' and ((opening == "{" and depth == 1) or (opening == "(" and braces == 0)):
             quoted = not quoted
         elif quoted:
             pass
@@ -67,7 +67,7 @@ def _fields(body: str) -> dict[str, str]:
             break
         if body[start] in "{\"":
             closing = "}" if body[start] == "{" else '"'
-            end = _group(body, start, "{", "}") if closing == "}" else None
+            end = _group(body, start, "{", "}", protect_quotes=False) if closing == "}" else None
             if closing == '"':
                 found = re.search(r'(?<!\\)"', body[start + 1:])
                 end = start + 2 + found.start() if found else None
