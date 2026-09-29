@@ -280,7 +280,8 @@ def main(argv: list[str] | None = None) -> int:
                                       pdf_converter=pdf_converter, extra_diagnostics=compile_diagnostics,
                                       rendering=rendering, statuses=statuses)
         print(report.html)
-        return 2 if any(d.severity in {"warning", "error"} for d in report.document.diagnostics) else 0
+        return 2 if any(d.rule_status is None and d.severity in {"warning", "error"}
+                        for d in report.document.diagnostics) else 0
     except ConfigurationError as exc:
         _record_failure(output if output_ready else _known_output_after_config_error(args),
                         Diagnostic("configuration_error", "error", str(exc)))

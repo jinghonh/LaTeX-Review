@@ -23,6 +23,7 @@ from .comparison import ComparisonResult
 from .contract import (ChangeDetail, Diagnostic, DiagnosticsDocument, PrimaryChange, ReviewDocument,
                        ReviewNode, SourceLocation, build_summary, dumps)
 from .preview import render_preview
+from .rules import check_rules
 from .structure import ParsedNode, ParsedProject
 from .sources import ExpandedProject
 
@@ -333,9 +334,14 @@ def _detail_target(document: ReviewDocument, change: PrimaryChange, detail: Chan
 def _diagnostics_html(document: ReviewDocument) -> str:
     items = []
     for diagnostic in sorted(document.diagnostics, key=lambda item: (item.code, item.message)):
+        rule = ""
+        if diagnostic.rule_status:
+            status = {"existing": "既有", "new": "新增", "resolved": "已解决"}[diagnostic.rule_status]
+            evidence = "".join(f"<li>{_e(item)}</li>" for item in diagnostic.evidence)
+            rule = f'<small>规则状态：{status}；证据：</small><ul>{evidence}</ul>'
         items.append(f'<li><strong>{_e(_SEVERITY_LABELS.get(diagnostic.severity, diagnostic.severity))} · '
                      f'{_e(diagnostic.code)}</strong>：{_e(diagnostic.message)}'
-                     f'<small>旧：{_e(_location(diagnostic.source_old))}；新：{_e(_location(diagnostic.source_new))}</small></li>')
+                     f'<small>旧：{_e(_location(diagnostic.source_old))}；新：{_e(_location(diagnostic.source_new))}</small>{rule}</li>')
     body = f'<ul>{"".join(items)}</ul>' if items else '<p>无诊断。</p>'
     return f'<section class="report-diagnostics" aria-label="诊断" data-count="{len(items)}">' \
            f'<h3>诊断 {len(items)}</h3>{body}</section>'
@@ -556,8 +562,10 @@ def write_report(old: ParsedProject, new: ParsedProject, comparison: ComparisonR
         "new": tuple(node for node in comparison.document.nodes_new if node.id not in parsed_ids["new"]),
     }
     preview = render_preview(old, new, figure_assets=figure_html, extra_nodes=extra_nodes)
-    diagnostics = tuple(dict.fromkeys((*comparison.document.diagnostics, *preview.diagnostics,
-                                       *asset_diagnostics, *extra_diagnostics)))
+    preview_diagnostics = (item for item in preview.diagnostics
+                           if item.code not in {"bibliography_key_unresolved", "unresolved_reference"})
+    diagnostics = tuple(dict.fromkeys((*comparison.document.diagnostics, *preview_diagnostics,
+                                       *check_rules(old, new), *asset_diagnostics, *extra_diagnostics)))
     document = replace(comparison.document, diagnostics=diagnostics)
     diff_json = dumps(document)
     pairs = tuple((pair.old_id, pair.new_id) for pair in comparison.mapping.pairs)

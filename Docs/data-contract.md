@@ -13,6 +13,7 @@
 - 1.1 增加 `move` 类别。`moved` 主变更携带双侧节点、章节路径与源码位置；移动后的局部改动仍是同一主变更内的明细。表格明细可选用从 1 开始的 `row_old`、`column_old`、`row_new`、`column_new` 标记可确定的行或列；未提供的坐标不代表第零行或第零列。
 - `Summary.added_words` 与 `removed_words` 是正文词数，由后续比较器提供；注释主变更计入 `changes` 和 `comment` 类别，但不得计入这两个词数。`category_hits` 在构造时复制并冻结，避免构造后改动摘要。
 - `Diagnostic` 使用固定严重级别、稳定代码、消息及可选的旧新位置。诊断另存独立文件，即使无诊断也为 `[]`。
+- 规则诊断在 1.1 契约中增加可选的 `rule_status`、`evidence`、`related_sources_old`、`related_sources_new`；非规则诊断维持既有序列化。详见[论文规则诊断](paper-rules.md)。
 
 `dumps` 使用 UTF-8 可表示的中文、字典键排序、两侧节点按 ID 排序、主变更和明细按 ID 排序、类别去重排序，并以换行结尾。`child_ids` 和 `section_path` 的顺序表示文档结构，保留原序。相同输入产生逐字节相同的输出。代表性样例见 `tests/snapshots/representative_diff.json`。
 
