@@ -31,9 +31,15 @@
     panels[side].insertBefore(empty, panels[side].querySelector('h2').nextSibling);
   }
   function visibleCards() { return cards.filter(card => !card.hidden); }
-  function topNode(node, side) {
-    while (node && node.parentElement !== panels[side]) node = node.parentElement.closest('.review-node');
-    return node;
+  function reviewNode(target, side) {
+    const node = target && target.closest('.review-node');
+    return node && panels[side].contains(node) ? node : null;
+  }
+  function revealAncestors(node, side) {
+    for (let current = node; current && panels[side].contains(current);
+         current = current.parentElement.closest('.review-node')) {
+      current.classList.remove('context-hidden');
+    }
   }
   function context() {
     const keep = {old: new Set(), new: new Set()};
@@ -41,19 +47,18 @@
       const jump = card.querySelector('.change-jump');
       for (const side of ['old', 'new']) {
         const target = jump.dataset[side] && document.getElementById(side + '-' + jump.dataset[side]);
-        const root = target && topNode(target, side);
-        if (!root) continue;
-        keep[side].add(root);
-        const siblings = nodes[side].filter(node => node.parentElement === panels[side]);
-        const index = siblings.indexOf(root);
-        if (index > 0) keep[side].add(siblings[index - 1]);
-        if (index + 1 < siblings.length) keep[side].add(siblings[index + 1]);
+        const node = reviewNode(target, side);
+        if (!node) continue;
+        const siblings = nodes[side].filter(item => item.parentElement === node.parentElement);
+        const index = siblings.indexOf(node);
+        for (const neighbor of siblings.slice(Math.max(0, index - 1), index + 2)) keep[side].add(neighbor);
+        for (let current = node; current && panels[side].contains(current);
+             current = current.parentElement.closest('.review-node')) keep[side].add(current);
       }
     }
     for (const side of ['old', 'new']) {
       nodes[side].forEach(node => {
-        if (node.parentElement === panels[side])
-          node.classList.toggle('context-hidden', mode.value === 'context' && !keep[side].has(node));
+        node.classList.toggle('context-hidden', mode.value === 'context' && !keep[side].has(node));
       });
     }
   }
@@ -83,8 +88,8 @@
       const node = id ? document.getElementById(side + '-' + id) : null;
       if (node) {
         if (mode.value === 'context') {
-          const root = topNode(node, side);
-          if (root) root.classList.remove('context-hidden');
+          const target = reviewNode(node, side);
+          if (target) revealAncestors(target, side);
         }
         empty.classList.remove('is-visible');
         node.classList.add('is-highlighted');
@@ -144,19 +149,33 @@
     }
   });
 
-  function nearestAnchor(side, active) {
-    const source = nodes[side].filter(node => node.parentElement === panels[side] && !node.classList.contains('context-hidden'));
+  function visibleNodes(side) {
+    return nodes[side].filter(node => node.getClientRects().length > 0);
+  }
+  function nearestAnchor(side, active, reference) {
     const other = side === 'old' ? 'new' : 'old';
-    let index = source.indexOf(active);
-    if (index < 0) index = source.findIndex(node => node.contains(active));
-    if (index < 0) return null;
-    for (let offset = 0; offset < source.length; offset++) {
-      for (const candidate of [index - offset, index + offset]) {
-        if (candidate < 0 || candidate >= source.length) continue;
-        const id = paired[side].get(source[candidate].dataset.nodeId);
-        const match = id && document.getElementById(other + '-' + id);
-        if (match && !match.classList.contains('context-hidden')) return [source[candidate], match];
-      }
+    function match(node) {
+      const id = paired[side].get(node.dataset.nodeId);
+      const counterpart = id && document.getElementById(other + '-' + id);
+      return counterpart && counterpart.getClientRects().length > 0 ? [node, counterpart] : null;
+    }
+    const direct = match(active);
+    if (direct) return direct;
+    const distance = node => {
+      const rect = node.getBoundingClientRect();
+      return Math.max(rect.top - reference, reference - rect.bottom, 0);
+    };
+    const near = candidates => candidates.map(match).filter(Boolean).sort((a, b) =>
+      distance(a[0]) - distance(b[0]))[0];
+    const visible = visibleNodes(side);
+    const sibling = near(visible.filter(node => node.parentElement === active.parentElement));
+    if (sibling) return sibling;
+    const adjacent = near(visible.filter(node => node !== active && !node.contains(active) && !active.contains(node)));
+    if (adjacent) return adjacent;
+    for (let parent = active.parentElement.closest('.review-node'); parent;
+         parent = parent.parentElement.closest('.review-node')) {
+      const fallback = match(parent);
+      if (fallback) return fallback;
     }
     return null;
   }
@@ -165,11 +184,22 @@
     const panel = panels[side];
     const other = panels[side === 'old' ? 'new' : 'old'];
     const reference = panel.getBoundingClientRect().top + panel.clientHeight / 2;
-    const candidates = nodes[side].filter(node => node.parentElement === panel && !node.classList.contains('context-hidden'));
+    const candidates = visibleNodes(side);
     if (!candidates.length) return;
+    const depth = node => {
+      let result = 0;
+      for (let parent = node.parentElement.closest('.review-node'); parent;
+           parent = parent.parentElement.closest('.review-node')) result++;
+      return result;
+    };
+    const distance = node => {
+      const rect = node.getBoundingClientRect();
+      return Math.max(rect.top - reference, reference - rect.bottom, 0);
+    };
+    const score = node => distance(node) + Math.min(node.getBoundingClientRect().height, 500) * .1;
     const active = candidates.reduce((best, node) =>
-      Math.abs(node.getBoundingClientRect().top - reference) < Math.abs(best.getBoundingClientRect().top - reference) ? node : best);
-    const anchor = nearestAnchor(side, active);
+      score(node) < score(best) || (score(node) === score(best) && depth(node) > depth(best)) ? node : best);
+    const anchor = nearestAnchor(side, active, reference);
     if (!anchor) return;
     const [from, to] = anchor;
     const fraction = Math.max(0, Math.min(1, (reference - from.getBoundingClientRect().top) / Math.max(1, from.offsetHeight)));

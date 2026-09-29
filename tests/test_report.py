@@ -8,6 +8,7 @@ from dataclasses import replace
 from html import escape
 from pathlib import Path
 import shutil
+import subprocess
 import struct
 import sys
 import time
@@ -223,3 +224,14 @@ def test_editor_template_rejects_unsafe_forms(tmp_path: Path, template: str) -> 
         with pytest.raises(ValueError, match="编辑器模板"):
             write_report(before, after, compare_projects(before, after), tmp_path / "output",
                          editor_url_template=template)
+
+
+def test_nested_context_and_sync_anchor() -> None:
+    node = shutil.which("node")
+    if node is None:
+        pytest.skip("缺少 JavaScript 运行时")
+    root = Path(__file__).resolve().parents[1]
+    result = subprocess.run((node, str(root / "tests/report_interaction_smoke.cjs"),
+                             str(root / "src/latex_review/report_interaction.js")),
+                            capture_output=True, text=True, check=False)
+    assert result.returncode == 0, result.stderr
