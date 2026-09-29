@@ -5,6 +5,7 @@ const assert = require('assert');
 class Element {
   constructor(id = '', classes = '', dataset = {}, y = 0, height = 0) {
     this.id = id; this.dataset = dataset; this.y = y; this.height = height;
+    this.tagName = 'DIV';
     this.offsetHeight = height;
     this.parentElement = null; this.children = []; this.scrollTop = 0; this.clientHeight = 500;
     this.hidden = false; this.value = 'all'; this.events = {};
@@ -27,6 +28,12 @@ class Element {
     if (selector === '.change-card') return this.classes.has('change-card');
     if (selector === '.change-jump') return this.classes.has('change-jump');
     if (selector === '.side-empty') return this.classes.has('side-empty');
+    if (selector === '.preview-side .is-highlighted') return this.classes.has('is-highlighted');
+    if (selector === '.preview-side .is-cell-highlighted') return this.classes.has('is-cell-highlighted');
+    if (selector === 'button[data-old][data-new]') return this.dataset.old !== undefined && this.dataset.new !== undefined;
+    if (selector === 'td[data-row][data-column]') {
+      return this.tagName === 'TD' && this.dataset.row !== undefined && this.dataset.column !== undefined;
+    }
     if (selector === 'h2') return this.id.endsWith('-heading');
     return false;
   }
@@ -129,4 +136,25 @@ const removedAnchor = window.hooks.nearestAnchor('old', removed, 250);
 assert(removedAnchor && removedAnchor[1].getClientRects().length, '仅删除时仍需可见新侧锚点');
 now = 2000;
 window.hooks.align('old');
+
+const oldTable = register(oldSection.append(new Element('old-table-old', 'review-node', {nodeId:'table-old'}, 900, 100)));
+const newTable = register(newSection.append(new Element('new-table-new', 'review-node', {nodeId:'table-new'}, 900, 100)));
+const oldOtherCell = oldTable.append(new Element('', '', {row:'1',column:'1'}));
+oldOtherCell.tagName = 'TD';
+const oldTargetCell = oldTable.append(new Element('', '', {row:'1',column:'2'}));
+oldTargetCell.tagName = 'TD';
+const newOtherCell = newTable.append(new Element('', '', {row:'1',column:'2'}));
+newOtherCell.tagName = 'TD';
+const newTargetCell = newTable.append(new Element('', '', {row:'1',column:'3'}));
+newTargetCell.tagName = 'TD';
+const detailJump = card.append(new Element('table-detail', 'detail-jump', {
+  old:'table-old', new:'table-new', oldLocation:'旧表格', newLocation:'新表格',
+  oldRow:'1', oldColumn:'2', newRow:'1', newColumn:'3'
+}));
+changes.events.click({target:detailJump});
+assert(oldTargetCell.classes.has('is-cell-highlighted'), '旧侧应定位到对应单元格');
+assert(!oldOtherCell.classes.has('is-cell-highlighted'), '旧侧其他单元格不应高亮');
+assert(newTargetCell.classes.has('is-cell-highlighted'), '新侧应定位到对应单元格');
+assert(!newOtherCell.classes.has('is-cell-highlighted'), '新侧其他单元格不应高亮');
+
 console.log('嵌套折叠、相邻锚点以及仅新增或仅删除的双侧上下文校验通过');

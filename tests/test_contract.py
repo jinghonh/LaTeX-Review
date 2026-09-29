@@ -55,6 +55,19 @@ def test_schema_snapshot_and_counts():
     validate_document(json.loads(dumps(diagnostics)))
 
 
+def test_legacy_version_accepts_old_data_but_rejects_new_movement_and_coordinates():
+    data = json.loads(dumps(representative_document()))
+    data["schema_version"] = "1.0"
+    validate_document(data)
+    data["changes"][0]["details"][0]["row_old"] = 1
+    with pytest.raises(ValidationError):
+        validate_document(data)
+    del data["changes"][0]["details"][0]["row_old"]
+    data["changes"][0]["categories"].append("move")
+    with pytest.raises(ValidationError):
+        validate_document(data)
+
+
 def test_removed_and_comment_count():
     removed = PrimaryChange("r", "removed", "paragraph", "p", None, SourceLocation("main.tex", 1, 1), None, 1.0, ("text",), (), "删除")
     comment = PrimaryChange("n", "added", "comment", None, "comment-1", None, SourceLocation("main.tex", 2, 2), 1.0, ("comment",), (), "新增注释")

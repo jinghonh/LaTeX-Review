@@ -74,6 +74,13 @@ def _space_description(space: tuple[bool, bool]) -> str:
     return f"前侧{'有' if space[0] else '无'}空白；后侧{'有' if space[1] else '无'}空白"
 
 
+def _move_detail(left: ReviewNode, right: ReviewNode, number: int) -> ChangeDetail:
+    old_section = " / ".join(left.section_path) or "文档根部"
+    new_section = " / ".join(right.section_path) or "文档根部"
+    return ChangeDetail(f"detail-{number:03d}", "move", "moved", old_section, new_section,
+                        f"位置移动：{old_section} → {new_section}", left.source, right.source)
+
+
 def compare_projects(old: ParsedProject, new: ParsedProject, *, review_comments: bool = False) -> ComparisonResult:
     """比较解析后的两侧项目；主变更按审阅结构计数。"""
     mapping = match_nodes(old, new)
@@ -98,7 +105,7 @@ def compare_projects(old: ParsedProject, new: ParsedProject, *, review_comments:
             added_words += sum(token.words for edit in edits for token in edit.new)
 
     def text_change(left: ReviewNode | None, right: ReviewNode | None, confidence: float,
-                    reason: str) -> None:
+                    reason: str, moved: bool = False) -> None:
         old_tokens = scan_latex(_semantic_raw(a[left.id], a))[0] if left else ()
         new_tokens = scan_latex(_semantic_raw(b[right.id], b))[0] if right else ()
         # 公式和引用是完整词元；其语义明细按子节点及其来源位置独立比较。
@@ -145,14 +152,17 @@ def compare_projects(old: ParsedProject, new: ParsedProject, *, review_comments:
                                                     _space_description(old_space), _space_description(new_space),
                                                     "行内内容相邻空白变化"))
                         break
+        if moved and left and right:
+            categories.append("move")
+            details.append(_move_detail(left, right, len(details) + 1))
         if not details:
             return
-        kind = "modified" if left and right else "removed" if left else "added"
+        kind = "moved" if moved else "modified" if left and right else "removed" if left else "added"
         emit(kind, left, right, confidence, tuple(dict.fromkeys(categories)), tuple(details),
-             f"{('正文修改' if kind == 'modified' else '正文删除' if kind == 'removed' else '正文新增')}；{reason}", text_edits)
+             f"{('正文移动' if kind == 'moved' else '正文修改' if kind == 'modified' else '正文删除' if kind == 'removed' else '正文新增')}；{reason}", text_edits)
 
     def structured_change(left: ReviewNode | None, right: ReviewNode | None, confidence: float,
-                          reason: str) -> None:
+                          reason: str, moved: bool = False) -> None:
         kind = (right or left).type
         left_node, right_node = a[left.id] if left else None, b[right.id] if right else None
         if kind == "equation":
@@ -167,14 +177,17 @@ def compare_projects(old: ParsedProject, new: ParsedProject, *, review_comments:
                                             new_arrays[index] if index < len(new_arrays) else None):
                     details.append(ChangeDetail(f"detail-{len(details) + 1:03d}", detail.category, detail.kind,
                                                 detail.old_text, detail.new_text, detail.summary,
-                                                detail.source_old, detail.source_new))
+                                                detail.source_old, detail.source_new,
+                                                detail.row_old, detail.column_old, detail.row_new, detail.column_new))
         elif kind == "figure":
             details = figure_details(left_node, right_node)
         else:
             details = table_details(left_node, right_node)
+        if moved and left and right:
+            details.append(_move_detail(left, right, len(details) + 1))
         if not details:
             return
-        change_kind = "modified" if left and right else "removed" if left else "added"
+        change_kind = "moved" if moved else "modified" if left and right else "removed" if left else "added"
         emit(change_kind, left, right, confidence, tuple(dict.fromkeys(detail.category for detail in details)),
              tuple(details), f"{kind} 整体变化；{reason}")
 
@@ -182,15 +195,18 @@ def compare_projects(old: ParsedProject, new: ParsedProject, *, review_comments:
         return (node.type == "table" and node.parent_id is not None and
                 by_id[node.parent_id].review.type == "equation")
 
-    def compare_one(left: ReviewNode | None, right: ReviewNode | None, confidence: float, reason: str) -> None:
+    def compare_one(left: ReviewNode | None, right: ReviewNode | None, confidence: float, reason: str,
+                    moved: bool = False) -> None:
         try:
-            (text_change if _is_text_node(right or left) else structured_change)(left, right, confidence, reason)
+            (text_change if _is_text_node(right or left) else structured_change)(left, right, confidence, reason, moved)
         except Exception as exc:
-            kind = "modified" if left and right else "removed" if left else "added"
+            kind = "moved" if moved else "modified" if left and right else "removed" if left else "added"
             category = (right or left).type if (right or left).type in {"equation", "figure", "table"} else "text"
             detail = ChangeDetail("detail-001", category, kind, left.raw_latex if left else None,
                                   right.raw_latex if right else None, "节点比较失败；保留双侧 LaTeX 原文")
-            emit(kind, left, right, confidence, (category,), (detail,), "节点源码回退；" + reason)
+            details = (detail, _move_detail(left, right, 2)) if moved and left and right else (detail,)
+            categories = (category, "move") if moved else (category,)
+            emit(kind, left, right, confidence, categories, details, "节点源码回退；" + reason)
             diagnostics.append(Diagnostic("node_diff_fallback", "warning", f"节点比较失败，已保留原文：{exc}",
                                           source_old=left.source if left else None,
                                           source_new=right.source if right else None))
@@ -204,7 +220,7 @@ def compare_projects(old: ParsedProject, new: ParsedProject, *, review_comments:
         if nested_array(left, a) or not (_is_text_node(left) or left.type in {"equation", "figure", "table"}):
             continue
         if pair := pairs.get(left.id):
-            compare_one(left, b[pair.new_id].review, pair.confidence, pair.reason)
+            compare_one(left, b[pair.new_id].review, pair.confidence, pair.reason, pair.moved)
         elif item := unmatched_old.get(left.id):
             compare_one(left, None, item.confidence, item.reason)
             if item.confidence:

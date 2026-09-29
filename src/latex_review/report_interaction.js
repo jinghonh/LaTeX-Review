@@ -152,6 +152,7 @@
 
   function jump(button) {
     document.querySelectorAll('.preview-side .is-highlighted').forEach(node => node.classList.remove('is-highlighted'));
+    document.querySelectorAll('.preview-side .is-cell-highlighted').forEach(node => node.classList.remove('is-cell-highlighted'));
     const messages = [];
     for (const [side, label] of [['old', '修改前'], ['new', '修改后']]) {
       const panel = panels[side];
@@ -166,6 +167,15 @@
         empty.classList.remove('is-visible');
         node.classList.add('is-highlighted');
         panel.scrollTop += node.getBoundingClientRect().top - panel.getBoundingClientRect().top - panel.clientHeight / 3;
+        const row = button.dataset[side + 'Row'];
+        const column = button.dataset[side + 'Column'];
+        if (row || column) {
+          node.querySelectorAll('td[data-row][data-column]').forEach(cell => {
+            if ((!row || cell.dataset.row === row) && (!column || cell.dataset.column === column)) {
+              cell.classList.add('is-cell-highlighted');
+            }
+          });
+        }
       } else {
         empty.textContent = label + '侧无对应节点'; empty.classList.add('is-visible');
       }
