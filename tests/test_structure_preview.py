@@ -98,8 +98,9 @@ def test_two_side_preview_math_failure_and_anchor_isolation(tmp_path):
     html = result.html
     assert "内容预览" in html and "不代表最终编译版式" in html
     assert "\\(α+β\\)" in html and "x^2+y^2=z^2" in html
-    assert "&lt;script&gt;alert(1)&lt;/script&gt;" in html and "<script>alert(1)</script>" not in html
-    assert "\\unknown" in html and "查看 LaTeX 原文" in html
+    assert "&lt;script&gt;alert(1)&lt;/script&gt;" not in html and "<script>alert(1)</script>" not in html
+    assert "\\unknown" not in html and "查看 LaTeX 原文" not in html
+    assert "此处暂无法预览" in html
     assert {diagnostic.code for diagnostic in result.diagnostics} >= {"unknown_latex", "unresolved_reference"}
     for side, project in (("old", parsed_old), ("new", parsed_new)):
         ids = re.findall(rf'id="({side}-[^" ]+)"', html)
@@ -108,16 +109,16 @@ def test_two_side_preview_math_failure_and_anchor_isolation(tmp_path):
         assert re.search(rf'href="#{side}-section-[^"]+"', html)
         assert re.search(rf'href="#{side}-bibliography_entry-[^"]+"', html)
     assert "onerror=\"mathDependencyFailed()\"" in html
-    assert "在线公式排版不可用；页面保留原始 TeX 公式供阅读。" in html
+    assert "在线公式排版不可用。" in html
     if shutil.which("node"):
         script = re.search(r"<script>\n(.*?)\n</script>", html, re.S).group(1)
         harness = """
 const vm = require('vm');
 const status = {textContent:'',dataset:{}};
-const context = {document:{getElementById:()=>status},window:{},setTimeout:()=>1,clearTimeout:()=>{}};
+    const context = {document:{getElementById:()=>status,querySelectorAll:()=>[]},window:{},setTimeout:()=>1,clearTimeout:()=>{}};
 vm.runInNewContext(%s, context);
 context.window.mathDependencyFailed();
-if(status.dataset.state !== 'failed' || !status.textContent.includes('原始 TeX')) process.exit(1);
+    if(status.dataset.state !== 'failed' || !status.textContent.includes('不可用')) process.exit(1);
 """ % json.dumps(script)
         subprocess.run(["node", "-e", harness], check=True)
 
@@ -138,4 +139,4 @@ def test_nested_captions_and_underscored_unknown_environment(tmp_path):
     assert fallback.review.raw_latex == r"\begin{odd_env_name}Unknown content\end{odd_env_name}"
     assert fallback.review.source.file == "main.tex" and fallback.origins
     assert any(diagnostic.code == "unknown_latex" for diagnostic in fallback.diagnostics)
-    assert "未识别的 LaTeX 内容，原文如下" in preview.html
+    assert "此处暂无法预览" in preview.html

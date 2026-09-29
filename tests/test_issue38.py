@@ -70,7 +70,7 @@ def test_rule_status_evidence_sources_and_report(tmp_path):
     machine = json.loads(report.diff_json.read_text(encoding="utf-8"))
     separate = json.loads((report.directory / "diagnostics.json").read_text(encoding="utf-8"))
     assert machine["diagnostics"] == separate["diagnostics"]
-    assert "规则状态：既有" in report.html.read_text(encoding="utf-8")
+    assert "规则状态：既有" not in report.html.read_text(encoding="utf-8")
     assert any(item["code"] == "duplicate_label" and len(item["related_sources_new"]) == 2
                for item in machine["diagnostics"])
     assert not any(item["code"] == "bibliography_key_unresolved" and "valid" in item["message"]

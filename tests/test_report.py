@@ -63,10 +63,8 @@ New text \cite{b}.
         if change["new_node_id"]:
             assert f'id="new-{change["new_node_id"]}"' in html
     assert any(item["code"] == "report_asset_missing" for item in data["diagnostics"])
-    assert f'data-count="{len(data["diagnostics"])}"' in html
-    for diagnostic in data["diagnostics"]:
-        assert diagnostic["code"] in html
-        assert escape(diagnostic["message"]) in html
+    assert 'class="report-diagnostics"' not in html
+    assert 'id="review-data"' not in html
     assert "图缺失：fig/missing.png" in html and "Missing image" in html
     assert "data-old-location=" in html and "data-new-location=" in html
     assert 'id="old-comment-old-000001"' in html and 'id="new-comment-new-000001"' in html
@@ -214,8 +212,8 @@ def test_single_file_embeds_both_images_and_editor_links_only_for_live_sources(t
         assert 'src="assets/' not in html and 'href="assets/' not in html
         assert base64.b64encode((old / "fig/same.png").read_bytes()).decode() in html
         assert base64.b64encode((new / "fig/same.png").read_bytes()).decode() in html
-        assert 'id="review-data"' in html
-        assert 'vscode://file/' in html and 'class="copy-source"' in html
+        assert 'id="review-data"' not in html
+        assert 'vscode://file/' not in html and 'class="copy-source"' not in html
         assert '{path}' not in html
         historical = replace(before, expanded=replace(before.expanded,
                              source=replace(before.expanded.source,
@@ -224,7 +222,7 @@ def test_single_file_embeds_both_images_and_editor_links_only_for_live_sources(t
                                          editor_url_template="vscode://file/{path}:{line}:{column}")
         historical_html = historical_report.html.read_text(encoding="utf-8")
         assert '在编辑器打开旧侧' not in historical_html
-        assert '在编辑器打开新侧' in historical_html
+        assert '在编辑器打开新侧' not in historical_html
     moved = tmp_path / "moved-single.html"
     shutil.copyfile(report.single_html, moved)
     shutil.rmtree(report.directory)

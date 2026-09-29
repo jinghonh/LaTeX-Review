@@ -54,17 +54,27 @@ def _anchor(side: str, node_id: str) -> str:
 
 def _citation_html(keys: tuple[str, ...], project: ParsedProject, side: str, anchor: str = "") -> str:
     parts = []
+    by_id = project.by_id()
     for key in keys:
         key = key.strip()
         target = project.labels.get(f"bib:{key}")
-        entry = project.bibliography.get(key)
-        label = f'<a href="#{_e(_anchor(side, target))}">{_e(key)}</a>' if target else _e(key)
-        if entry:
-            metadata = "；".join((f"作者：{entry.author or '缺失'}", f"题目：{entry.title or '缺失'}",
-                                   f"年份：{entry.year or '缺失'}"))
-            parts.append(f'{label}<small class="citation-metadata">{_e(metadata)}</small>')
-        else:
-            parts.append(f'{label}<small class="citation-metadata">文献元数据未解析，保留引用键</small>')
+        label = key
+        if target:
+            item = by_id[target]
+            parent = by_id.get(item.review.parent_id)
+            siblings = [by_id[child] for child in parent.review.child_ids] if parent else []
+            bibliography = [node for node in siblings if node.review.type == "bibliography_entry"]
+            # 仅在手写文献列表的编号规则可确认时推导序号；BibTeX 顺序不是排版编号。
+            if (parent and parent.review.raw_latex.startswith(r"\begin{thebibliography}") and
+                    len(bibliography) == len(siblings) and
+                    not re.search(r"\\(?:setcounter|renewcommand|item)(?![A-Za-z@])", parent.review.raw_latex) and
+                    all(re.match(r"\\bibitem\s*\{", node.review.raw_latex) for node in bibliography)):
+                label = str(bibliography.index(item) + 1)
+            else:
+                explicit = re.match(r"\\bibitem\[([0-9]+)\]\s*\{", item.review.raw_latex)
+                if explicit:
+                    label = explicit.group(1)
+        parts.append(f'<a href="#{_e(_anchor(side, target))}">{_e(label)}</a>' if target else _e(label))
     return f'<span class="citation"{anchor}>[{", ".join(parts)}]</span>'
 
 
@@ -80,7 +90,7 @@ def _missing_bibliography(key: str, project: ParsedProject, side: str, source: S
 def _math(raw: str, display: bool) -> str:
     if _UNSAFE_MATH.search(raw) or any(match.group(1) not in _MATH_SAFE
                                        for match in re.finditer(r"\\([A-Za-z@]+)", raw)):
-        return f'<code class="math-unsafe" title="公式含不安全链接或 HTML 命令，显示原文">{_e(raw)}</code>'
+        return '<span class="preview-unavailable">此处暂无法预览</span>'
     if raw.startswith("\\begin"):
         wrapped = raw  # MathJax 处理完整环境；不能再套一层展示公式定界符。
     elif raw.startswith("\\[") and raw.endswith("\\]"):
@@ -94,12 +104,13 @@ def _math(raw: str, display: bool) -> str:
     else:
         wrapped = f"\\[{raw}\\]" if display else f"\\({raw}\\)"
     tag = "div" if display else "span"
-    return f'<{tag} class="math-tex" data-raw-tex="{_e(raw)}">{_e(wrapped)}</{tag}>'
+    return f'<{tag} class="math-tex">{_e(wrapped)}</{tag}>'
 
 
 def _math_preview(raw: str, project: ParsedProject, side: str, source: SourceLocation,
                   diagnostics: list[Diagnostic], display: bool) -> str:
     expanded = raw
+    unavailable = False
     if project.macros:
         pieces = []
         cursor = 0
@@ -108,9 +119,12 @@ def _math_preview(raw: str, project: ParsedProject, side: str, source: SourceLoc
                 continue
             pieces.append(raw[cursor:match.start()])
             replacement, end, problem = expand_call(raw, match.start(), match.group(1), project.macros)
+            if project.macros[match.group(1)].strategy == "raw":
+                unavailable = True
             if problem:
+                unavailable = True
                 diagnostics.append(Diagnostic("preview_macro_fallback", "warning",
-                                              f"\\{match.group(1)}：{problem}；已显示原文",
+                                              f"\\{match.group(1)}：{problem}；已显示占位",
                                               source_old=source if side == "old" else None,
                                               source_new=source if side == "new" else None))
             pieces.append(replacement)
@@ -118,17 +132,18 @@ def _math_preview(raw: str, project: ParsedProject, side: str, source: SourceLoc
         if pieces:
             pieces.append(raw[cursor:])
             expanded = "".join(pieces)
+    if unavailable:
+        return '<span class="preview-unavailable">此处暂无法预览</span>'
     rendered = _math(expanded, display)
     if expanded != raw:
-        return (f'<span class="macro-placeholder" title="宏占位预览；原始来源见 LaTeX 原文，展开位置近似" '
-                f'data-source-approximate="true" data-original="{_e(raw)}">{rendered}</span>')
+        return f'<span class="macro-placeholder">{rendered}</span>'
     return rendered
 
 
 @lru_cache(maxsize=2048)
 def _parse_dom(raw: str):
     if any(match.group(1) not in _INLINE_SAFE for match in re.finditer(r"\\([A-Za-z@]+)", raw)):
-        raise ValueError("片段含未允许的宏，已显示原文")
+        raise ValueError("片段含未允许的宏，已显示占位")
     tex = TeX()
     tex.input("\\begin{document}\n" + raw + "\n\\end{document}")
     with _quiet_plastex():
@@ -180,7 +195,7 @@ def _dom_html(node: object, project: ParsedProject, side: str, inline: list[Pars
             return f'<a class="cross-ref" href="#{_e(_anchor(side, target))}"{anchor}>{_e(label)}</a>'
         return f'<span class="unresolved-ref"{anchor}>?? ({_e(key)})</span>'
     if type(node).__module__ == "plasTeX.Context":
-        return f'<span class="fallback-inline">未识别：<code>{_e(getattr(node, "source", ""))}</code></span>'
+        return '<span class="preview-unavailable">此处暂无法预览</span>'
     children = "".join(_dom_html(child, project, side, inline, cursors, diagnostics, source)
                        for child in getattr(node, "childNodes", ()))
     if name in {"#document", "document", "par", "bgroup", "group"}:
@@ -218,8 +233,8 @@ def _inline_html(raw: str, project: ParsedProject, side: str, inline: list[Parse
                       (base_start is None or base_start + cursor <= child.expanded_start < base_start + relative)]
             pieces.append(_inline_html(raw[cursor:relative], project, side, prefix, diagnostics, source,
                                        None if base_start is None else base_start + cursor))
-            pieces.append(f'<span class="fallback-inline" id="{_e(_anchor(side, item.review.id))}" '
-                          f'data-node-id="{_e(item.review.id)}">未识别：<code>{_e(item.review.raw_latex)}</code></span>')
+            pieces.append(f'<span class="preview-unavailable" id="{_e(_anchor(side, item.review.id))}" '
+                          f'data-node-id="{_e(item.review.id)}">此处暂无法预览</span>')
             cursor = relative + len(item.review.raw_latex)
         suffix = [child for child in inline if child.review.type != "fallback" and
                   (base_start is None or child.expanded_start >= base_start + cursor)]
@@ -297,15 +312,12 @@ def _inline_html(raw: str, project: ParsedProject, side: str, inline: list[Parse
                 pieces.append(_inline_html(raw[consumed:start], project, side, prefix_nodes, diagnostics, source,
                                            None if base_start is None else base_start + consumed))
                 rendered, end, problem = expand_call(raw, start, name, project.macros)
-                original = raw[start:end]
                 if problem and diagnostics is not None:
                     location = source or SourceLocation(None, None, None, confidence=0, uncertainty_reason="宏调用位置不确定")
-                    diagnostics.append(Diagnostic("preview_macro_fallback", "warning", f"\\{name}：{problem}；已显示原文",
+                    diagnostics.append(Diagnostic("preview_macro_fallback", "warning", f"\\{name}：{problem}；已显示占位",
                                                   source_old=location if side == "old" else None,
                                                   source_new=location if side == "new" else None))
-                label = "宏原文" if project.macros[name].strategy == "raw" or problem else "宏占位预览"
-                pieces.append(f'<span class="macro-placeholder" title="{label}；原始来源见 LaTeX 原文，展开位置近似" '
-                              f'data-source-approximate="true" data-original="{_e(original)}">{_e(rendered)}</span>')
+                pieces.append(f'<span class="macro-placeholder">{_e(rendered) if not problem and project.macros[name].strategy != "raw" else "此处暂无法预览"}</span>')
                 consumed = end
                 search_at = end
             suffix_nodes = [child for child in inline if base_start is not None and child.expanded_start >= base_start + consumed]
@@ -326,25 +338,17 @@ def _inline_html(raw: str, project: ParsedProject, side: str, inline: list[Parse
             collect(dom)
             for name in sorted(unknown):
                 location = source or SourceLocation(None, None, None, confidence=0, uncertainty_reason="预览片段无法定位")
-                diagnostics.append(Diagnostic("preview_unknown_macro", "warning", f"预览无法解释宏 \\{name}；已显示原文",
+                diagnostics.append(Diagnostic("preview_unknown_macro", "warning", f"预览无法解释宏 \\{name}；已显示占位",
                                               source_old=location if side == "old" else None,
                                               source_new=location if side == "new" else None))
         return _dom_html(dom, project, side, inline, {}, diagnostics if diagnostics is not None else [], source)
     except Exception as exc:
         if diagnostics is not None and raw.strip():
             location = source or SourceLocation(None, None, None, confidence=0, uncertainty_reason="预览片段无法定位")
-            diagnostics.append(Diagnostic("preview_fallback", "warning", f"plasTeX 预览片段解析失败，已显示原文：{exc}",
+            diagnostics.append(Diagnostic("preview_fallback", "warning", f"plasTeX 预览片段解析失败，已显示占位：{exc}",
                                           source_old=location if side == "old" else None,
                                           source_new=location if side == "new" else None))
-        return f'<code class="fallback-inline">{_e(raw)}</code>'
-
-
-def _source_details(node: ParsedNode) -> str:
-    warnings = "".join(f'<p class="node-warning">{_e(diag.code)}：{_e(diag.message)}</p>' for diag in node.diagnostics)
-    origin = node.review.source
-    location = f"{origin.file}:{origin.start_line}" if origin.file and origin.start_line else "来源位置不确定"
-    return (f'{warnings}<details class="latex-source"><summary>查看 LaTeX 原文 · {_e(location)}</summary>'
-            f'<pre>{_e(node.review.raw_latex)}</pre></details>')
+        return '<span class="preview-unavailable">此处暂无法预览</span>'
 
 
 def _caption(raw: str) -> tuple[str, int] | None:
@@ -357,7 +361,7 @@ def _caption(raw: str) -> tuple[str, int] | None:
 def _embedded_fallbacks(children: list[ParsedNode], side: str) -> str:
     return "".join(
         f'<p class="node-warning" id="{_e(_anchor(side, child.review.id))}" '
-        f'data-node-id="{_e(child.review.id)}">未识别的局部内容：<code>{_e(child.review.raw_latex)}</code></p>'
+        f'data-node-id="{_e(child.review.id)}">此处暂无法预览</p>'
         for child in children if child.review.type == "fallback"
     )
 
@@ -396,7 +400,7 @@ def _table_preview(node: ParsedNode, project: ParsedProject, side: str,
     grid, reason = parse_table(node.review.raw_latex, allowed_commands=project.macros)
     if grid is None:
         diagnostics.append(Diagnostic("preview_table_fallback", "warning",
-                                      f"表格预览无法可靠解析：{reason}；已显示原文",
+                                      f"表格预览无法可靠解析：{reason}；已显示占位",
                                       source_old=node.review.source if side == "old" else None,
                                       source_new=node.review.source if side == "new" else None))
         return None
@@ -454,24 +458,24 @@ def _body(node: ParsedNode, project: ParsedProject, side: str, by_id: dict[str, 
         assets = (figure_assets or {}).get((side, node.review.id))
         if assets is None:
             assets = "".join(f'<p class="asset">图资源：{_e(asset)}</p>' for asset in node.assets)
-        missing = "".join(f'<p class="node-warning">{_e(diag.message)}</p>' for diag in node.diagnostics
-                          if diag.code in {"missing_dependency", "dependency_outside_root"})
+        missing = ('<p class="preview-unavailable">此处暂无法预览</p>' if any(
+            diag.code in {"missing_dependency", "dependency_outside_root"} for diag in node.diagnostics) else "")
         caption_children = [child for child in children if child.review.type != "fallback"]
         return assets + missing + (f'<figcaption>{_inline_html(caption[0], project, side, caption_children, diagnostics, node.review.source, node.expanded_start + caption[1])}</figcaption>' if caption else "") + _embedded_fallbacks(children, side)
     if kind == "table":
         caption = _caption(node.review.raw_latex)
         caption_children = [child for child in children if child.review.type != "fallback"]
         return ((f'<p class="table-caption">{_inline_html(caption[0], project, side, caption_children, diagnostics, node.review.source, node.expanded_start + caption[1])}</p>' if caption else "")
-                + (_table_preview(node, project, side, diagnostics) or '<p class="node-warning">复杂表格预览使用原始 LaTeX。</p>')
-                + f'<pre class="table-source">{_e(node.review.raw_latex)}</pre>' + _embedded_fallbacks(children, side))
+                + (_table_preview(node, project, side, diagnostics) or '<p class="preview-unavailable">此处暂无法预览</p>')
+                + _embedded_fallbacks(children, side))
     if kind == "bibliography":
-        return '<h3>参考文献</h3>' + ("<ol>" + "".join(_render_node(child, project, side, by_id, diagnostics, figure_assets) for child in children) + "</ol>" if children else '<p>参考文献资源见源码。</p>')
+        return '<h3>参考文献</h3>' + ("<ol>" + "".join(_render_node(child, project, side, by_id, diagnostics, figure_assets) for child in children) + "</ol>" if children else '<p class="preview-unavailable">此处暂无法预览</p>')
     if kind == "bibliography_entry":
         body = re.sub(r"^\\bibitem(?:\[[^\]]*\])?\s*\{[^{}]+\}", "", node.review.raw_latex, count=1)
         base = node.expanded_start + len(node.review.raw_latex) - len(body)
         return f'<span>{_inline_html(body, project, side, children, diagnostics, node.review.source, base)}</span>'
     if kind == "fallback":
-        return f'<p class="fallback-label">未识别的 LaTeX 内容，原文如下：</p><pre class="fallback-raw">{_e(node.review.raw_latex)}</pre>'
+        return '<p class="preview-unavailable">此处暂无法预览</p>'
     if kind == "environment":
         return "".join(_render_node(child, project, side, by_id, diagnostics, figure_assets) for child in children)
     return _inline_html(node.review.raw_latex, project, side, children, diagnostics, node.review.source)
@@ -485,7 +489,7 @@ def _render_node(node: ParsedNode, project: ParsedProject, side: str, by_id: dic
     tag = {"figure": "figure", "list_item": "li", "theorem": "aside", "bibliography_entry": "li"}.get(kind, "div")
     return (f'<{tag} class="review-node node-{_e(kind)}" id="{_e(_anchor(side, node.review.id))}" '
             f'data-node-id="{_e(node.review.id)}" data-side="{side}">'
-            + _body(node, project, side, by_id, diagnostics, figure_assets) + _source_details(node) + f"</{tag}>")
+            + _body(node, project, side, by_id, diagnostics, figure_assets) + f"</{tag}>")
 
 
 def _side(project: ParsedProject, side: str, title: str, diagnostics: list[Diagnostic],
@@ -495,10 +499,18 @@ def _side(project: ParsedProject, side: str, title: str, diagnostics: list[Diagn
     roots = [node for node in project.nodes if node.review.parent_id is None]
     content = "".join(_render_node(node, project, side, by_id, diagnostics, figure_assets) for node in roots)
     if extra_nodes:
-        content += '<h3>独立注释审阅</h3>'
-        content += "".join(f'<aside class="review-node node-{_e(node.type)}" id="{_e(_anchor(side, node.id))}" '
-                           f'data-node-id="{_e(node.id)}" data-side="{side}"><pre>{_e(node.raw_latex)}</pre></aside>'
-                           for node in extra_nodes)
+        comments = [node for node in extra_nodes if node.type == "comment"]
+        bibliography = [node for node in extra_nodes if node.type == "bibliography_change"]
+        if comments:
+            content += '<h3>独立注释审阅</h3>' + "".join(
+                f'<aside class="review-node node-comment" id="{_e(_anchor(side, node.id))}" '
+                f'data-node-id="{_e(node.id)}" data-side="{side}">注释变更</aside>'
+                for node in comments)
+        if bibliography:
+            content += '<h3>文献变更</h3>' + "".join(
+                f'<aside class="review-node node-bibliography_change" id="{_e(_anchor(side, node.id))}" '
+                f'data-node-id="{_e(node.id)}" data-side="{side}">引用键 {_e(node.plain_text or "")}</aside>'
+                for node in bibliography)
     return f'<section class="preview-side" aria-label="{_e(title)}" data-side="{side}"><h2>{_e(title)}</h2>{content}</section>'
 
 
@@ -541,27 +553,26 @@ main{{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:1rem;paddin
 .theorem-title{{font-weight:700;text-transform:capitalize}}figure{{margin:1rem 0;padding:.8rem;border:1px solid #ddd8cb}}
 figcaption,.table-caption{{font-style:italic}}.asset,.fallback-label{{color:#75531e}}
 .table-preview{{border-collapse:collapse;margin:.6rem 0}}.table-preview td{{border:1px solid #ddd8cb;padding:.25rem .6rem}}
-.math-tex{{font-family:serif;white-space:pre-wrap;overflow-wrap:anywhere}}.node-equation{{overflow-x:auto;text-align:center;margin:1rem 0}}
-.latex-source{{font-size:.75rem;color:#6b6356;margin:.4rem 0}}.latex-source pre,.fallback-raw,.table-source{{white-space:pre-wrap;overflow-wrap:anywhere;background:#f6f4ef;padding:.7rem;text-align:left}}
-.node-warning{{color:#9b3c26;background:#fff1e8;padding:.35rem .55rem}}.fallback-inline{{background:#fff1e8;color:#8d3320}}
+.math-tex{{font-family:serif;white-space:pre-wrap;overflow-wrap:anywhere;visibility:hidden}}.math-tex.preview-unavailable{{visibility:visible}}.node-equation{{overflow-x:auto;text-align:center;margin:1rem 0}}
+.preview-unavailable{{color:#6b3e27;background:#fff1e8;padding:.35rem .55rem}}
 .citation,.cross-ref{{color:#315c86}}.unresolved-ref{{color:#9b3c26}}
-.citation-metadata{{display:inline;color:#374151;margin-left:.25rem}}.macro-placeholder{{background:#edf4ed;border-bottom:1px dotted #48734b}}
+.macro-placeholder{{background:#edf4ed;border-bottom:1px dotted #48734b}}
 @media(max-width:800px){{main{{grid-template-columns:1fr}}.preview-side{{max-height:none}}}}
 </style></head><body>
 <header><h1>LaTeX 内容预览</h1><p class="notice">用于审阅正文内容，不代表最终编译版式。</p>
-<p id="math-status" role="status">正在加载在线公式排版；原始 TeX 可直接阅读。</p></header>
+<p id="math-status" role="status">正在加载在线公式排版。</p></header>
 <main>{_side(old, "old", "修改前", diagnostics, figure_assets, extra.get("old", ()))}{_side(new, "new", "修改后", diagnostics, figure_assets, extra.get("new", ()))}</main>
 <script>
 (function(){{
  window.MathJax={{tex:{{processEnvironments:true}},options:{{ignoreHtmlClass:'math-unsafe'}}}};
  const status=document.getElementById('math-status');
  let settled=false;
- function failed(){{if(settled)return;settled=true;status.textContent='在线公式排版不可用；页面保留原始 TeX 公式供阅读。';status.dataset.state='failed';}}
+ function failed(){{if(settled)return;settled=true;status.textContent='在线公式排版不可用。';status.dataset.state='failed';document.querySelectorAll('.math-tex').forEach(function(node){{node.textContent='此处暂无法预览';node.classList.add('preview-unavailable');}});}}
  const timer=setTimeout(failed,10000);
  window.mathDependencyFailed=failed;
  window.mathDependencyReady=function(){{
    if(!window.MathJax || !MathJax.startup || !MathJax.startup.promise){{failed();return;}}
-   MathJax.startup.promise.then(function(){{if(settled)return;settled=true;clearTimeout(timer);status.textContent='公式排版已加载。';status.dataset.state='ready';}},failed);
+   MathJax.startup.promise.then(function(){{if(settled)return;settled=true;clearTimeout(timer);document.querySelectorAll('.math-tex').forEach(function(node){{node.style.visibility='visible';}});status.textContent='公式排版已加载。';status.dataset.state='ready';}},failed);
  }};
 }})();
 </script>

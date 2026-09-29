@@ -290,8 +290,29 @@ def compare_projects(old: ParsedProject, new: ParsedProject, *, review_comments:
                 detail = ChangeDetail("detail-001", "comment", "added", None, node.raw_latex, "注释新增")
                 emit("added", None, node, 0, ("comment",), (detail,), "注释新增")
 
+    # 文献库本身不会成为正文结构节点；同键字段变化独立计为引用主变更。
+    bibliography_nodes = {"old": [], "new": []}
+    for key in sorted(old.bibliography.keys() & new.bibliography.keys()):
+        before, after = old.bibliography[key], new.bibliography[key]
+        fields = [label for field, label in (("author", "作者"), ("title", "题名"), ("year", "年份"))
+                  if getattr(before, field) != getattr(after, field)]
+        if not fields:
+            continue
+        nodes = []
+        for side, entry in (("old", before), ("new", after)):
+            location = SourceLocation(entry.file, None, None, confidence=0.5,
+                                      uncertainty_reason="文献条目行号未记录") if entry.file else SourceLocation(
+                                          None, None, None, confidence=0, uncertainty_reason="文献来源未知")
+            node = ReviewNode(f"bibliography-{side}-{sha256(key.encode()).hexdigest()[:16]}",
+                              "bibliography_change", "", None, (), (), location, plain_text=key)
+            bibliography_nodes[side].append(node)
+            nodes.append(node)
+        detail = ChangeDetail("detail-001", "citation", "modified", None, None,
+                              f"引用键 {key}：{'、'.join(fields)}变化", nodes[0].source, nodes[1].source)
+        emit("modified", nodes[0], nodes[1], 1, ("citation",), (detail,), detail.summary)
+
     document = ReviewDocument(old.expanded.source.entry, old.expanded.source.identity,
-                              new.expanded.source.identity, old.review_nodes + old_comments,
-                              new.review_nodes + new_comments, tuple(changes), tuple(diagnostics),
+                              new.expanded.source.identity, old.review_nodes + old_comments + tuple(bibliography_nodes["old"]),
+                              new.review_nodes + new_comments + tuple(bibliography_nodes["new"]), tuple(changes), tuple(diagnostics),
                               build_summary(tuple(changes), added_words=added_words, removed_words=removed_words))
     return ComparisonResult(mapping, document, MappingProxyType(token_changes))

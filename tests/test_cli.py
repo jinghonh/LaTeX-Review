@@ -101,7 +101,8 @@ def test_diagnostics_exit_codes_and_stale_report(tmp_path):
     assert any(item["code"] == "unknown_latex" and item["source_new"]["file"] == "main.tex"
                for item in diagnostics)
     html = output.joinpath("report.html").read_text()
-    assert "&lt;script&gt;" in html and "<script>alert(1)</script>" not in html
+    assert "&lt;script&gt;" not in html and "<script>alert(1)</script>" not in html
+    assert "此处暂无法预览" in html
     (tmp_path / "main.tex").unlink()
     failed = run_cli(tmp_path, "main.tex")
     assert failed.returncode == 4 and not output.joinpath("report.html").exists()
@@ -133,7 +134,7 @@ def test_document_commands_and_links_are_inert(tmp_path):
     assert not marker.exists()
     html = (tmp_path / ".latex-review/latest/report.html").read_text()
     assert 'href="javascript:' not in html
-    assert "javascript:alert(1)" in html
+    assert "javascript:alert(1)" not in html
     assert any(item["code"] == "unknown_latex" for item in
                json.loads((tmp_path / ".latex-review/latest/diagnostics.json").read_text())["diagnostics"])
 
@@ -152,8 +153,8 @@ def test_source_fallback_and_internal_error(tmp_path, monkeypatch):
     output = tmp_path / ".latex-review/latest"
     html = output.joinpath("report.html").read_text()
     data = json.loads(output.joinpath("diff.json").read_text())
-    assert "源码对比报告" in html and "Old text" in html and "New text" in html
-    assert r"\input{part}" in html and "===== part.tex =====" in html
+    assert "此处暂无法预览" in html and "Old text" not in html and "New text" not in html
+    assert r"\input{part}" not in html and "===== part.tex =====" not in html
     assert data["nodes_old"][0]["raw_latex"] and data["nodes_new"][0]["raw_latex"]
     assert any(item["code"] == "source_fallback" for item in data["diagnostics"])
     monkeypatch.setattr(cli, "parse_project", original)
