@@ -154,8 +154,18 @@ def _known_output_after_config_error(args) -> Path | None:
     if target in (Path.cwd(), Path("/")):
         return None
     try:
-        _check_output_separate(target, _source_options(args, raw))
-    except (ConfigurationError, SourceError, TypeError, AttributeError):
+        if args.old_dir or args.new_dir:
+            roots = [Path(value).expanduser().resolve() for value in (args.old_dir, args.new_dir) if value]
+        elif len(args.paths) >= 2:
+            roots = [Path(value).expanduser().resolve().parent for value in args.paths]
+        else:
+            entry = args.paths[0] if args.paths else raw.get("entry")
+            if not isinstance(entry, str) or not entry:
+                return None
+            roots = [Path(entry).expanduser().resolve().parent]
+        if any(target == root or target in root.parents for root in roots):
+            return None
+    except (OSError, TypeError, ValueError):
         return None
     return target
 
