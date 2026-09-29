@@ -37,6 +37,113 @@ class CommentSpan:
     text: str
 
 
+@dataclass(frozen=True)
+class Sentence:
+    start: int
+    end: int
+    text: str
+
+
+_ABBREVIATIONS = {"mr", "mrs", "ms", "dr", "prof", "fig", "figs", "eq", "eqs", "sec", "secs",
+                  "ref", "refs", "no", "nos", "vol", "vs", "etc", "al", "e.g", "i.e", "cf", "st"}
+
+
+def split_sentences(raw: str) -> tuple[Sentence, ...]:
+    """按原文偏移切句；公式、引用和完整宏调用作为不可分割片段。"""
+    result: list[Sentence] = []
+    start = index = 0
+    while index < len(raw):
+        verbatim = _VERBATIM.match(raw, index)
+        if verbatim:
+            closing = f"\\end{{{verbatim.group(1)}}}"
+            end = raw.find(closing, verbatim.end())
+            if end >= 0:
+                index = end + len(closing)
+                continue
+        backslashes = 0
+        if raw[index] == "%":
+            previous = index - 1
+            while previous >= 0 and raw[previous] == "\\":
+                backslashes += 1
+                previous -= 1
+        if raw[index] == "%" and backslashes % 2 == 0:
+            end = raw.find("\n", index)
+            leading_comment = not raw[start:index].strip()
+            index = len(raw) if end < 0 else end + 1
+            if leading_comment:
+                start = index
+            continue
+        if raw.startswith((r"\(", r"\["), index):
+            opening = raw[index:index + 2]
+            end = _math_end(raw, index, opening, r"\)" if opening == r"\(" else r"\]")
+            if end:
+                index = end
+                continue
+        if raw[index] == "$":
+            opening = "$$" if raw.startswith("$$", index) else "$"
+            end = _math_end(raw, index, opening, opening)
+            if end:
+                index = end
+                continue
+        command = _COMMAND.match(raw, index)
+        if command:
+            end = command.end()
+            if raw.startswith(r"\verb", index) and end < len(raw):
+                delimiter = end + (raw[end] == "*")
+                finish = raw.find(raw[delimiter], delimiter + 1) if delimiter < len(raw) else -1
+                if finish >= 0:
+                    index = finish + 1
+                    continue
+            while True:
+                opening = end
+                while opening < len(raw) and raw[opening].isspace():
+                    opening += 1
+                if opening >= len(raw) or raw[opening] not in "[{":
+                    break
+                close = "]" if raw[opening] == "[" else "}"
+                next_end = _group_end(raw, opening, raw[opening], close)
+                if next_end is None:
+                    break
+                end = next_end
+            index = end
+            continue
+        if raw[index] in ".!?。！？":
+            char = raw[index]
+            before = raw[start:index]
+            next_char = raw[index + 1:index + 2]
+            following = raw[index + 1:].lstrip()[:1]
+            abbreviation = re.search(r"([A-Za-z]+(?:\.[A-Za-z]+)?)$", before)
+            short = abbreviation.group(1).lower() if abbreviation else ""
+            protected = (char == "." and (
+                (before[-1:].isdigit() and next_char.isdigit()) or
+                (short in _ABBREVIATIONS and not (short in {"al", "etc"} and following.isupper())) or
+                (len(short) == 1 and (next_char.isalpha() or following.isupper())) or
+                bool(re.search(r"(?:[A-Za-z]\.)+[A-Za-z]$", before) and not following.isupper())))
+            if not protected:
+                end = index + 1
+                while end < len(raw) and raw[end] in '”’"\')]}':
+                    end += 1
+                if end == len(raw) or raw[end].isspace() or char in "。！？":
+                    left = start
+                    while left < end and raw[left].isspace():
+                        left += 1
+                    if left < end and _without_comments(raw[left:end])[0].strip():
+                        result.append(Sentence(left, end, raw[left:end]))
+                    start = end
+                    index = end
+                    continue
+        index += 1
+    left = start
+    while left < len(raw) and raw[left].isspace():
+        left += 1
+    end = len(raw)
+    while end > left and raw[end - 1].isspace():
+        end -= 1
+    if left < end and _without_comments(raw[left:end])[0].strip():
+        result.append(Sentence(left, end, raw[left:end]))
+    return tuple(result)
+
+
 def _group_end(text: str, start: int, opening: str, closing: str) -> int | None:
     depth = 1
     index = start + 1

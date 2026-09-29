@@ -14,7 +14,7 @@ from .contract import Diagnostic, ReviewNode, SourceLocation
 from .structure import ParsedNode, ParsedProject, _argument, _masked, _quiet_plastex
 from .table_model import display_tables
 from .macros import expand_call
-from .text_diff import CITATION_COMMANDS
+from .text_diff import CITATION_COMMANDS, _without_comments, split_sentences
 from .latex_commands import MATH_COMMANDS, REFERENCE_COMMANDS, TEXT_COMMANDS
 
 
@@ -223,6 +223,13 @@ def _inline_html(raw: str, project: ParsedProject, side: str, inline: list[Parse
                  diagnostics: list[Diagnostic] | None = None, source: SourceLocation | None = None,
                  base_start: int | None = None) -> str:
     inline = inline or []
+    heading = re.match(r"^(\s*)\\(?:paragraph|subparagraph)\*?\s*\{([^{}]*)\}", raw)
+    if heading:
+        remainder = heading.end()
+        suffix = [child for child in inline if base_start is not None and child.expanded_start >= base_start + remainder]
+        return (_e(heading.group(1)) + f'<strong>{_e(heading.group(2))}</strong> '
+                + _inline_html(raw[remainder:], project, side, suffix, diagnostics, source,
+                               None if base_start is None else base_start + remainder))
     if any(item.review.type == "fallback" for item in inline):
         # 对未知宏分段，使 plasTeX 的宽松解析不会吞掉其参数。
         pieces = []
@@ -428,7 +435,8 @@ def _table_preview(node: ParsedNode, project: ParsedProject, side: str,
 
 
 def _body(node: ParsedNode, project: ParsedProject, side: str, by_id: dict[str, ParsedNode], diagnostics: list[Diagnostic],
-          figure_assets: Mapping[tuple[str, str], str] | None = None) -> str:
+          figure_assets: Mapping[tuple[str, str], str] | None = None,
+          sentence_highlights: Mapping[tuple[str, str], frozenset[int]] | None = None) -> str:
     kind = node.review.type
     children = [by_id[child] for child in node.review.child_ids]
     if kind in {"part", "chapter", "section", "subsection", "subsubsection"}:
@@ -439,35 +447,52 @@ def _body(node: ParsedNode, project: ParsedProject, side: str, by_id: dict[str, 
         title_html = _inline_html(title, project, side, title_children, diagnostics, node.review.source,
                                   node.expanded_start + arg[2] if arg else None)
         heading = f"<h{depth}>{title_html}</h{depth}>"
-        return heading + "".join(_render_node(child, project, side, by_id, diagnostics, figure_assets) for child in children)
+        return heading + "".join(_render_node(child, project, side, by_id, diagnostics, figure_assets, sentence_highlights) for child in children)
     if kind == "paragraph":
+        changed = (sentence_highlights or {}).get((side, node.review.id))
+        if changed is not None:
+            pieces = []
+            cursor = 0
+            raw = node.review.raw_latex
+            for number, sentence in enumerate(split_sentences(raw), 1):
+                pieces.append(_e(_without_comments(raw[cursor:sentence.start])[0]))
+                contained = [child for child in children if node.expanded_start + sentence.start <= child.expanded_start
+                             and child.expanded_end <= node.expanded_start + sentence.end]
+                body = _inline_html(sentence.text, project, side, contained, diagnostics, node.review.source,
+                                    node.expanded_start + sentence.start)
+                sentence_id = f"{side}-{node.review.id}-sentence-{number}"
+                sentence_class = "review-sentence sentence-changed" if number in changed else "review-sentence"
+                pieces.append(f'<span class="{sentence_class}" id="{_e(sentence_id)}">{body}</span>')
+                cursor = sentence.end
+            pieces.append(_e(_without_comments(raw[cursor:])[0]))
+            return f'<p>{"".join(pieces)}</p>'
         return f'<p>{_inline_html(node.review.raw_latex, project, side, children, diagnostics, node.review.source, node.expanded_start)}</p>'
     if kind == "equation":
-        arrays = "".join(_render_node(child, project, side, by_id, diagnostics, figure_assets)
+        arrays = "".join(_render_node(child, project, side, by_id, diagnostics, figure_assets, sentence_highlights)
                          for child in children if child.review.type == "math_array")
         fallback_url = (figure_assets or {}).get((side, node.review.id))
         return _math_preview(node.review.raw_latex, project, side, node.review.source, diagnostics, True, fallback_url) + arrays
     if kind == "math_array":
         return ""  # 已由父公式预览，保留独立来源锚点。
     if kind == "frontmatter":
-        return "".join(_render_node(child, project, side, by_id, diagnostics, figure_assets) for child in children)
+        return "".join(_render_node(child, project, side, by_id, diagnostics, figure_assets, sentence_highlights) for child in children)
     if kind in {"abstract", "keywords"}:
         title = "摘要" if kind == "abstract" else "关键词"
-        return f"<h3>{title}</h3>" + "".join(_render_node(child, project, side, by_id, diagnostics, figure_assets) for child in children)
+        return f"<h3>{title}</h3>" + "".join(_render_node(child, project, side, by_id, diagnostics, figure_assets, sentence_highlights) for child in children)
     if kind == "metadata":
         return ""  # 元数据保留结构与来源，正文阅读内容由后续界面批次处理。
     if kind == "list":
         tag = "ol" if node.review.raw_latex.startswith("\\begin{enumerate}") else "ul"
-        return f"<{tag}>" + "".join(_render_node(child, project, side, by_id, diagnostics, figure_assets) for child in children) + f"</{tag}>"
+        return f"<{tag}>" + "".join(_render_node(child, project, side, by_id, diagnostics, figure_assets, sentence_highlights) for child in children) + f"</{tag}>"
     if kind == "list_item":
         body = re.sub(r"^\\item(?:\[[^\]]*\])?", "", node.review.raw_latex, count=1)
         if children:
-            return "".join(_render_node(child, project, side, by_id, diagnostics, figure_assets) for child in children)
+            return "".join(_render_node(child, project, side, by_id, diagnostics, figure_assets, sentence_highlights) for child in children)
         return _inline_html(body, project, side, diagnostics=diagnostics, source=node.review.source)
     if kind == "theorem":
         name = re.match(r"\\begin\{([^{}]+)\}", node.review.raw_latex)
         title = name.group(1) if name else "定理"
-        return f'<p class="theorem-title">{_e(title)}</p>' + "".join(_render_node(child, project, side, by_id, diagnostics, figure_assets) for child in children)
+        return f'<p class="theorem-title">{_e(title)}</p>' + "".join(_render_node(child, project, side, by_id, diagnostics, figure_assets, sentence_highlights) for child in children)
     if kind == "figure":
         caption = _caption(node.review.raw_latex)
         assets = (figure_assets or {}).get((side, node.review.id))
@@ -488,7 +513,7 @@ def _body(node: ParsedNode, project: ParsedProject, side: str, by_id: dict[str, 
                 + (table_html or '<p class="preview-unavailable">此处暂无法预览</p>')
                 + _embedded_fallbacks(children, side))
     if kind == "bibliography":
-        return '<h3>参考文献</h3>' + ("<ol>" + "".join(_render_node(child, project, side, by_id, diagnostics, figure_assets) for child in children) + "</ol>" if children else '<p class="preview-unavailable">此处暂无法预览</p>')
+        return '<h3>参考文献</h3>' + ("<ol>" + "".join(_render_node(child, project, side, by_id, diagnostics, figure_assets, sentence_highlights) for child in children) + "</ol>" if children else '<p class="preview-unavailable">此处暂无法预览</p>')
     if kind == "bibliography_entry":
         body = re.sub(r"^\\bibitem(?:\[[^\]]*\])?\s*\{[^{}]+\}", "", node.review.raw_latex, count=1)
         base = node.expanded_start + len(node.review.raw_latex) - len(body)
@@ -496,27 +521,29 @@ def _body(node: ParsedNode, project: ParsedProject, side: str, by_id: dict[str, 
     if kind == "fallback":
         return '<p class="preview-unavailable">此处暂无法预览</p>'
     if kind == "environment":
-        return "".join(_render_node(child, project, side, by_id, diagnostics, figure_assets) for child in children)
+        return "".join(_render_node(child, project, side, by_id, diagnostics, figure_assets, sentence_highlights) for child in children)
     return _inline_html(node.review.raw_latex, project, side, children, diagnostics, node.review.source)
 
 
 def _render_node(node: ParsedNode, project: ParsedProject, side: str, by_id: dict[str, ParsedNode], diagnostics: list[Diagnostic],
-                 figure_assets: Mapping[tuple[str, str], str] | None = None) -> str:
+                 figure_assets: Mapping[tuple[str, str], str] | None = None,
+                 sentence_highlights: Mapping[tuple[str, str], frozenset[int]] | None = None) -> str:
     kind = node.review.type
     if kind in {"inline_math", "citation", "reference"}:
         return ""  # 行内节点由父段落的 plasTeX DOM 呈现。
     tag = {"figure": "figure", "list_item": "li", "theorem": "aside", "bibliography_entry": "li"}.get(kind, "div")
     return (f'<{tag} class="review-node node-{_e(kind)}" id="{_e(_anchor(side, node.review.id))}" '
             f'data-node-id="{_e(node.review.id)}" data-side="{side}">'
-            + _body(node, project, side, by_id, diagnostics, figure_assets) + f"</{tag}>")
+            + _body(node, project, side, by_id, diagnostics, figure_assets, sentence_highlights) + f"</{tag}>")
 
 
 def _side(project: ParsedProject, side: str, title: str, diagnostics: list[Diagnostic],
           figure_assets: Mapping[tuple[str, str], str] | None = None,
-          extra_nodes: tuple[ReviewNode, ...] = ()) -> str:
+          extra_nodes: tuple[ReviewNode, ...] = (),
+          sentence_highlights: Mapping[tuple[str, str], frozenset[int]] | None = None) -> str:
     by_id = project.by_id()
     roots = [node for node in project.nodes if node.review.parent_id is None]
-    content = "".join(_render_node(node, project, side, by_id, diagnostics, figure_assets) for node in roots)
+    content = "".join(_render_node(node, project, side, by_id, diagnostics, figure_assets, sentence_highlights) for node in roots)
     if extra_nodes:
         comments = [node for node in extra_nodes if node.type == "comment"]
         bibliography = [node for node in extra_nodes if node.type == "bibliography_change"]
@@ -535,7 +562,8 @@ def _side(project: ParsedProject, side: str, title: str, diagnostics: list[Diagn
 
 def render_preview(old: ParsedProject, new: ParsedProject, *,
                    figure_assets: Mapping[tuple[str, str], str] | None = None,
-                   extra_nodes: Mapping[str, tuple[ReviewNode, ...]] | None = None) -> PreviewResult:
+                   extra_nodes: Mapping[str, tuple[ReviewNode, ...]] | None = None,
+                   sentence_highlights: Mapping[tuple[str, str], frozenset[int]] | None = None) -> PreviewResult:
     """返回双侧连续阅读视图与公共诊断，不写文件。"""
     diagnostics = [*old.diagnostics, *new.diagnostics]
     for project, side in ((old, "old"), (new, "new")):
@@ -582,7 +610,7 @@ figcaption,.table-caption{{font-style:italic}}.asset,.fallback-label{{color:#755
 </style></head><body>
 <header><h1>LaTeX 内容预览</h1><p class="notice">用于审阅正文内容，不代表最终编译版式。</p>
 <p id="math-status" role="status">正在加载在线公式排版。</p></header>
-<main>{_side(old, "old", "修改前", diagnostics, figure_assets, extra.get("old", ()))}{_side(new, "new", "修改后", diagnostics, figure_assets, extra.get("new", ()))}</main>
+<main>{_side(old, "old", "修改前", diagnostics, figure_assets, extra.get("old", ()), sentence_highlights)}{_side(new, "new", "修改后", diagnostics, figure_assets, extra.get("new", ()), sentence_highlights)}</main>
 <script>
 (function(){{
  window.MathJax={{startup:{{typeset:false}},tex:{{packages:{{'[+]':['ams','newcommand','boldsymbol']}}}}}};

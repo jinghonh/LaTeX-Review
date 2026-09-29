@@ -34,7 +34,7 @@ def test_single_node_diff_failure_keeps_raw_and_other_changes(tmp_path, monkeypa
     assert any("FAIL" in detail.old_text for change in result.document.changes
                for detail in change.details if detail.old_text)
     assert any("Stable" in old.by_id()[change.old_node_id].review.raw_latex and
-               any(detail.old_text == "before" and detail.new_text == "after" for detail in change.details)
+               any(detail.old_text == "Stable before." and detail.new_text == "Stable after." for detail in change.details)
                for change in result.document.changes if change.old_node_id)
 
 
@@ -172,7 +172,7 @@ def test_semantic_space_boundary_and_unicode_latin_word_count(tmp_path):
     result = compare_projects(old, new)
     assert result.document.summary.changes == 1
     assert (result.document.summary.added_words, result.document.summary.removed_words) == (0, 0)
-    assert "␠" in result.document.changes[0].details[0].old_text
+    assert result.document.changes[0].details[0].old_text == r"$x$ y"
 
     polish = "Zażółć gęślą jaźń"
     for text in (polish, unicodedata.normalize("NFD", polish)):
@@ -189,7 +189,7 @@ def test_nonbreaking_space_before_reference_changes_format_without_adding_word(t
     assert result.document.summary.changes == 1
     assert result.document.summary.category_hits == {"text": 1}
     assert (result.document.summary.added_words, result.document.summary.removed_words) == (0, 0)
-    assert result.document.changes[0].details[0].new_text == "~"
+    assert result.document.changes[0].details[0].new_text == r"See Fig.~\ref{fig:one}."
     assert token_edits(scan_latex(r"Fig. \ref{fig:one}")[0],
                        scan_latex(r"Fig.~\ref{fig:one}")[0])
 
@@ -218,7 +218,8 @@ def test_top_level_unknown_environment_content_is_not_silently_skipped(tmp_path)
     change = result.document.changes[0]
     assert change.node_type == "paragraph" and "text" in change.categories
     assert change.source_old.file == change.source_new.file == "main.tex"
-    assert any(detail.old_text == "Old" and detail.new_text == "Revised" for detail in change.details)
+    assert any(detail.old_text == "Old abstract claim." and detail.new_text == "Revised abstract claim."
+               for detail in change.details)
 
 
 def test_comment_switch_inline_standalone_and_escaped_percent(tmp_path):

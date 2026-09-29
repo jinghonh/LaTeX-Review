@@ -108,7 +108,8 @@ def test_citation_adjacent_space_survives_other_word_edit(tmp_path):
     assert result.document.summary.changes == 1
     assert result.document.summary.category_hits == {"text": 1}
     details = result.document.changes[0].details
-    assert any(detail.old_text == "B" and detail.new_text == "C" for detail in details)
+    assert any(detail.old_text == r"A\cite{k} B." and detail.new_text == r"A \cite{k} C."
+               for detail in details)
     assert any(detail.summary == "行内内容相邻空白变化" for detail in details)
     assert all(detail.category == "text" for detail in details)
 

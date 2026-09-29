@@ -12,7 +12,7 @@ from .contract import ChangeDetail, Diagnostic, PrimaryChange, ReviewDocument, R
 from .matching import NodeMapping, _semantic_raw, match_nodes
 from .structure import ParsedNode, ParsedProject
 from .structured_diff import align_inline_sites, citation_details, equation_details, figure_details, table_details
-from .text_diff import TokenEdit, scan_latex, token_edits
+from .text_diff import TokenEdit, normalized_text, scan_latex, split_sentences, token_edits
 
 
 _TEXT_TYPES = {"paragraph", "part", "chapter", "section", "subsection", "subsubsection", "keywords"}
@@ -73,8 +73,35 @@ def _comment_nodes(project: ParsedProject, side: str) -> tuple[ReviewNode, ...]:
     return tuple(nodes)
 
 
-def _text_of(tokens) -> str:
-    return " ".join(token.text for token in tokens)
+def _align_sentence_region(old_keys: list[str], new_keys: list[str], old_start: int,
+                           old_end: int, new_start: int, new_end: int) -> list[tuple[int, int, int, int]]:
+    """保序对齐未完全相同的句子，允许一对二拆句及二对一合句。"""
+    old_count, new_count = old_end - old_start, new_end - new_start
+    costs = [[float("inf")] * (new_count + 1) for _ in range(old_count + 1)]
+    paths: list[list[list[tuple[int, int, int, int]]]] = [[[] for _ in range(new_count + 1)]
+                                                    for _ in range(old_count + 1)]
+    costs[0][0] = 0
+    for i in range(old_count + 1):
+        for j in range(new_count + 1):
+            if costs[i][j] == float("inf"):
+                continue
+            for take_old, take_new in ((1, 1), (1, 2), (2, 1), (1, 0), (0, 1)):
+                if i + take_old > old_count or j + take_new > new_count:
+                    continue
+                if take_old and take_new:
+                    before = " ".join(old_keys[old_start + i:old_start + i + take_old])
+                    after = " ".join(new_keys[new_start + j:new_start + j + take_new])
+                    similarity = SequenceMatcher(None, before, after, autojunk=False).ratio()
+                    step = 1.6 - 1.4 * similarity + (0.12 if take_old + take_new == 3 else 0)
+                else:
+                    step = 0.65
+                candidate = costs[i][j] + step
+                if candidate < costs[i + take_old][j + take_new] - 1e-9:
+                    costs[i + take_old][j + take_new] = candidate
+                    paths[i + take_old][j + take_new] = paths[i][j] + [
+                        (old_start + i, old_start + i + take_old,
+                         new_start + j, new_start + j + take_new)]
+    return paths[old_count][new_count]
 
 
 def _prose_tokens(tokens):
@@ -133,18 +160,40 @@ def compare_projects(old: ParsedProject, new: ParsedProject, *, review_comments:
 
     def text_change(left: ReviewNode | None, right: ReviewNode | None, confidence: float,
                     reason: str, moved: bool = False) -> None:
-        old_tokens = scan_latex(_semantic_raw(a[left.id], a))[0] if left else ()
-        new_tokens = scan_latex(_semantic_raw(b[right.id], b))[0] if right else ()
+        old_raw = _semantic_raw(a[left.id], a) if left else ""
+        new_raw = _semantic_raw(b[right.id], b) if right else ""
+        old_tokens = scan_latex(old_raw)[0] if left else ()
+        new_tokens = scan_latex(new_raw)[0] if right else ()
         # 公式和引用是完整词元；其语义明细按子节点及其来源位置独立比较。
         text_edits = token_edits(_prose_tokens(old_tokens), _prose_tokens(new_tokens))
         details: list[ChangeDetail] = []
         categories: list[str] = []
-        for edit in text_edits:
-            old_visible = _text_of(edit.old)
-            new_visible = _text_of(edit.new)
+        if text_edits and (right or left).type != "paragraph":
             categories.append("text")
-            details.append(ChangeDetail(f"detail-{len(details) + 1:03d}", "text", edit.kind,
-                                        old_visible or None, new_visible or None, "正文词元变化"))
+            details.append(ChangeDetail(f"detail-{len(details) + 1:03d}", "text",
+                                        "modified" if left and right else "removed" if left else "added",
+                                        old_raw or None, new_raw or None, "结构文字变化"))
+        elif text_edits:
+            old_sentences = split_sentences(left.raw_latex) if left else ()
+            new_sentences = split_sentences(right.raw_latex) if right else ()
+            old_keys = [normalized_text(sentence.text) for sentence in old_sentences]
+            new_keys = [normalized_text(sentence.text) for sentence in new_sentences]
+            matcher = SequenceMatcher(None, old_keys, new_keys, autojunk=False)
+            for operation, old_start, old_end, new_start, new_end in matcher.get_opcodes():
+                if operation == "equal":
+                    continue
+                groups = _align_sentence_region(old_keys, new_keys, old_start, old_end, new_start, new_end)
+                for first_old, last_old, first_new, last_new in groups:
+                    old_group = old_sentences[first_old:last_old]
+                    new_group = new_sentences[first_new:last_new]
+                    kind = "modified" if old_group and new_group else "removed" if old_group else "added"
+                    categories.append("text")
+                    details.append(ChangeDetail(f"detail-{len(details) + 1:03d}", "text", kind,
+                                                " ".join(item.text for item in old_group) or None,
+                                                " ".join(item.text for item in new_group) or None,
+                                                "完整句子变化",
+                                                old_sentences=tuple(range(first_old + 1, last_old + 1)),
+                                                new_sentences=tuple(range(first_new + 1, last_new + 1))))
         for detail in citation_details(a[left.id] if left else None, b[right.id] if right else None, old, new):
             categories.append("citation")
             details.append(ChangeDetail(f"detail-{len(details) + 1:03d}", detail.category, detail.kind,

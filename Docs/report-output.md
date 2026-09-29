@@ -13,9 +13,9 @@ with resolve_sources(entry="main.tex", old_dir="old", new_dir="new") as pair:
     print(report.html, report.diff_json)
 ```
 
-输出目录含 `report.html`、`diff.json`、`diagnostics.json` 和双侧隔离的 `assets/old/`、`assets/new/`；成功转换的 PDF 预览放在 `previews/old/`、`previews/new/`。受管路径中的符号链接会被拒绝，写入时先生成临时文件再替换目标。页面可直接通过 `file://` 打开，节点与变更卡片均在生成时写入，不通过本地 `fetch` 加载。图片以相对路径引用；移动整个目录后仍可读取。页面使用内容预览与在线 MathJax 公式排版；无法预览的内容原位显示简短占位。详细诊断保留在机器数据文件中，不进入阅读页面。段内引用和公式明细优先跳到对应子节点，无法唯一定位时回退到主变更节点。
+输出目录含 `report.html`、`diff.json`、`diagnostics.json` 和双侧隔离的 `assets/old/`、`assets/new/`；成功转换的 PDF 预览放在 `previews/old/`、`previews/new/`。受管路径中的符号链接会被拒绝，写入时先生成临时文件再替换目标。页面可直接通过 `file://` 打开，节点与变更卡片均在生成时写入，不通过本地 `fetch` 加载。图片以相对路径引用；移动整个目录后仍可读取。页面使用内容预览与在线 MathJax 公式排版；无法预览的内容原位显示简短占位。详细诊断保留在机器数据文件中，不进入阅读页面。段内引用和公式明细优先跳到对应子节点，无法唯一定位时回退到主变更节点。正文句子明细使用独立句子锚点；缺失时显示定位不确定，不将整段高亮作为句子定位成功。
 
-`write_report` 返回的 `ReportResult.document` 是实际序列化到 `diff.json` 的审阅文档，合并了比较、预览和资源诊断；页面摘要和变更卡片均从该文档生成。正文主变更按 #2 契约计数，正文中的引用明细只命中类别；同键文献字段变化单独计为一个引用主变更，不累计为正文词数。`pdf_converter` 默认自动查找 `pdftoppm`；传入空字符串可禁用 PDF 预览，传入可执行文件路径可指定受控转换器；`conversion_timeout` 默认 8 秒。转换器只读取图 PDF 的第一页，限制输出宽高、时间及文件大小，失败则保留原 PDF 文件链接、图注、来源和未知尺寸提示。仅允许受控图片格式与 PDF 被复制或链接；SVG、HTML 等其他格式显示安全占位并产生可定位诊断。此接口不执行论文编译引擎。
+`write_report` 返回的 `ReportResult.document` 是实际序列化到 `diff.json` 的审阅文档，合并了比较、预览和资源诊断；页面摘要和变更卡片均从该文档生成。正文主变更按 #2 契约计数，正文中的引用明细只命中类别；同键文献字段变化单独计为一个引用主变更，不累计为正文词数。`pdf_converter` 默认自动查找 `pdftoppm`；传入空字符串可禁用 PDF 预览，传入可执行文件路径可指定受控转换器；`conversion_timeout` 默认 8 秒。转换器只读取图 PDF 的第一页，限制输出宽高、时间及文件大小，失败则保留原 PDF 文件链接、图注、来源和未知尺寸提示。仅允许受控图片格式与 PDF 被复制或链接；SVG、HTML 等其他格式显示安全占位并产生可定位诊断。复杂片段预览可调用本机已有 TeX 环境；此接口不执行整篇论文编译。
 
 命令行现已接入该接口；`latex-review main.tex` 默认比较 Git HEAD 与磁盘工作区，将报告写到 `.latex-review/latest/`，并写入独立的 `cache-meta.json`。缓存命中状态不写入 `diff.json`，因此冷热运行的机器语义数据保持一致。结构解析整体失败时阅读页面显示双侧占位，`diff.json` 和 `diagnostics.json` 仍保留机器数据。
 
