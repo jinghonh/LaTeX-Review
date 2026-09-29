@@ -8,6 +8,8 @@ from importlib.metadata import version
 import json
 import os
 from pathlib import Path
+import re
+import secrets
 import tempfile
 
 from .contract import Diagnostic, ReviewNode, SourceLocation
@@ -30,12 +32,14 @@ def _json(value: object) -> bytes:
     return json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8")
 
 
-def _read_envelope(path: Path, key: str) -> dict:
+def _read_envelope(path: Path, key: str | None) -> dict:
     envelope = json.loads(path.read_text(encoding="utf-8"))
     if not isinstance(envelope, dict):
         raise ValueError("缓存信封无效")
     parsed = envelope.get("parsed")
-    if (envelope.get("format") != CACHE_FORMAT or envelope.get("key") != key or
+    actual_key = envelope.get("key")
+    if (not isinstance(actual_key, str) or re.fullmatch(r"[0-9a-f]{64}", actual_key) is None or
+            (key is not None and actual_key != key) or envelope.get("format") != CACHE_FORMAT or
             not isinstance(parsed, dict) or not isinstance(parsed.get("nodes"), list) or
             not isinstance(parsed.get("diagnostics"), list) or not isinstance(parsed.get("labels"), dict) or
             envelope.get("checksum") != _digest(_json(parsed))):
@@ -43,10 +47,10 @@ def _read_envelope(path: Path, key: str) -> dict:
     return envelope
 
 
-def is_managed_cache_file(path: Path) -> bool:
-    """清理前确认文件内容确实是与文件名匹配的完整缓存信封。"""
+def is_managed_cache_file(path: Path, *, temporary: bool = False) -> bool:
+    """清理前确认完整缓存信封；正式文件另须与文件名的键一致。"""
     try:
-        _read_envelope(path, path.stem)
+        _read_envelope(path, None if temporary else path.stem)
         return True
     except (OSError, UnicodeError, ValueError, TypeError):
         return False
@@ -165,20 +169,26 @@ class ParseCache:
                            "labels": parsed.labels}
                 envelope = {"format": CACHE_FORMAT, "key": parse_key, "parsed": payload,
                             "checksum": _digest(_json(payload))}
-                temporary = None
+                staging = pending = None
                 try:
                     self.directory.mkdir(parents=True, exist_ok=True)
-                    with tempfile.NamedTemporaryFile("wb", dir=self.directory, prefix=".write-", suffix=".tmp",
+                    # 先在缓存目录外写完整信封；目录内可见的待替换文件始终可校验。
+                    with tempfile.NamedTemporaryFile("wb", dir=self.directory.parent,
+                                                     prefix=".latex-review-stage-", suffix=".tmp",
                                                      delete=False) as stream:
-                        temporary = Path(stream.name)
+                        staging = Path(stream.name)
                         stream.write(_json(envelope))
                         stream.flush()
                         os.fsync(stream.fileno())
-                    os.replace(temporary, path)
+                    pending = self.directory / f".write-{secrets.token_hex(16)}.tmp"
+                    os.replace(staging, pending)
+                    os.replace(pending, path)
                 except OSError:
                     state = "unavailable"
                 finally:
-                    if temporary is not None:
+                    for temporary in (staging, pending):
+                        if temporary is None:
+                            continue
                         try:
                             temporary.unlink(missing_ok=True)
                         except OSError:

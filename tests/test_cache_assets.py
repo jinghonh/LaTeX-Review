@@ -216,13 +216,20 @@ def test_clear_cache_removes_interrupted_writes_but_keeps_foreign_files(tmp_path
     fixture(tmp_path)
     assert run(tmp_path).returncode == 0
     cache_dir = tmp_path / ".latex-review/cache"
+    complete_envelope = next(cache_dir.glob("[0-9a-f]*.json")).read_bytes()
     orphans = []
     for suffix in ("", ".tmp"):
         with tempfile.NamedTemporaryFile("wb", dir=cache_dir, prefix=".write-", suffix=suffix,
                                          delete=False) as stream:
-            stream.write(b"interrupted")
+            stream.write(complete_envelope)
             orphans.append(Path(stream.name))
     assert all(path.is_file() for path in orphans)
+    ordinary_temp = cache_dir / ".write-user.tmp"
+    ordinary_temp.write_text("普通文件", encoding="utf-8")
+    assert run(tmp_path, "--clear-cache").returncode == 64
+    assert ordinary_temp.read_text(encoding="utf-8") == "普通文件"
+    assert all(path.is_file() for path in orphans)
+    ordinary_temp.unlink()
     assert run(tmp_path, "--clear-cache").returncode == 0
     assert all(not path.exists() for path in orphans)
     foreign = cache_dir / "notes.txt"
