@@ -15,6 +15,7 @@ from .structure import ParsedNode, ParsedProject, _argument, _masked, _quiet_pla
 from .table_model import parse_table
 from .macros import expand_call
 from .text_diff import CITATION_COMMANDS
+from .latex_commands import MATH_COMMANDS, REFERENCE_COMMANDS, TEXT_COMMANDS
 
 
 _MATHJAX_URL = "https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-chtml.js"
@@ -25,14 +26,15 @@ _INLINE_SAFE = {
     "alpha", "beta", "gamma", "delta", "epsilon", "theta", "lambda", "mu", "pi", "sigma",
     "omega", "sum", "prod", "int", "frac", "sqrt", "left", "right", "mathrm", "mathbf",
     "mathbb", "mathcal", "text", "cdot", "times", "leq", "geq", "infty", "partial",
-    "nabla", "ell", "operatorname", "overline", "hat", "bar", "tilde",
+    "nabla", "ell", "operatorname", "overline", "hat", "bar", "tilde", *MATH_COMMANDS,
+    *REFERENCE_COMMANDS, *TEXT_COMMANDS,
 }
 _UNSAFE_MATH = re.compile(r"\\(?:href|url|html\w*|class|style|cssId|cssClass)(?![A-Za-z@])|(?:javascript|data|vbscript)\s*:", re.I)
 _MATH_SAFE = {
     "begin", "end", "label", "tag", "notag", "nonumber", "text", "mathrm", "mathbf", "mathbb", "mathcal",
     "alpha", "beta", "gamma", "delta", "epsilon", "theta", "lambda", "mu", "pi", "sigma", "omega",
     "sum", "prod", "int", "frac", "sqrt", "left", "right", "cdot", "times", "leq", "geq",
-    "infty", "partial", "nabla", "ell", "operatorname", "overline", "hat", "bar", "tilde",
+    "infty", "partial", "nabla", "ell", "operatorname", "overline", "hat", "bar", "tilde", *MATH_COMMANDS,
 }
 
 
@@ -139,10 +141,12 @@ def _dom_html(node: object, project: ParsedProject, side: str, inline: list[Pars
     name = getattr(node, "nodeName", "")
     if name == "#text":
         return _e(str(node))
+    if name == "sep":
+        return " · "
     if name in {"label", "centering", "hfill", "noindent"}:
         return ""
-    if name in {*CITATION_COMMANDS, "ref", "eqref", "autoref", "pageref", "math", "displaymath"}:
-        kind = "citation" if name in CITATION_COMMANDS else "reference" if name.endswith("ref") else "inline_math"
+    if name in {*CITATION_COMMANDS, *REFERENCE_COMMANDS, "math", "displaymath"}:
+        kind = "citation" if name in CITATION_COMMANDS else "reference" if name in REFERENCE_COMMANDS else "inline_math"
         candidates = [item for item in inline if item.review.type == kind]
         index = cursors.get(kind, 0)
         item = candidates[index] if index < len(candidates) else None
@@ -222,6 +226,42 @@ def _inline_html(raw: str, project: ParsedProject, side: str, inline: list[Parse
         pieces.append(_inline_html(raw[cursor:], project, side, suffix, diagnostics, source,
                                    None if base_start is None else base_start + cursor))
         return "".join(pieces)
+    sites = sorted((item for item in inline if item.review.type in {"citation", "reference"}),
+                   key=lambda item: item.expanded_start)
+    if sites:
+        pieces = []
+        cursor = 0
+        for item in sites:
+            relative = item.expanded_start - base_start if base_start is not None else raw.find(item.review.raw_latex, cursor)
+            if relative < cursor or relative + len(item.review.raw_latex) > len(raw):
+                continue
+            prefix = [child for child in inline if child.review.type not in {"citation", "reference"} and
+                      (base_start is None or base_start + cursor <= child.expanded_start < base_start + relative)]
+            pieces.append(_inline_html(raw[cursor:relative], project, side, prefix, diagnostics, source,
+                                       None if base_start is None else base_start + cursor))
+            anchor = f' id="{_e(_anchor(side, item.review.id))}" data-node-id="{_e(item.review.id)}"'
+            if item.review.type == "citation":
+                for key in item.citations:
+                    if key not in project.bibliography and diagnostics is not None:
+                        diagnostic = _missing_bibliography(key, project, side, item.review.source)
+                        if diagnostic not in diagnostics:
+                            diagnostics.append(diagnostic)
+                pieces.append(_citation_html(item.citations, project, side, anchor))
+            else:
+                key = item.references[0] if item.references else ""
+                target = project.labels.get(key)
+                if target:
+                    node_info = project.by_id()[target].review
+                    label = node_info.section_path[-1] if node_info.type in {"part", "chapter", "section", "subsection", "subsubsection"} and node_info.section_path else key
+                    pieces.append(f'<a class="cross-ref" href="#{_e(_anchor(side, target))}"{anchor}>{_e(label)}</a>')
+                else:
+                    pieces.append(f'<span class="unresolved-ref"{anchor}>?? ({_e(key)})</span>')
+            cursor = relative + len(item.review.raw_latex)
+        suffix = [child for child in inline if child.review.type not in {"citation", "reference"} and
+                  (base_start is None or child.expanded_start >= base_start + cursor)]
+        pieces.append(_inline_html(raw[cursor:], project, side, suffix, diagnostics, source,
+                                   None if base_start is None else base_start + cursor))
+        return "".join(pieces)
     macro_math = [item for item in inline if item.review.type == "inline_math" and
                   any(match.group(1) in project.macros for match in re.finditer(r"\\([A-Za-z@]+)", item.review.raw_latex))]
     if macro_math and base_start is not None:
@@ -279,7 +319,7 @@ def _inline_html(raw: str, project: ParsedProject, side: str, inline: list[Parse
             def collect(node: object) -> None:
                 if type(node).__module__ == "plasTeX.Context":
                     name = getattr(node, "nodeName", "")
-                    if re.search(r"\\" + re.escape(name) + r"(?![A-Za-z@])", raw):
+                    if name not in _INLINE_SAFE and re.search(r"\\" + re.escape(name) + r"(?![A-Za-z@])", raw):
                         unknown.add(name)
                 for child in getattr(node, "childNodes", ()):
                     collect(child)
@@ -385,8 +425,17 @@ def _body(node: ParsedNode, project: ParsedProject, side: str, by_id: dict[str, 
         return f'<p>{_inline_html(node.review.raw_latex, project, side, children, diagnostics, node.review.source, node.expanded_start)}</p>'
     if kind == "equation":
         arrays = "".join(_render_node(child, project, side, by_id, diagnostics, figure_assets)
-                         for child in children if child.review.type == "table")
+                         for child in children if child.review.type == "math_array")
         return _math_preview(node.review.raw_latex, project, side, node.review.source, diagnostics, True) + arrays + _embedded_fallbacks(children, side)
+    if kind == "math_array":
+        return ""  # 已由父公式预览，保留独立来源锚点。
+    if kind == "frontmatter":
+        return "".join(_render_node(child, project, side, by_id, diagnostics, figure_assets) for child in children)
+    if kind in {"abstract", "keywords"}:
+        title = "摘要" if kind == "abstract" else "关键词"
+        return f"<h3>{title}</h3>" + "".join(_render_node(child, project, side, by_id, diagnostics, figure_assets) for child in children)
+    if kind == "metadata":
+        return ""  # 元数据保留结构与来源，正文阅读内容由后续界面批次处理。
     if kind == "list":
         tag = "ol" if node.review.raw_latex.startswith("\\begin{enumerate}") else "ul"
         return f"<{tag}>" + "".join(_render_node(child, project, side, by_id, diagnostics, figure_assets) for child in children) + f"</{tag}>"

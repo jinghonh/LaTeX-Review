@@ -15,7 +15,7 @@ from .structured_diff import align_inline_sites, citation_details, equation_deta
 from .text_diff import TokenEdit, scan_latex, token_edits
 
 
-_TEXT_TYPES = {"paragraph", "part", "chapter", "section", "subsection", "subsubsection"}
+_TEXT_TYPES = {"paragraph", "part", "chapter", "section", "subsection", "subsubsection", "keywords"}
 _VERBATIM_STARTS = (r"\begin{verbatim", r"\begin{Verbatim", r"\begin{lstlisting", r"\begin{minted")
 
 
@@ -118,7 +118,7 @@ def compare_projects(old: ParsedProject, new: ParsedProject, *, review_comments:
 
     def emit(kind: str, left: ReviewNode | None, right: ReviewNode | None, confidence: float,
              categories: tuple[str, ...], details: tuple[ChangeDetail, ...], summary: str,
-             edits: tuple[TokenEdit, ...] = ()) -> None:
+             edits: tuple[TokenEdit, ...] = (), *, count_words: bool = True) -> None:
         nonlocal added_words, removed_words
         change_id = f"change-{len(changes) + 1:06d}"
         changes.append(PrimaryChange(change_id, kind, (right or left).type,
@@ -127,8 +127,9 @@ def compare_projects(old: ParsedProject, new: ParsedProject, *, review_comments:
                                      confidence, categories, details, summary))
         if edits:
             token_changes[change_id] = edits
-            removed_words += sum(token.words for edit in edits for token in edit.old)
-            added_words += sum(token.words for edit in edits for token in edit.new)
+            if count_words:
+                removed_words += sum(token.words for edit in edits for token in edit.old)
+                added_words += sum(token.words for edit in edits for token in edit.new)
 
     def text_change(left: ReviewNode | None, right: ReviewNode | None, confidence: float,
                     reason: str, moved: bool = False) -> None:
@@ -185,7 +186,8 @@ def compare_projects(old: ParsedProject, new: ParsedProject, *, review_comments:
             return
         kind = "moved" if moved else "modified" if left and right else "removed" if left else "added"
         emit(kind, left, right, confidence, tuple(dict.fromkeys(categories)), tuple(details),
-             f"{('正文移动' if kind == 'moved' else '正文修改' if kind == 'modified' else '正文删除' if kind == 'removed' else '正文新增')}；{reason}", text_edits)
+             f"{('关键词' if (right or left).type == 'keywords' else '正文')}{('移动' if kind == 'moved' else '修改' if kind == 'modified' else '删除' if kind == 'removed' else '新增')}；{reason}",
+             text_edits, count_words=(right or left).type != "keywords")
 
     def structured_change(left: ReviewNode | None, right: ReviewNode | None, confidence: float,
                           reason: str, moved: bool = False) -> None:
@@ -196,12 +198,12 @@ def compare_projects(old: ParsedProject, new: ParsedProject, *, review_comments:
                               for project, node in ((old, left_node), (new, right_node)) if node
                               for child in node.review.child_ids)
             details = equation_details(left_node, right_node, diagnostics, unsupported=unsupported)
-            old_arrays = [a[child] for child in left.child_ids if a[child].review.type == "table"] if left else []
-            new_arrays = [b[child] for child in right.child_ids if b[child].review.type == "table"] if right else []
+            old_arrays = [a[child] for child in left.child_ids if a[child].review.type == "math_array"] if left else []
+            new_arrays = [b[child] for child in right.child_ids if b[child].review.type == "math_array"] if right else []
             for index in range(max(len(old_arrays), len(new_arrays))):
                 for detail in table_details(old_arrays[index] if index < len(old_arrays) else None,
                                             new_arrays[index] if index < len(new_arrays) else None):
-                    details.append(ChangeDetail(f"detail-{len(details) + 1:03d}", detail.category, detail.kind,
+                    details.append(ChangeDetail(f"detail-{len(details) + 1:03d}", "equation", detail.kind,
                                                 detail.old_text, detail.new_text, detail.summary,
                                                 detail.source_old, detail.source_new,
                                                 detail.row_old, detail.column_old, detail.row_new, detail.column_new))
@@ -218,9 +220,14 @@ def compare_projects(old: ParsedProject, new: ParsedProject, *, review_comments:
         emit(change_kind, left, right, confidence, tuple(dict.fromkeys(detail.category for detail in details)),
              tuple(details), f"{kind} 整体变化；{reason}")
 
-    def nested_array(node: ReviewNode, by_id: dict[str, ParsedNode]) -> bool:
-        return (node.type == "table" and node.parent_id is not None and
-                by_id[node.parent_id].review.type == "equation")
+    def excluded_prose(node: ReviewNode, by_id: dict[str, ParsedNode]) -> bool:
+        parent = node.parent_id
+        while parent:
+            ancestor = by_id[parent].review
+            if ancestor.type in {"keywords", "metadata"}:
+                return True
+            parent = ancestor.parent_id
+        return False
 
     def compare_one(left: ReviewNode | None, right: ReviewNode | None, confidence: float, reason: str,
                     moved: bool = False) -> None:
@@ -244,7 +251,7 @@ def compare_projects(old: ParsedProject, new: ParsedProject, *, review_comments:
     unmatched_new = {item.node_id: item for item in mapping.new_unmatched}
     for node in old.nodes:
         left = node.review
-        if nested_array(left, a) or not (_is_text_node(left) or left.type in {"equation", "figure", "table"}):
+        if excluded_prose(left, a) or not (_is_text_node(left) or left.type in {"equation", "figure", "table"}):
             continue
         if pair := pairs.get(left.id):
             compare_one(left, b[pair.new_id].review, pair.confidence, pair.reason, pair.moved)
@@ -255,7 +262,7 @@ def compare_projects(old: ParsedProject, new: ParsedProject, *, review_comments:
                                               source_old=left.source))
     for node in new.nodes:
         right = node.review
-        if not nested_array(right, b) and (_is_text_node(right) or right.type in {"equation", "figure", "table"}) and (item := unmatched_new.get(right.id)):
+        if not excluded_prose(right, b) and (_is_text_node(right) or right.type in {"equation", "figure", "table"}) and (item := unmatched_new.get(right.id)):
             compare_one(None, right, item.confidence, item.reason)
             if item.confidence:
                 diagnostics.append(Diagnostic("low_confidence_match", "warning", "节点未可靠配对；按删除与新增处理：" + item.reason,
