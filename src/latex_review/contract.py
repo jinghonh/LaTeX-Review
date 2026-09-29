@@ -1,4 +1,4 @@
-"""供解析、比较和报告模块共用的 1.0 数据契约。"""
+"""供解析、比较和报告模块共用的数据契约。"""
 
 from __future__ import annotations
 
@@ -11,8 +11,8 @@ from typing import Literal, Mapping
 
 from jsonschema import Draft202012Validator
 
-SCHEMA_VERSION = "1.0"
-Category = Literal["text", "equation", "figure", "table", "citation", "comment"]
+SCHEMA_VERSION = "1.1"
+Category = Literal["text", "equation", "figure", "table", "citation", "comment", "move"]
 Kind = Literal["added", "removed", "modified", "moved"]
 
 
@@ -68,6 +68,10 @@ class ChangeDetail:
     summary: str
     source_old: SourceLocation | None = None
     source_new: SourceLocation | None = None
+    row_old: int | None = None
+    column_old: int | None = None
+    row_new: int | None = None
+    column_new: int | None = None
 
 
 @dataclass(frozen=True)
@@ -171,6 +175,9 @@ def _ordered(value: object) -> object:
                 for side in ("source_old", "source_new"):
                     if detail_data[side] is None:
                         del detail_data[side]
+                for coordinate in ("row_old", "column_old", "row_new", "column_new"):
+                    if detail_data[coordinate] is None:
+                        del detail_data[coordinate]
                 item["details"].append(detail_data)
             item["categories"] = sorted(set(change.categories))
             result["changes"].append(item)

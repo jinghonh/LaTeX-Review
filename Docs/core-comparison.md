@@ -1,6 +1,6 @@
 # 核心结构匹配与正文差异
 
-主票 #8 提供 `match_nodes(old, new)` 和 `compare_projects(old, new, review_comments=False)`。参数均为 `parse_project` 返回的 `ParsedProject`；调用方须在 `resolve_sources` 的作用域内完成来源展开与解析。比较结果的 `document` 是现有 1.0 公共契约的 `ReviewDocument`，可交给 `dumps` 与 `validate_document`。`mapping` 是供后续结构化差异分析复用的双侧映射；`token_changes` 按主变更标识保留词元操作，公共契约中的 `ChangeDetail` 同时给出可显示的增删片段。
+主票 #8 提供 `match_nodes(old, new)` 和 `compare_projects(old, new, review_comments=False)`。参数均为 `parse_project` 返回的 `ParsedProject`；调用方须在 `resolve_sources` 的作用域内完成来源展开与解析。比较结果的 `document` 是公共契约的 `ReviewDocument`，可交给 `dumps` 与 `validate_document`。`mapping` 是供结构化差异分析复用的双侧映射；`token_changes` 按主变更标识保留词元操作，公共契约中的 `ChangeDetail` 同时给出可显示的增删片段。
 
 ```python
 with resolve_sources(entry="main.tex", old_dir="old", new_dir="new") as pair:

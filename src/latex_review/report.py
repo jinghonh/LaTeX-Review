@@ -22,7 +22,7 @@ from .structure import ParsedNode, ParsedProject
 
 _IMAGE_SUFFIXES = {".png", ".jpg", ".jpeg", ".svg", ".webp", ".gif"}
 _KIND_LABELS = {"added": "新增", "removed": "删除", "modified": "修改", "moved": "移动"}
-_CATEGORY_LABELS = {"text": "正文", "equation": "公式", "figure": "图", "table": "表格", "citation": "引用", "comment": "注释"}
+_CATEGORY_LABELS = {"text": "正文", "equation": "公式", "figure": "图", "table": "表格", "citation": "引用", "comment": "注释", "move": "移动"}
 _SEVERITY_LABELS = {"info": "提示", "warning": "警告", "error": "错误"}
 
 
@@ -253,7 +253,9 @@ def _change_cards(document: ReviewDocument, anchors: set[str]) -> str:
             detail_new_id = _detail_target(document, change, detail, "new", anchors)
             details.append(f'<li><button type="button" class="detail-jump" data-old="{_e(detail_old_id)}" '
                            f'data-new="{_e(detail_new_id)}" data-old-location="{_e(_location(old_source))}" '
-                           f'data-new-location="{_e(_location(new_source))}">'
+                           f'data-new-location="{_e(_location(new_source))}" '
+                           f'data-old-row="{detail.row_old or ""}" data-old-column="{detail.column_old or ""}" '
+                           f'data-new-row="{detail.row_new or ""}" data-new-column="{detail.column_new or ""}">'
                            f'{_e(_CATEGORY_LABELS.get(detail.category, detail.category))} · '
                            f'{_e(_KIND_LABELS.get(detail.kind, detail.kind))}：{_e(detail.summary)}</button>'
                            f'<small>{_e(detail.old_text or "∅")} → {_e(detail.new_text or "∅")}</small></li>')
@@ -290,6 +292,7 @@ body{{background:#f3f4f6;color:#17212d}}header{{padding:.8rem 1.2rem}}header h1{
 main{{grid-template-columns:repeat(3,minmax(0,1fr));gap:.7rem;padding:.7rem;align-items:start}}
 .preview-side,.changes-side{{height:calc(100vh - 11rem);max-height:none;overflow:auto;background:white;border:1px solid #b8c0ca;border-radius:.35rem;padding:1rem}}
 .changes-side h2{{margin:0 0 .8rem}}.preview-side .is-highlighted{{outline:3px solid #9a5700;outline-offset:3px;background:#fff5d9}}
+.preview-side td.is-cell-highlighted{{outline:3px solid #9a5700;outline-offset:-3px;background:#ffdf93}}
 .change-card{{border:1px solid #adb7c4;border-radius:.35rem;margin:.6rem 0;padding:.7rem;background:#fff}}
 .change-card[hidden]{{display:none}}.change-card:focus-within{{outline:2px solid #244e9b}}
 button,select{{font:inherit}}button:focus-visible,select:focus-visible,a:focus-visible{{outline:3px solid #1d4ed8;outline-offset:2px}}
@@ -297,7 +300,7 @@ button,select{{font:inherit}}button:focus-visible,select:focus-visible,a:focus-v
 .change-jump:hover,.detail-jump:hover{{text-decoration:underline}}.detail-list{{padding-left:1.3rem;margin:.35rem 0}}
 .detail-list li{{margin:.3rem 0}}.detail-list small{{display:block;color:#374151;overflow-wrap:anywhere}}
 .kind{{display:inline-block;border-radius:.2rem;padding:.1rem .3rem;font-weight:700;border:1px solid #53657a}}
-.kind-added{{background:#d8f0df}}.kind-removed{{background:#fce2df}}.kind-modified{{background:#fff0c9}}
+.kind-added{{background:#d8f0df}}.kind-removed{{background:#fce2df}}.kind-modified{{background:#fff0c9}}.kind-moved{{background:#dce9ff}}
 .badge{{display:inline-block;background:#e7edf7;padding:.05rem .25rem;border-radius:.2rem;margin-right:.2rem}}
 .card-meta,.card-source{{font-size:.85rem;color:#374151;margin:.4rem 0}}
 .filters{{display:flex;gap:.5rem;flex-wrap:wrap;margin:.5rem 0}}.filters label{{font-size:.9rem;font-weight:600}}
@@ -317,8 +320,8 @@ button,select{{font:inherit}}button:focus-visible,select:focus-visible,a:focus-v
 <p class="summary-extra">{_e(category_counts)}</p>
 <p id="math-status" role="status">正在加载在线公式排版；原始 TeX 可直接阅读。</p></header>
 <main>{main.group(1)}<section class="changes-side" aria-label="变更" id="changes-side"><h2>变更</h2>
-<div class="filters"><label>操作 <select id="kind-filter"><option value="all">全部</option><option value="added">新增</option><option value="removed">删除</option><option value="modified">修改</option></select></label>
-<label>类别 <select id="category-filter"><option value="all">全部</option><option value="text">正文</option><option value="equation">公式</option><option value="figure">图</option><option value="table">表格</option><option value="citation">引用</option><option value="comment">注释</option></select></label></div>
+<div class="filters"><label>操作 <select id="kind-filter"><option value="all">全部</option><option value="added">新增</option><option value="removed">删除</option><option value="modified">修改</option><option value="moved">移动</option></select></label>
+<label>类别 <select id="category-filter"><option value="all">全部</option><option value="text">正文</option><option value="equation">公式</option><option value="figure">图</option><option value="table">表格</option><option value="citation">引用</option><option value="comment">注释</option><option value="move">移动</option></select></label></div>
 <p id="filter-count" role="status"></p><p id="jump-status" class="jump-status" role="status"></p>{diagnostics_html}{cards}</section></main>
 <script>(function(){{
 const cards=Array.from(document.querySelectorAll('.change-card'));
@@ -337,13 +340,19 @@ document.querySelectorAll('.preview-side').forEach(function(side){{
 document.getElementById('changes-side').addEventListener('click',function(event){{
  const button=event.target.closest('button[data-old][data-new]');if(!button)return;
  document.querySelectorAll('.preview-side .is-highlighted').forEach(function(node){{node.classList.remove('is-highlighted');}});
+ document.querySelectorAll('.preview-side .is-cell-highlighted').forEach(function(node){{node.classList.remove('is-cell-highlighted');}});
  const messages=[];
  [['old','修改前'],['new','修改后']].forEach(function(pair){{
    const side=pair[0],label=pair[1],id=button.dataset[side];
    const panel=document.querySelector('.preview-side[data-side="'+side+'"]');
    const empty=panel.querySelector('.side-empty');
    const node=id?document.getElementById(side+'-'+id):null;
-   if(node){{empty.classList.remove('is-visible');node.classList.add('is-highlighted');node.scrollIntoView({{block:'center',behavior:'auto'}});}}
+   if(node){{empty.classList.remove('is-visible');node.classList.add('is-highlighted');node.scrollIntoView({{block:'center',behavior:'auto'}});
+     const row=button.dataset[side+'Row'],column=button.dataset[side+'Column'];
+     if(row||column)node.querySelectorAll('td[data-row][data-column]').forEach(function(cell){{
+       if((!row||cell.dataset.row===row)&&(!column||cell.dataset.column===column))cell.classList.add('is-cell-highlighted');
+     }});
+   }}
    else{{empty.textContent=label+'侧无对应节点';empty.classList.add('is-visible');}}
    messages.push(label+'：'+button.dataset[side+'Location']);
  }});

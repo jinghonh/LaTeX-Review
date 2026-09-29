@@ -17,6 +17,7 @@ class NodePair:
     new_id: str
     confidence: float
     reason: str
+    moved: bool = False
 
 
 @dataclass(frozen=True)
@@ -172,7 +173,7 @@ def match_nodes(old: ParsedProject, new: ParsedProject) -> NodeMapping:
         if not parents_match(i, j):
             return 0.0, "父节点未配对"
         if not scope_compatible(i, j):
-            return 0.0, "章节不同；跨章节移动留待后续版本"
+            return 0.0, "章节不同；交由独立移动锚点检查"
         if (i, j) not in similarities:
             similarities[i, j] = SequenceMatcher(None, a_text[i], b_text[j], autojunk=False).ratio()
         similarity = similarities[i, j]
@@ -204,6 +205,98 @@ def match_nodes(old: ParsedProject, new: ParsedProject) -> NodeMapping:
         eligible.sort(key=lambda item: (-item[0], item[1], item[2]))
         _, i, j, reason = eligible[0]
         add(i, j, candidates[i, j][0], reason)
+
+    # 跨章节只接受全局唯一的显式标签，或全局唯一且完全一致的正文。
+    # 相似文本本身不构成移动证据。
+    movable = {"paragraph", "equation", "figure", "table"}
+    for i, item in enumerate(a):
+        if i in used_a or item.review.type not in movable:
+            continue
+        options = []
+        for j, candidate in enumerate(b):
+            if j in used_b or candidate.review.type != item.review.type or a_scope[i] == b_scope[j]:
+                continue
+            labels = a_effective_labels[i] & b_effective_labels[j]
+            old_body = _matching_text(re.sub(r"\\label\s*\{[^{}]*\}", "", a_raw[i]), item.review.type)
+            new_body = _matching_text(re.sub(r"\\label\s*\{[^{}]*\}", "", b_raw[j]), item.review.type)
+            unique_label = (any(a_labels[item.review.type, label] == b_labels[item.review.type, label] == 1
+                                for label in labels) and
+                            SequenceMatcher(None, old_body, new_body, autojunk=False).ratio() >= .65)
+            exact = (len(a_text[i]) >= 12 and a_text[i] == b_text[j] and
+                     sum(n.review.type == item.review.type and t == a_text[i] for n, t in zip(a, a_text)) == 1 and
+                     sum(n.review.type == item.review.type and t == b_text[j] for n, t in zip(b, b_text)) == 1)
+            if unique_label or exact:
+                options.append((j, unique_label))
+        if len(options) == 1:
+            j, labelled = options[0]
+            competing = [k for k, candidate in enumerate(a) if k not in used_a and k != i and
+                         candidate.review.type == item.review.type and a_scope[k] != b_scope[j] and
+                         (a_effective_labels[k] & b_effective_labels[j] or a_text[k] == b_text[j])]
+            if not competing:
+                add(i, j, .99 if labelled else .98,
+                    "跨章节唯一标签确认移动" if labelled else "跨章节唯一完整内容确认移动")
+                pairs[-1] = NodePair(pairs[-1].old_id, pairs[-1].new_id, pairs[-1].confidence,
+                                     pairs[-1].reason, True)
+
+    def unique_lis(sequence: list[int]) -> set[int] | None:
+        length, count, predecessor = [], [], []
+        for i, value in enumerate(sequence):
+            previous = [j for j in range(i) if sequence[j] < value]
+            best = max((length[j] for j in previous), default=0)
+            choices = [j for j in previous if length[j] == best]
+            length.append(best + 1)
+            count.append(min(2, sum(count[j] for j in choices)) if choices else 1)
+            predecessor.append(choices[0] if len(choices) == 1 and count[choices[0]] == 1 else None)
+        maximum = max(length, default=0)
+        ends = [i for i, value in enumerate(length) if value == maximum]
+        if sum(count[i] for i in ends) != 1:
+            return None
+        kept: set[int] = set()
+        index = ends[0]
+        while index is not None:
+            kept.add(index)
+            index = predecessor[index]
+        return kept
+
+    # 文档内重排以唯一最长保序锚点识别；并且移动节点本身必须有唯一身份。
+    pair_positions = {pair.old_id: index for index, pair in enumerate(pairs)}
+    b_indices = {node.review.id: index for index, node in enumerate(b)}
+    ambiguous_order: set[str] = set()
+    for scope in set(a_scope):
+        for kind in movable:
+            old_order = [pair for pair in pairs if a[a_indices[pair.old_id]].review.type == kind and
+                         a_scope[a_indices[pair.old_id]] == scope and
+                         b_scope[b_indices[pair.new_id]] == scope]
+            if len(old_order) < 2:
+                continue
+            old_order.sort(key=lambda pair: a_indices[pair.old_id])
+            sequence = [b_indices[pair.new_id] for pair in old_order]
+            kept = unique_lis(sequence)
+            if kept is None:
+                ambiguous_order.update(old_order[index].old_id for index in range(len(sequence))
+                                       if any(sequence[index] > sequence[next_index] for next_index in range(index + 1, len(sequence)))
+                                       or any(sequence[previous] > sequence[index] for previous in range(index)))
+                continue
+            for index, pair in enumerate(old_order):
+                if index in kept:
+                    continue
+                i, j = a_indices[pair.old_id], b_indices[pair.new_id]
+                identity = ("唯一标签" in pair.reason or
+                            a_text[i] == b_text[j] and len(a_text[i]) >= 12 and
+                            sum(t == a_text[i] and n.review.type == kind for n, t in zip(a, a_text)) == 1 and
+                            sum(t == b_text[j] and n.review.type == kind for n, t in zip(b, b_text)) == 1)
+                if identity:
+                    pairs[pair_positions[pair.old_id]] = NodePair(pair.old_id, pair.new_id, pair.confidence,
+                                                                  pair.reason + "；同章节保序锚点确认移动", True)
+                else:
+                    ambiguous_order.add(pair.old_id)
+    if ambiguous_order:
+        for pair in pairs:
+            if pair.old_id in ambiguous_order:
+                used_a.discard(a_indices[pair.old_id])
+                used_b.discard(b_indices[pair.new_id])
+                pair_map.pop(pair.old_id, None)
+        pairs = [pair for pair in pairs if pair.old_id not in ambiguous_order]
 
     def unmatched(side: str) -> tuple[UnmatchedNode, ...]:
         own, other, used, other_used = (a, b, used_a, used_b) if side == "old" else (b, a, used_b, used_a)

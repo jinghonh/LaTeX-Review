@@ -12,6 +12,7 @@ from plasTeX.TeX import TeX
 
 from .contract import Diagnostic, ReviewNode, SourceLocation
 from .structure import ParsedNode, ParsedProject, _argument, _masked, _quiet_plastex
+from .table_model import parse_table
 
 
 _MATHJAX_URL = "https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-chtml.js"
@@ -188,23 +189,16 @@ def _embedded_fallbacks(children: list[ParsedNode], side: str) -> str:
 
 
 def _table_preview(raw: str) -> str | None:
-    """只展示简单 tabular/array；复杂宏由双侧源码预览承担。"""
-    opening = re.search(r"\\begin\{(?:tabular\*?|array)\}(?:\[[^\]]*\])?\{[^{}]*\}", raw)
-    if not opening:
+    """预览和差异使用相同的保守表格边界。"""
+    grid, _ = parse_table(raw)
+    if grid is None:
         return None
-    closing = re.search(r"\\end\{(?:tabular\*?|array)\}", raw[opening.end():])
-    if not closing:
-        return None
-    body = raw[opening.end():opening.end() + closing.start()]
-    if re.search(r"\\(?!hline\b|cline\b)", re.sub(r"(?<!\\)\\\\", "", body)):
-        return None
-    body = re.sub(r"\\hline\b|\\cline\{[^{}]*\}", "", body)
     rows = []
-    for row in re.split(r"(?<!\\)\\\\", body):
-        cells = [cell.strip() for cell in row.split("&")]
-        if any(cells):
-            rows.append("<tr>" + "".join(f"<td>{_e(cell)}</td>" for cell in cells) + "</tr>")
-    return '<table class="table-preview"><tbody>' + "".join(rows) + "</tbody></table>" if rows else None
+    for row_index, row in enumerate(grid.rows, 1):
+        cells = "".join(f'<td data-row="{row_index}" data-column="{column_index}">{_e(cell)}</td>'
+                        for column_index, cell in enumerate(row, 1))
+        rows.append(f"<tr>{cells}</tr>")
+    return '<table class="table-preview"><tbody>' + "".join(rows) + "</tbody></table>"
 
 
 def _body(node: ParsedNode, project: ParsedProject, side: str, by_id: dict[str, ParsedNode], diagnostics: list[Diagnostic],

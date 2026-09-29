@@ -1,12 +1,12 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://github.com/jinghonh/LaTeX-Review/blob/main/src/latex_review/schemas/diff.schema.json",
-  "title": "LaTeX Review diff.json 1.0",
+  "title": "LaTeX Review diff.json 1.1",
   "type": "object",
   "additionalProperties": false,
   "required": ["schema_version", "entry", "old", "new", "nodes_old", "nodes_new", "changes", "diagnostics", "summary"],
   "properties": {
-    "schema_version": {"const": "1.0"},
+    "schema_version": {"enum": ["1.0", "1.1"]},
     "entry": {"type": "string", "minLength": 1},
     "old": {"$ref": "#/$defs/comparison_source"},
     "new": {"$ref": "#/$defs/comparison_source"},
@@ -16,6 +16,18 @@
     "diagnostics": {"type": "array", "items": {"$ref": "#/$defs/diagnostic"}},
     "summary": {"$ref": "#/$defs/summary"}
   },
+  "allOf": [{
+    "if": {"properties": {"schema_version": {"const": "1.0"}}},
+    "then": {"properties": {"changes": {"items": {"properties": {
+      "categories": {"items": {"enum": ["text", "equation", "figure", "table", "citation", "comment"]}},
+      "details": {"items": {"properties": {
+        "category": {"enum": ["text", "equation", "figure", "table", "citation", "comment"]}
+      }, "not": {"anyOf": [
+        {"required": ["row_old"]}, {"required": ["column_old"]},
+        {"required": ["row_new"]}, {"required": ["column_new"]}
+      ]}}}
+    }}}}}
+  }],
   "$defs": {
     "comparison_source": {
       "type": "object", "additionalProperties": false,
@@ -60,10 +72,12 @@
         "id": {"type": "string", "minLength": 1}, "category": {"$ref": "#/$defs/category"},
         "kind": {"$ref": "#/$defs/kind"}, "old_text": {"type": ["string", "null"]},
         "new_text": {"type": ["string", "null"]}, "summary": {"type": "string"},
-        "source_old": {"$ref": "#/$defs/location"}, "source_new": {"$ref": "#/$defs/location"}
+        "source_old": {"$ref": "#/$defs/location"}, "source_new": {"$ref": "#/$defs/location"},
+        "row_old": {"type": "integer", "minimum": 1}, "column_old": {"type": "integer", "minimum": 1},
+        "row_new": {"type": "integer", "minimum": 1}, "column_new": {"type": "integer", "minimum": 1}
       }
     },
-    "category": {"enum": ["text", "equation", "figure", "table", "citation", "comment"]},
+    "category": {"enum": ["text", "equation", "figure", "table", "citation", "comment", "move"]},
     "kind": {"enum": ["added", "removed", "modified", "moved"]},
     "change": {
       "type": "object", "additionalProperties": false,

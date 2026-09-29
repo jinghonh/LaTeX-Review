@@ -6,7 +6,9 @@ from difflib import SequenceMatcher
 import re
 
 from .contract import ChangeDetail, Diagnostic
+from .math_structure import structure_summary
 from .structure import ParsedNode, ParsedProject, _argument, _masked
+from .table_model import parse_table, table_edits
 
 
 _MATH_TOKEN = re.compile(r"\\(?:[A-Za-z@]+|.)|[A-Za-z]+|[0-9]+|[^\s]")
@@ -159,7 +161,7 @@ def equation_details(left: ParsedNode | None, right: ParsedNode | None,
         return details
     old_tokens, old_meta, old_ok = _math_parts(old_raw) if old_raw else ((), (), True)
     new_tokens, new_meta, new_ok = _math_parts(new_raw) if new_raw else ((), (), True)
-    if unsupported or not old_ok or not new_ok:
+    if not old_ok or not new_ok:
         _detail(details, "equation", _kind(left, right), old_raw, new_raw, "公式词元无法可靠解析；保留两侧原文", left, right)
         diagnostics.append(Diagnostic("equation_diff_fallback", "warning", "公式词元无法可靠解析；已保留双侧原文",
                                       left.review.source if left else None, right.review.source if right else None))
@@ -168,8 +170,12 @@ def equation_details(left: ParsedNode | None, right: ParsedNode | None,
         matcher = SequenceMatcher(None, old_tokens, new_tokens, autojunk=False)
         removed = [token for op, a, b, _, _ in matcher.get_opcodes() if op != "equal" for token in old_tokens[a:b]]
         added = [token for op, _, _, c, d in matcher.get_opcodes() if op != "equal" for token in new_tokens[c:d]]
-        summary = f"数学内容词元：{' '.join(removed) or '∅'} → {' '.join(added) or '∅'}"
+        structural = None if unsupported or not left or not right else structure_summary(old_tokens, new_tokens)
+        summary = structural or f"数学内容词元：{' '.join(removed) or '∅'} → {' '.join(added) or '∅'}"
         _detail(details, "equation", _kind(left, right), old_raw, new_raw, summary, left, right)
+        if unsupported:
+            diagnostics.append(Diagnostic("equation_diff_fallback", "warning", "含未支持宏；结构摘要回退公式词元差异",
+                                          left.review.source if left else None, right.review.source if right else None))
     if old_meta != new_meta:
         _detail(details, "equation", _kind(left, right), ", ".join(old_meta) or None,
                 ", ".join(new_meta) or None, "公式标签或编号标记变化（数学内容未由此判定改变）", left, right)
@@ -228,6 +234,29 @@ def table_details(left: ParsedNode | None, right: ParsedNode | None) -> list[Cha
     if old is not None and new is not None and " ".join(_masked(old).split()) == " ".join(_masked(new).split()):
         return []
     details: list[ChangeDetail] = []
+    old_grid, old_reason = parse_table(old) if old is not None else (None, "")
+    new_grid, new_reason = parse_table(new) if new is not None else (None, "")
+    if left and right and old_grid and new_grid:
+        edits = table_edits(old_grid, new_grid)
+        if edits is not None:
+            for edit in edits:
+                description = edit.summary
+                if edit.kind == "modified":
+                    description += f"：{edit.old_text or '∅'} → {edit.new_text or '∅'}"
+                details.append(ChangeDetail(f"detail-{len(details) + 1:03d}", "table", edit.kind,
+                                            old, new, description,
+                                            left.review.source, right.review.source,
+                                            edit.row_old, edit.column_old, edit.row_new, edit.column_new))
+            old_outer = old[:old_grid.start] + old[old_grid.end:]
+            new_outer = new[:new_grid.start] + new[new_grid.end:]
+            if (" ".join(_masked(old_outer).split()) != " ".join(_masked(new_outer).split()) or
+                    old_grid.specification != new_grid.specification or
+                    old_grid.environment != new_grid.environment or not details and old != new):
+                _detail(details, "table", "modified", old, new,
+                        "表格外层、列规格或格式变化；保留两侧原文", left, right)
+            return details
+        old_reason = new_reason = "重复行、空单元格或行列插删使对齐存在歧义"
+    reason = old_reason or new_reason or "表格整体新增或删除"
     _detail(details, "table", _kind(left, right), old, new,
-            "表格整体差异；双侧原文可查看，不提供单元格定位", left, right)
+            f"表格整体差异；{reason}；无法提供单元格定位，双侧原文可查看", left, right)
     return details

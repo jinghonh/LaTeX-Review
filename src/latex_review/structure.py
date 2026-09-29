@@ -20,7 +20,8 @@ _ENV = re.compile(r"\\(begin|end)\s*\{([^{}\s]+)\}")
 _HEADING = {"part": 0, "chapter": 1, "section": 2, "subsection": 3, "subsubsection": 4}
 _MATH_ENV = {"equation", "equation*", "align", "align*", "gather", "gather*", "multline", "multline*", "displaymath", "math"}
 _LIST_ENV = {"itemize", "enumerate", "description"}
-_TABLE_ENV = {"table", "table*", "tabular", "tabular*", "longtable", "array"}
+_TABLE_ENV = {"table", "table*", "tabular", "tabular*", "longtable", "array",
+              "matrix", "pmatrix", "bmatrix", "Bmatrix", "vmatrix", "Vmatrix"}
 _FIGURE_ENV = {"figure", "figure*"}
 _THEOREM_ENV = {"theorem", "lemma", "proposition", "corollary", "definition", "remark", "proof", "example", "claim"}
 _SAFE_COMMANDS = {
@@ -388,11 +389,11 @@ class _Builder:
                 i += 1
 
     def _array_children(self, parent: str, start: int, end: int) -> None:
-        """数学块中的 array 是从属表格，保留其独立来源和预览节点。"""
+        """数学块中的 array 和矩阵是从属表格，保留独立来源和预览节点。"""
         i = start
         while match := _ENV.search(self.mask, i, end):
             i = match.end()
-            if match.group(1) != "begin" or match.group(2) != "array":
+            if match.group(1) != "begin" or match.group(2) not in {"array", "matrix", "pmatrix", "bmatrix", "Bmatrix", "vmatrix", "Vmatrix"}:
                 continue
             extent = _environment_end(self.mask, match.start(), end)
             if extent:
