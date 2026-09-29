@@ -50,6 +50,37 @@ def test_bibliography_two_sides_missing_duplicate_and_no_semantic_change(tmp_pat
     assert json.loads(report.diff_json.read_text(encoding="utf-8"))["summary"]["changes"] == 0
 
 
+def test_citation_optional_note_braces_do_not_replace_the_citation_key(tmp_path):
+    old, new = _roots(tmp_path, r"\begin{document}\citep[compare {KeyA}]{ref}\bibliography{refs}\end{document}")
+    for root in (old, new):
+        _write(root, "refs.bib", "@article{ref, author={实际作者}, title={实际题目}, year={2024}}")
+    with resolve_sources(entry="main.tex", old_dir=old, new_dir=new) as pair:
+        before, after = parse_project(pair.old.expand()), parse_project(pair.new.expand())
+        result = render_preview(before, after)
+    assert next(node.citations for node in before.nodes if node.review.type == "citation") == ("ref",)
+    assert "实际作者" in result.html and "实际题目" in result.html
+    assert "KeyA<small class=\"citation-metadata\"" not in result.html
+    assert not any(item.code == "bibliography_key_unresolved" for item in result.diagnostics)
+
+
+def test_parenthesized_bibtex_entry_ignores_protected_closing_parentheses(tmp_path):
+    source = r"\begin{document}\cite{braced,quoted}\bibliography{refs}\end{document}"
+    old, new = _roots(tmp_path, source)
+    content = ('@article(braced, author={甲}, title={A closing ) inside a braced field}, year={2024})\n'
+               '@article(quoted, author={乙}, title="A closing ) inside a quoted field", year={2025})\n')
+    for root in (old, new):
+        _write(root, "refs.bib", content)
+    with resolve_sources(entry="main.tex", old_dir=old, new_dir=new) as pair:
+        before, after = parse_project(pair.old.expand()), parse_project(pair.new.expand())
+        result = render_preview(before, after)
+    assert before.bibliography["braced"].title == "A closing ) inside a braced field"
+    assert before.bibliography["braced"].year == "2024"
+    assert before.bibliography["quoted"].title == "A closing ) inside a quoted field"
+    assert before.bibliography["quoted"].year == "2025"
+    assert "A closing ) inside a braced field" in result.html
+    assert not any(item.code == "bibliography_missing_field" for item in result.diagnostics)
+
+
 def test_unsupported_bibliography_keeps_key_and_preview(tmp_path):
     old, new = _roots(tmp_path, r"\begin{document}\cite{handmade}\begin{thebibliography}{9}"
                       r"\bibitem{handmade} 原始条目。\end{thebibliography}\end{document}")

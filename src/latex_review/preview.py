@@ -125,8 +125,12 @@ def _dom_html(node: object, project: ParsedProject, side: str, inline: list[Pars
         anchor = f' id="{_e(_anchor(side, item.review.id))}" data-node-id="{_e(item.review.id)}"' if item else ""
         if kind == "inline_math":
             return f"<span{anchor}>{_math_preview(raw, project, side, item.review.source if item else SourceLocation(None, None, None, confidence=0, uncertainty_reason='公式来源不确定'), diagnostics, False)}</span>"
-        key_match = re.search(r"\{([^{}]+)\}", raw)
-        keys = key_match.group(1).split(",") if key_match else []
+        if item:
+            keys = item.citations if kind == "citation" else item.references
+        else:
+            command = re.match(r"\\[A-Za-z@]+", raw)
+            argument = _argument(_masked(raw), command.end()) if command else None
+            keys = tuple(part.strip() for part in argument[1].split(",")) if argument else ()
         if kind == "citation":
             parts = []
             for key in keys:

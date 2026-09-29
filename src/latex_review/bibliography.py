@@ -26,14 +26,27 @@ def _location(file: str, text: str, offset: int) -> SourceLocation:
 
 def _group(text: str, start: int, opening: str, closing: str) -> int | None:
     depth = 1
+    braces = 0
+    quoted = False
     index = start + 1
     while index < len(text):
-        if text[index] == "\\":
+        char = text[index]
+        if char == "\\":
             index += 2
             continue
-        if text[index] == opening:
+        if char == '"' and ((opening == "{" and depth == 1) or (opening == "(" and braces == 0)):
+            quoted = not quoted
+        elif quoted:
+            pass
+        elif opening == "(" and char == "{":
+            braces += 1
+        elif opening == "(" and char == "}" and braces:
+            braces -= 1
+        elif opening == "(" and braces:
+            pass
+        elif char == opening:
             depth += 1
-        elif text[index] == closing:
+        elif char == closing:
             depth -= 1
             if depth == 0:
                 return index + 1
