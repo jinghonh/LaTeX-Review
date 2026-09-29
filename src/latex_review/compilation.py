@@ -215,11 +215,12 @@ def _sandbox_ready(profile: Path, project: Path) -> bool:
 
 def compile_side(source: ProjectSource, output_dir: Path, *, engine: str = "pdflatex",
                  timeout: float = 90, output_limit: int = 2 * 1024 * 1024,
-                 sandbox: bool = False) -> tuple[CompileStatus, tuple[Diagnostic, ...]]:
+                 sandbox: bool = False, related_sources: tuple[ProjectSource, ...] = ()
+                 ) -> tuple[CompileStatus, tuple[Diagnostic, ...]]:
     if engine not in _MODES or timeout <= 0 or not 1024 <= output_limit <= 16 * 1024 * 1024:
         raise ValueError("编译引擎、超时或输出上限无效")
     side = source.side
-    safe_path, forbidden = _safe_path(source, output_dir)
+    safe_path, forbidden = _safe_path((source, *related_sources), output_dir)
     latexmk = _program("latexmk", safe_path, forbidden)
     engine_path = _program(engine, safe_path, forbidden)
     reason = None

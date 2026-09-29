@@ -253,7 +253,9 @@ def main(argv: list[str] | None = None) -> int:
                     if source.side == "old" and new_only:
                         built.append(skipped_side(output, engine))
                         continue
-                    status, issues = compile_side(source, output, engine=engine, timeout=timeout, sandbox=sandbox)
+                    peer = pair.new if source.side == "old" else pair.old
+                    status, issues = compile_side(source, output, engine=engine, timeout=timeout, sandbox=sandbox,
+                                                  related_sources=(peer,))
                     built.append(status)
                     compile_diagnostics += issues
                 statuses = tuple(built)

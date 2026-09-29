@@ -21,7 +21,7 @@ from latex_review.visual import align_pages
 
 
 def _source(root: Path, text: str, side: str = "new") -> ProjectSource:
-    root.mkdir()
+    root.mkdir(parents=True)
     (root / "main.tex").write_text(text, encoding="utf-8")
     return ProjectSource(side, root, "main.tex", ComparisonSource("directory", str(root)))
 
@@ -213,6 +213,33 @@ def test_only_project_tools_available_refuses_before_execution(tmp_path: Path, m
     status, issues = compile_side(source, output, sandbox=True)
     assert status.status == "unavailable" and issues
     assert not marker.exists()
+
+
+@pytest.mark.skipif(not _ready(), reason="需要 macOS、latexmk 和 Poppler")
+@pytest.mark.parametrize("sandbox", [False, True])
+def test_other_side_project_tool_is_excluded_from_both_compilations(
+        tmp_path: Path, monkeypatch, sandbox: bool) -> None:
+    old = _source(tmp_path / "old-parent" / "paper", _tex("Old text."), "old")
+    new = _source(tmp_path / "new-parent" / "paper", _tex("New text."), "new")
+    neutral = tmp_path / "neutral"; neutral.mkdir()
+    marker = tmp_path / "outside-sentinel"
+    fake = new.root / "latexmk"
+    content = f"#!/bin/sh\nprintf dangerous > '{marker}'\nprintf 'Latexmk\\n'\n"
+    fake.write_text(content, encoding="utf-8"); fake.chmod(0o755)
+    monkeypatch.setenv("PATH", f"{new.root}:{os.environ['PATH']}")
+    monkeypatch.chdir(neutral)
+    output = tmp_path / "output"
+    options = ["--entry", "main.tex", "--old-dir", str(old.root), "--new-dir", str(new.root),
+               "--output", str(output), "--compile"]
+    if sandbox:
+        options.append("--sandbox-render")
+    assert cli.main(options) in (0, 2)
+    assert not marker.exists()
+    assert fake.read_text() == content
+    assert (old.root / "main.tex").read_text() == _tex("Old text.")
+    assert (new.root / "main.tex").read_text() == _tex("New text.")
+    assert all(json.loads((output / f"compiled/{side}/status.json").read_text())["status"] == "success"
+               for side in ("old", "new"))
 
 
 @pytest.mark.skipif(not _ready(), reason="需要 macOS 与 TeX 工具")
