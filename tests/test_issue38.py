@@ -129,3 +129,43 @@ def test_duplicate_label_reports_each_original_file(tmp_path):
     duplicate = next(item for item in diagnostics if item.code == "duplicate_label")
     assert [(site.file, site.start_line) for site in duplicate.related_sources_new] == [
         ("a.tex", 1), ("b.tex", 1)]
+
+
+def test_unreadable_bibliography_does_not_invent_new_missing_key(tmp_path):
+    source = "\\bibliography{refs}\n\\begin{document}\\cite{known}\\end{document}"
+    old, new = _pair(tmp_path, source, source)
+    (old / "refs.bib").write_text("@article{known, title={Known}}\n", encoding="utf-8")
+    (new / "refs.bib").write_bytes(b"\xff\xfe")
+    with resolve_sources(entry="main.tex", old_dir=old, new_dir=new) as pair:
+        before, after = parse_project(pair.old.expand()), parse_project(pair.new.expand())
+        assert any(item.code == "bibliography_unreadable" for item in after.diagnostics)
+        assert not any(item.code == "bibliography_key_unresolved" for item in check_rules(before, after))
+        report = write_report(before, after, compare_projects(before, after), tmp_path / "out")
+    codes = {item["code"] for item in json.loads((report.directory / "diagnostics.json").read_text())["diagnostics"]}
+    assert "bibliography_unreadable" in codes
+    assert "bibliography_key_unresolved" not in codes
+
+
+def test_inline_verb_and_verb_star_do_not_produce_rule_findings(tmp_path):
+    source = r"""\begin{document}
+\verb|\cite{missing} \ref{y}| and \verb*+\label{dup}\label{dup}+
+\verb!% \cite{also-missing}! followed by \ref{x} and \label{x}.
+\end{document}"""
+    old, new = _pair(tmp_path, source, source)
+    with resolve_sources(entry="main.tex", old_dir=old, new_dir=new) as pair:
+        assert check_rules(parse_project(pair.old.expand()), parse_project(pair.new.expand())) == ()
+
+
+def test_comma_is_only_a_separator_for_citation_keys(tmp_path):
+    source = r"""\begin{document}
+\begin{figure}\caption{Comma label}\label{fig:a,b}\end{figure}
+\ref{fig:a,b} and \ref{missing,a}
+\cite{first,second}
+\end{document}"""
+    old, new = _pair(tmp_path, source, source)
+    with resolve_sources(entry="main.tex", old_dir=old, new_dir=new) as pair:
+        diagnostics = check_rules(parse_project(pair.old.expand()), parse_project(pair.new.expand()))
+    keys = {(item.code, item.evidence[0]) for item in diagnostics}
+    assert keys == {("unresolved_reference", "键：missing,a"),
+                    ("bibliography_key_unresolved", "键：first"),
+                    ("bibliography_key_unresolved", "键：second")}

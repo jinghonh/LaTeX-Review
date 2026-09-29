@@ -39,15 +39,45 @@ def _body_range(mask: str) -> tuple[int, int]:
     return start.end(), start.end() + end.start() if end else len(mask)
 
 
+def _rule_mask(text: str) -> str:
+    """屏蔽注释和逐字片段，保持每个原文下标及换行位置。"""
+    chars = list(text)
+    index = 0
+    while index < len(text):
+        if text[index] == "%":
+            end = index
+            while end < len(text) and text[end] not in "\r\n":
+                end += 1
+        elif text[index] == "\\":
+            environment = _VERBATIM.match(text, index) if text.startswith(r"\begin", index) else None
+            if environment:
+                end = environment.end()
+            elif text.startswith(r"\verb", index) and (index + 5 == len(text) or not text[index + 5].isalpha()):
+                delimiter_at = index + 5 + (index + 5 < len(text) and text[index + 5] == "*")
+                if delimiter_at >= len(text) or text[delimiter_at] in "\r\n":
+                    index += 5
+                    continue
+                line_end = min((end for end in (text.find("\r", delimiter_at), text.find("\n", delimiter_at))
+                                if end >= 0), default=len(text))
+                closing = text.find(text[delimiter_at], delimiter_at + 1, line_end)
+                end = closing + 1 if closing >= 0 else line_end
+            else:
+                command = _COMMAND.match(text, index)
+                index = command.end() if command else index + 1
+                continue
+        else:
+            index += 1
+            continue
+        for offset in range(index, end):
+            if chars[offset] not in "\r\n":
+                chars[offset] = " "
+        index = end
+    return "".join(chars)
+
+
 def _sites(project: ParsedProject) -> tuple[dict[str, list[_Site]], dict[str, list[_Site]], dict[str, list[_Site]]]:
-    text = project.expanded.text
-    mask = list(_masked(text))
-    start, end = _body_range("".join(mask))
-    for match in _VERBATIM.finditer("".join(mask), start, end):
-        for index in range(match.start(), match.end()):
-            if mask[index] not in "\r\n":
-                mask[index] = " "
-    masked = "".join(mask)
+    masked = _rule_mask(project.expanded.text)
+    start, end = _body_range(masked)
     labels: dict[str, list[_Site]] = defaultdict(list)
     citations: dict[str, list[_Site]] = defaultdict(list)
     references: dict[str, list[_Site]] = defaultdict(list)
@@ -64,8 +94,9 @@ def _sites(project: ParsedProject) -> tuple[dict[str, list[_Site]], dict[str, li
                  if command == "label" else None)
         location = _location(project.expanded, project.expanded.origin_ranges(match.start(), argument[0]))
         target = labels if command == "label" else citations if command in CITATION_COMMANDS else references
-        for key in (part.strip() for part in argument[1].split(",")):
-            if key and (command != "label" or "," not in argument[1]):
+        keys = argument[1].split(",") if command in CITATION_COMMANDS else (argument[1],)
+        for key in (part.strip() for part in keys):
+            if key:
                 target[key].append(_Site(key, location, match.start(), owner))
     return labels, citations, references
 
@@ -73,8 +104,9 @@ def _sites(project: ParsedProject) -> tuple[dict[str, list[_Site]], dict[str, li
 def _findings(project: ParsedProject) -> dict[tuple[str, str], list[_Site]]:
     labels, citations, references = _sites(project)
     findings: dict[tuple[str, str], list[_Site]] = {}
+    bibliography_unreadable = any(item.code == "bibliography_unreadable" for item in project.diagnostics)
     for key, sites in citations.items():
-        if key not in project.bibliography and f"bib:{key}" not in project.labels:
+        if not bibliography_unreadable and key not in project.bibliography and f"bib:{key}" not in project.labels:
             findings[("bibliography_key_unresolved", key)] = sites
     for key, sites in references.items():
         if key not in labels:
