@@ -233,6 +233,25 @@ def test_clear_cache_removes_interrupted_writes_but_keeps_foreign_files(tmp_path
     assert link.is_symlink() and outside.read_text(encoding="utf-8") == "keep"
 
 
+def test_clear_cache_rejects_hex_named_foreign_file_without_partial_delete(tmp_path):
+    paper = tmp_path / "paper"
+    paper.mkdir()
+    fixture(paper)
+    cache_dir = tmp_path / "custom-cache"
+    assert run(paper, "--cache-dir", str(cache_dir)).returncode == 0
+    valid_entries = {entry.name for entry in cache_dir.iterdir()}
+    assert len(valid_entries) == 2
+    foreign = cache_dir / ("a" * 64 + ".json")
+    foreign.write_text("普通文本文件", encoding="utf-8")
+    rejected = run(paper, "--cache-dir", str(cache_dir), "--clear-cache")
+    assert rejected.returncode == 64
+    assert foreign.read_text(encoding="utf-8") == "普通文本文件"
+    assert valid_entries <= {entry.name for entry in cache_dir.iterdir()}
+    foreign.unlink()
+    assert run(paper, "--cache-dir", str(cache_dir), "--clear-cache").returncode == 0
+    assert states(paper) == ["miss", "miss"]
+
+
 def test_graphicspath_changes_resolved_path_with_same_bytes(tmp_path):
     old, new = tmp_path / "old", tmp_path / "new"
     for root, folder in ((old, "fig/old"), (new, "fig/new")):

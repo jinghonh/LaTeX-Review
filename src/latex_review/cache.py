@@ -30,6 +30,28 @@ def _json(value: object) -> bytes:
     return json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8")
 
 
+def _read_envelope(path: Path, key: str) -> dict:
+    envelope = json.loads(path.read_text(encoding="utf-8"))
+    if not isinstance(envelope, dict):
+        raise ValueError("缓存信封无效")
+    parsed = envelope.get("parsed")
+    if (envelope.get("format") != CACHE_FORMAT or envelope.get("key") != key or
+            not isinstance(parsed, dict) or not isinstance(parsed.get("nodes"), list) or
+            not isinstance(parsed.get("diagnostics"), list) or not isinstance(parsed.get("labels"), dict) or
+            envelope.get("checksum") != _digest(_json(parsed))):
+        raise ValueError("缓存校验失败")
+    return envelope
+
+
+def is_managed_cache_file(path: Path) -> bool:
+    """清理前确认文件内容确实是与文件名匹配的完整缓存信封。"""
+    try:
+        _read_envelope(path, path.stem)
+        return True
+    except (OSError, UnicodeError, ValueError, TypeError):
+        return False
+
+
 def implementation_versions() -> dict[str, str]:
     root = Path(__file__).parent
     return {"parser": _digest(_json({name: _digest((root / name).read_bytes()) for name in _PARSER_FILES})),
@@ -128,10 +150,7 @@ class ParseCache:
         parsed = None
         if self.enabled:
             try:
-                envelope = json.loads(path.read_text(encoding="utf-8"))
-                if (envelope["format"] != CACHE_FORMAT or envelope["key"] != parse_key or
-                        envelope["checksum"] != _digest(_json(envelope["parsed"]))):
-                    raise ValueError("缓存校验失败")
+                envelope = _read_envelope(path, parse_key)
                 parsed = _parsed_from_json(expanded, envelope["parsed"])
                 state = "hit"
             except FileNotFoundError:

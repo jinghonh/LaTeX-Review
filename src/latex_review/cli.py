@@ -14,7 +14,7 @@ import subprocess
 import sys
 import tomllib
 
-from .cache import ParseCache
+from .cache import ParseCache, is_managed_cache_file
 from .comparison import compare_projects
 from .contract import Diagnostic, SourceLocation
 from .report import ReportPathError, write_cache_metadata, write_failure_diagnostics, write_report, write_source_fallback
@@ -145,7 +145,7 @@ def _clear_cache(directory: Path, options: dict, *, managed_default: bool) -> No
         raise ConfigurationError("缓存路径已存在且不是目录")
     entries = tuple(directory.iterdir())
     if any(entry.is_symlink() or not entry.is_file() or
-           not (re.fullmatch(r"[0-9a-f]{64}\.json", entry.name) or
+           not ((re.fullmatch(r"[0-9a-f]{64}\.json", entry.name) and is_managed_cache_file(entry)) or
                 re.fullmatch(r"\.write-[A-Za-z0-9_-]+(?:\.tmp)?", entry.name)) for entry in entries):
         raise ConfigurationError("缓存目录含非缓存文件，拒绝清理")
     for entry in entries:
