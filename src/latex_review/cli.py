@@ -14,7 +14,7 @@ import subprocess
 import sys
 import tomllib
 
-from .cache import ParseCache, is_managed_cache_file
+from .cache import ParseCache, is_managed_cache_file, stage_prefix
 from .comparison import compare_projects
 from .contract import Diagnostic, SourceLocation
 from .report import ReportPathError, write_cache_metadata, write_failure_diagnostics, write_report, write_source_fallback
@@ -139,19 +139,24 @@ def _clear_cache(directory: Path, options: dict, *, managed_default: bool) -> No
         raise ConfigurationError("缓存清理目录不能覆盖论文来源目录")
     if not managed_default and any(root in directory.parents for root in roots):
         raise ConfigurationError("指定缓存目录位于论文来源内，拒绝清理")
-    if not directory.exists():
-        return
-    if not directory.is_dir():
+    if directory.exists() and not directory.is_dir():
         raise ConfigurationError("缓存路径已存在且不是目录")
-    entries = tuple(directory.iterdir())
+    prefix = stage_prefix(directory)
+    stages = tuple(entry for entry in directory.parent.iterdir()
+                   if re.fullmatch(re.escape(prefix) + r"[A-Za-z0-9_-]+\.tmp", entry.name)) if directory.parent.is_dir() else ()
+    if any(entry.is_symlink() or not entry.is_file() or not is_managed_cache_file(entry, temporary=True)
+           for entry in stages):
+        raise ConfigurationError("缓存暂存目录含无法确认归属的文件，拒绝清理")
+    entries = tuple(directory.iterdir()) if directory.exists() else ()
     if any(entry.is_symlink() or not entry.is_file() or
            not ((re.fullmatch(r"[0-9a-f]{64}\.json", entry.name) and is_managed_cache_file(entry)) or
                 (re.fullmatch(r"\.write-[A-Za-z0-9_-]+(?:\.tmp)?", entry.name) and
                  is_managed_cache_file(entry, temporary=True))) for entry in entries):
         raise ConfigurationError("缓存目录含非缓存文件，拒绝清理")
-    for entry in entries:
+    for entry in (*entries, *stages):
         entry.unlink()
-    directory.rmdir()
+    if directory.exists():
+        directory.rmdir()
 
 
 def _inspect(options: dict) -> int:

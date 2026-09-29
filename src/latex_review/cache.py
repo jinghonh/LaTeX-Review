@@ -32,6 +32,12 @@ def _json(value: object) -> bytes:
     return json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8")
 
 
+def stage_prefix(directory: Path) -> str:
+    """把父目录中的写入暂存文件限定到其所属缓存目录。"""
+    owner = _digest(os.fsencode(str(directory.resolve())))[:16]
+    return f".latex-review-stage-{owner}-"
+
+
 def _read_envelope(path: Path, key: str | None) -> dict:
     envelope = json.loads(path.read_text(encoding="utf-8"))
     if not isinstance(envelope, dict):
@@ -174,7 +180,7 @@ class ParseCache:
                     self.directory.mkdir(parents=True, exist_ok=True)
                     # 先在缓存目录外写完整信封；目录内可见的待替换文件始终可校验。
                     with tempfile.NamedTemporaryFile("wb", dir=self.directory.parent,
-                                                     prefix=".latex-review-stage-", suffix=".tmp",
+                                                     prefix=stage_prefix(self.directory), suffix=".tmp",
                                                      delete=False) as stream:
                         staging = Path(stream.name)
                         stream.write(_json(envelope))

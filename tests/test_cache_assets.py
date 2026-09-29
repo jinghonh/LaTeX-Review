@@ -245,6 +245,47 @@ def test_clear_cache_removes_interrupted_writes_but_keeps_foreign_files(tmp_path
     assert link.is_symlink() and outside.read_text(encoding="utf-8") == "keep"
 
 
+def test_clear_cache_removes_owned_stage_after_process_exit(tmp_path):
+    paper = tmp_path / "paper"
+    paper.mkdir()
+    fixture(paper)
+    cache_dir = tmp_path / "custom-cache"
+    child = """
+import os
+from pathlib import Path
+import sys
+import latex_review.cache as cache
+from latex_review.sources import resolve_sources
+from latex_review.structure import ParsedProject
+
+replace = os.replace
+def stop_before_first_replace(source, target):
+    if Path(source).name.startswith('.latex-review-stage-'):
+        os._exit(91)
+    return replace(source, target)
+cache.os.replace = stop_before_first_replace
+with resolve_sources(entry='main.tex', old_dir=sys.argv[1], new_dir=sys.argv[1]) as pair:
+    cache.ParseCache(Path(sys.argv[2])).parse(pair.old.expand(),
+        parser=lambda expanded: ParsedProject(expanded, (), (), {}))
+"""
+    killed = subprocess.run([sys.executable, "-c", child, str(paper), str(cache_dir)],
+                            env=dict(os.environ, PYTHONPATH=str(ROOT / "src")), capture_output=True, text=True)
+    assert killed.returncode == 91, killed.stderr
+    prefix = cache_module.stage_prefix(cache_dir)
+    owned = list(tmp_path.glob(prefix + "*.tmp"))
+    assert len(owned) == 1 and owned[0].is_file()
+    other_stage = tmp_path / (cache_module.stage_prefix(tmp_path / "other-cache") + "other.tmp")
+    other_stage.write_bytes(owned[0].read_bytes())
+    foreign = tmp_path / (prefix + "user.tmp")
+    foreign.write_text("普通暂存文件", encoding="utf-8")
+    assert run(paper, "--cache-dir", str(cache_dir), "--clear-cache").returncode == 64
+    assert owned[0].is_file() and foreign.read_text(encoding="utf-8") == "普通暂存文件"
+    foreign.unlink()
+    assert run(paper, "--cache-dir", str(cache_dir), "--clear-cache").returncode == 0
+    assert not owned[0].exists()
+    assert other_stage.is_file()
+
+
 def test_clear_cache_rejects_hex_named_foreign_file_without_partial_delete(tmp_path):
     paper = tmp_path / "paper"
     paper.mkdir()
