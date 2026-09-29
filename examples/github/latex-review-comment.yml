@@ -1,0 +1,30 @@
+# 与 latex-review-pr.yml 一起复制；此工作流只运行固定版本的可信发布器。
+name: LaTeX Review Comment
+on:
+  workflow_run:
+    workflows: ["LaTeX Review PR"]
+    types: [completed]
+permissions:
+  actions: read
+  contents: read
+  issues: write
+jobs:
+  comment:
+    runs-on: macos-latest
+    steps:
+      - name: 获取固定版本的审阅工具
+        uses: actions/checkout@v4
+        with:
+          repository: jinghonh/LaTeX-Review
+          ref: REPLACE_WITH_TRUSTED_TOOL_COMMIT
+          path: tool
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: 安装固定版本的发布器
+        run: python -m pip install ./tool
+      - name: 发布或更新评论
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: python -m latex_review.ci_comment
