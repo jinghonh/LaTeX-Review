@@ -25,4 +25,6 @@ python -m pip install '.[test]'
 
 配置从当前目录的 `.latex-review.toml` 读取，也可用 `--config` 指定；显式命令行选项覆盖配置，配置覆盖默认值。支持 `entry`、`output`、`ignore`、`[git].default_old/default_new` 与 `[diff].comments`；`--no-comments` 可覆盖配置中的注释审阅开关。首版的 `--math` 仅支持 `mathjax`，`--format` 仅支持 `html,json`；其他渲染与差异开关只接受首版固定值，未知或不支持的配置会报错。首版不支持 `--compile`。完整报告返回 0，降级报告返回 2，来源不可读取返回 4，内部错误返回 8；一般提示不改变成功状态。无效参数或配置返回 64。
 
+第一点五版可在 `[macros.名称]` 中设置受控宏占位预览；两侧引用会各自显示 `.bib` 作者、题目和年份。支持范围、配置样例和参考文献语义边界见[参考文献与宏占位预览](Docs/bibliography-macros.md)。
+
 契约结构、兼容性和使用样例见 [公共数据契约](Docs/data-contract.md)。解析和预览接口见 [结构解析与内容预览](Docs/structure-preview.md)，比较接口见[结构化内容差异](Docs/structured-content.md)。首版只比较图资源路径，不检测同一路径下的图片内容变化；表格只做整体差异，不定位单元格。运行时依赖包含 `jsonschema` 和 `plasTeX`；`pytest` 属于可选测试依赖。
