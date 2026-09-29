@@ -13,7 +13,7 @@ import sys
 import tomllib
 
 from .comparison import compare_projects
-from .compilation import compile_side, skipped_side
+from .compilation import _program, _safe_path, compile_side, skipped_side
 from .contract import Diagnostic, SourceLocation
 from .report import ReportPathError, write_failure_diagnostics, write_report, write_source_fallback
 from .sources import SourceError, resolve_sources
@@ -258,15 +258,19 @@ def main(argv: list[str] | None = None) -> int:
                     compile_diagnostics += issues
                 statuses = tuple(built)
                 rendering, visual_issues = build_visual(statuses[0], statuses[1], output,
-                                                        comparison.document if comparison else None)
+                                                        comparison.document if comparison else None,
+                                                        sources=(pair.old, pair.new))
                 compile_diagnostics += visual_issues
             if source_fallback:
                 report = write_source_fallback(old_expanded, new_expanded, output, parse_failures=failures,
                                                parsed=tuple(parsed), extra_diagnostics=compile_diagnostics,
                                                rendering=rendering, statuses=statuses)
             else:
+                safe_path, forbidden = _safe_path((pair.old, pair.new), output)
+                pdf_converter = _program("pdftoppm", safe_path, forbidden) or ""
                 report = write_report(parsed[0], parsed[1], comparison, output,
-                                      extra_diagnostics=compile_diagnostics, rendering=rendering, statuses=statuses)
+                                      pdf_converter=pdf_converter, extra_diagnostics=compile_diagnostics,
+                                      rendering=rendering, statuses=statuses)
         print(report.html)
         return 2 if any(d.severity in {"warning", "error"} for d in report.document.diagnostics) else 0
     except ConfigurationError as exc:

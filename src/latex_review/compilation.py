@@ -39,16 +39,37 @@ _MAX_FILE = 16 * 1024 * 1024
 _MAX_TREE = 128 * 1024 * 1024
 
 
-def _program(name: str, marker: str) -> str | None:
-    path = shutil.which(name)
-    if not path:
+class _ToolUnavailable(Exception):
+    pass
+
+
+def _safe_path(sources: ProjectSource | tuple[ProjectSource, ...], output_dir: Path) -> tuple[str, tuple[Path, ...]]:
+    if isinstance(sources, ProjectSource):
+        sources = (sources,)
+    roots = [output_dir.resolve(), Path.cwd().resolve()]
+    for source in sources:
+        roots.extend((source.root.resolve(), source.root.parent.resolve()))
+    forbidden = tuple(dict.fromkeys(roots))
+    entries = []
+    for raw in os.environ.get("PATH", os.defpath).split(os.pathsep):
+        if not raw or not Path(raw).is_absolute():
+            continue
+        candidate = Path(raw)
+        absolute = Path(os.path.abspath(candidate))
+        resolved = candidate.resolve()
+        if any(absolute.is_relative_to(root) or resolved.is_relative_to(root) for root in forbidden):
+            continue
+        entries.append(str(candidate))
+    return os.pathsep.join(entries), forbidden
+
+
+def _program(name: str, path: str, forbidden: tuple[Path, ...]) -> str | None:
+    """仅解析路径，不在宿主运行版本探测。"""
+    found = shutil.which(name, path=path)
+    if found is None:
         return None
-    try:
-        result = subprocess.run((path, "--version"), stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-                                timeout=4, check=False)
-    except (OSError, subprocess.TimeoutExpired):
-        return None
-    return path if result.returncode == 0 and marker.lower() in result.stdout[:4096].decode("utf-8", "replace").lower() else None
+    candidate = Path(found).resolve()
+    return str(candidate) if not any(candidate.is_relative_to(root) for root in forbidden) else None
 
 
 def _copy_project(source: ProjectSource, destination: Path, excluded: Path) -> None:
@@ -93,8 +114,12 @@ def _limits() -> None:
 
 
 def _group_usage(pgid: int) -> tuple[int, int]:
+    process_listing = "/bin/ps" if Path("/bin/ps").is_file() else "/usr/bin/ps"
+    if not Path(process_listing).is_file():
+        return 0, 0
     try:
-        result = subprocess.run(("ps", "-axo", "pgid=,rss="), capture_output=True, timeout=2, check=False)
+        result = subprocess.run((process_listing, "-axo", "pgid=,rss="), capture_output=True,
+                                timeout=2, check=False)
     except (OSError, subprocess.TimeoutExpired):
         return 0, 0
     members = [line.split() for line in result.stdout.splitlines()]
@@ -194,11 +219,13 @@ def compile_side(source: ProjectSource, output_dir: Path, *, engine: str = "pdfl
     if engine not in _MODES or timeout <= 0 or not 1024 <= output_limit <= 16 * 1024 * 1024:
         raise ValueError("编译引擎、超时或输出上限无效")
     side = source.side
-    latexmk = _program("latexmk", "latexmk")
-    engine_path = _program(engine, _ENGINE_MARKERS[engine])
+    safe_path, forbidden = _safe_path(source, output_dir)
+    latexmk = _program("latexmk", safe_path, forbidden)
+    engine_path = _program(engine, safe_path, forbidden)
     reason = None
     if not latexmk or not engine_path:
-        reason = f"缺少可用的 latexmk 或 {engine}；请自行安装并确认二者位于 PATH"
+        reason = (f"缺少可用的 latexmk 或 {engine}；论文目录及当前目录中的工具不会执行，"
+                  "请自行安装受信任的 TeX 工具并确认其位于 PATH")
     status = "unavailable" if reason else "failed"
     exit_code = None
     pdf_rel = log_rel = synctex_rel = None
@@ -216,16 +243,24 @@ def compile_side(source: ProjectSource, output_dir: Path, *, engine: str = "pdfl
                     allowed = [Path(latexmk), Path(engine_path), Path("/usr/bin/env"), Path("/usr/bin/perl"),
                                Path("/bin/sh"), Path("/private/var/select/sh"), Path("/bin/echo"), Path("/bin/cat")]
                     for tool in ("bibtex", "biber", "makeindex", "kpsewhich"):
-                        if found := shutil.which(tool):
+                        if found := _program(tool, safe_path, forbidden):
                             allowed.append(Path(found))
                     _sandbox_profile(profile, project, tuple(allowed))
                     if not _sandbox_ready(profile, project):
                         raise RuntimeError("macOS 沙箱不可用或隔离自检未通过；拒绝高级渲染")
                 out = project / "build"
                 out.mkdir()
-                env = {key: value for key, value in os.environ.items() if key in {"PATH", "LANG", "LC_ALL", "TMPDIR"}}
+                env = {key: value for key, value in os.environ.items() if key in {"LANG", "LC_ALL"}}
                 env.update({"HOME": str(project), "TEXMFOUTPUT": str(out), "openin_any": "p", "openout_any": "p",
-                            "shell_escape": "f", "max_print_line": "1000", "TMPDIR": str(out)})
+                            "shell_escape": "f", "max_print_line": "1000", "TMPDIR": str(out), "PATH": safe_path})
+                for program, marker in ((latexmk, "latexmk"), (engine_path, _ENGINE_MARKERS[engine])):
+                    probe_code, probe_log, probe_reason = _run_bounded(
+                        [program, "--version"], project, env, 4, 4096,
+                        sandbox_profile=profile if sandbox else None)
+                    if probe_code != 0 or marker.lower() not in probe_log.decode("utf-8", "replace").lower():
+                        log = probe_log
+                        raise _ToolUnavailable(f"无法在隔离环境中验证 {Path(program).name} 版本："
+                                               f"{probe_reason or '版本输出不符或退出失败'}")
                 command = [latexmk, "-norc", _MODES[engine], "-interaction=nonstopmode", "-halt-on-error",
                            "-file-line-error", "-latexoption=-no-shell-escape", "-latexoption=-synctex=1",
                            "-outdir=build", source.entry]
@@ -247,6 +282,8 @@ def compile_side(source: ProjectSource, output_dir: Path, *, engine: str = "pdfl
                 else:
                     status = "failed"
                     reason = reason or f"latexmk 退出状态 {exit_code}；详见编译日志"
+            except _ToolUnavailable as exc:
+                status, reason = "unavailable", str(exc)
             except RuntimeError as exc:
                 status, reason = "sandbox_rejected", str(exc)
             except OSError as exc:

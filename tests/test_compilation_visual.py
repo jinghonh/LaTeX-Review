@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 import shutil
 import socket
@@ -12,6 +13,7 @@ import sys
 import pytest
 
 from latex_review import cli
+from latex_review import compilation
 from latex_review.compilation import _run_bounded, _sandbox_profile, compile_side
 from latex_review.contract import ComparisonSource
 from latex_review.sources import ProjectSource
@@ -152,6 +154,65 @@ def test_missing_tool_is_a_diagnostic_not_an_exception(tmp_path: Path, monkeypat
     status, issues = compile_side(source, output)
     assert status.status == "unavailable" and issues[0].code == "compile_failed"
     assert (output / "compiled/new/status.json").is_file()
+
+
+@pytest.mark.skipif(not _ready(), reason="需要 macOS 与 TeX 工具")
+@pytest.mark.parametrize("sandbox", [False, True])
+def test_project_path_tools_never_run_in_host(tmp_path: Path, monkeypatch, sandbox: bool) -> None:
+    marker = tmp_path / "outside-sentinel"
+    source = _source(tmp_path / "paper", _tex("Safe text."))
+    fake_contents = {}
+    for name, version in (("latexmk", "Latexmk"), ("pdflatex", "pdfTeX"), ("ps", "")):
+        fake = source.root / name
+        content = f"#!/bin/sh\nprintf dangerous > '{marker}'\nprintf '{version}\\n'\n"
+        fake.write_text(content, encoding="utf-8"); fake.chmod(0o755)
+        fake_contents[name] = content
+    monkeypatch.setenv("PATH", f".:{source.root}:{tmp_path}:{os.environ['PATH']}")
+    monkeypatch.chdir(source.root)
+    output = tmp_path / "output"; output.mkdir()
+    seen = []
+    original = compilation._run_bounded
+    def observed(command, cwd, env, timeout, output_limit, *, sandbox_profile=None):
+        seen.append((tuple(command), cwd, sandbox_profile))
+        return original(command, cwd, env, timeout, output_limit, sandbox_profile=sandbox_profile)
+    monkeypatch.setattr(compilation, "_run_bounded", observed)
+    status, issues = compile_side(source, output, sandbox=sandbox, timeout=20)
+    assert status.status == "success", (status, issues)
+    assert len(seen) == 3 and sum("--version" in command for command, _, _ in seen) == 2
+    assert all(cwd != source.root for _, cwd, _ in seen)
+    assert all((profile is not None) == sandbox for _, _, profile in seen)
+    assert len({profile for _, _, profile in seen}) == 1
+    assert not marker.exists()
+    assert all((source.root / name).read_text() == content for name, content in fake_contents.items())
+    assert (source.root / "main.tex").read_text() == _tex("Safe text.")
+
+
+@pytest.mark.skipif(not _ready(), reason="需要 macOS、latexmk 和 Poppler")
+def test_page_tools_from_project_path_are_not_executed(tmp_path: Path, monkeypatch) -> None:
+    marker = tmp_path / "outside-sentinel"
+    for name in ("pdfinfo", "pdftoppm", "synctex"):
+        fake = tmp_path / name
+        fake.write_text(f"#!/bin/sh\nprintf dangerous > '{marker}'\n", encoding="utf-8")
+        fake.chmod(0o755)
+    monkeypatch.setenv("PATH", f"{tmp_path}:{os.environ['PATH']}")
+    _, output = _cli(tmp_path, _tex("Old text."), _tex("New text."), "--compile")
+    visual = json.loads((output / "pages/visual.json").read_text())
+    assert visual["comparable"] and visual["old"] and visual["new"]
+    assert not marker.exists()
+
+
+def test_only_project_tools_available_refuses_before_execution(tmp_path: Path, monkeypatch) -> None:
+    marker = tmp_path / "outside-sentinel"
+    source = _source(tmp_path / "paper", _tex("Text."))
+    for name in ("latexmk", "pdflatex"):
+        fake = source.root / name
+        fake.write_text(f"#!/bin/sh\nprintf dangerous > '{marker}'\n", encoding="utf-8")
+        fake.chmod(0o755)
+    monkeypatch.setenv("PATH", str(source.root))
+    output = tmp_path / "output"; output.mkdir()
+    status, issues = compile_side(source, output, sandbox=True)
+    assert status.status == "unavailable" and issues
+    assert not marker.exists()
 
 
 @pytest.mark.skipif(not _ready(), reason="需要 macOS 与 TeX 工具")

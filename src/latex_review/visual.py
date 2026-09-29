@@ -6,14 +6,14 @@ from dataclasses import asdict, dataclass
 import json
 from pathlib import Path
 import re
-import shutil
 import struct
 import subprocess
 import zlib
 
-from .compilation import CompileStatus
+from .compilation import CompileStatus, _program, _safe_path
 from .contract import Diagnostic, ReviewDocument, SourceLocation
 from .report import _write_managed
+from .sources import ProjectSource
 
 
 @dataclass(frozen=True)
@@ -128,12 +128,12 @@ def align_pages(old: list[tuple[int, int, bytes]], new: list[tuple[int, int, byt
     return list(reversed(pairs))
 
 
-def _page_for_location(location: SourceLocation | None, status: CompileStatus, output: Path) -> tuple[int | None, str]:
+def _page_for_location(location: SourceLocation | None, status: CompileStatus, output: Path,
+                       binary: str | None) -> tuple[int | None, str]:
     if status.status != "success" or not status.pdf or not status.synctex:
         return None, "该侧编译文档或位置索引不可用"
     if location is None or not location.file or not location.start_line or not location.end_line or location.confidence < .8:
         return None, "原始源码位置不确定"
-    binary = shutil.which("synctex")
     if not binary:
         return None, "缺少 synctex 定位工具"
     pages = []
@@ -150,11 +150,13 @@ def _page_for_location(location: SourceLocation | None, status: CompileStatus, o
     return (pages[0], "确定") if len(set(pages)) == 1 else (None, "审阅节点跨页")
 
 
-def build_visual(old: CompileStatus, new: CompileStatus, output: Path, document: ReviewDocument | None = None
+def build_visual(old: CompileStatus, new: CompileStatus, output: Path, document: ReviewDocument | None = None,
+                 sources: tuple[ProjectSource, ...] = ()
                  ) -> tuple[dict, tuple[Diagnostic, ...]]:
     result: dict = {"old": [], "new": [], "pairs": [], "changes": {}, "comparable": False}
     diagnostics: list[Diagnostic] = []
-    converter, info = shutil.which("pdftoppm"), shutil.which("pdfinfo")
+    safe_path, forbidden = _safe_path(sources, output)
+    converter, info = (_program(name, safe_path, forbidden) for name in ("pdftoppm", "pdfinfo"))
     if not converter or not info:
         diagnostics.append(Diagnostic("page_tools_missing", "warning", "页面预览需要 pdftoppm 和 pdfinfo"))
     else:
@@ -188,10 +190,11 @@ def build_visual(old: CompileStatus, new: CompileStatus, output: Path, document:
         else:
             diagnostics.append(Diagnostic("pages_not_comparable", "warning", "缺少双侧编译文档；页面视觉差异不可比较"))
     if document:
+        synctex = _program("synctex", safe_path, forbidden)
         for change in document.changes:
             result["changes"][change.id] = {}
             for side, status in (("old", old), ("new", new)):
-                page, reason = _page_for_location(getattr(change, f"source_{side}"), status, output)
+                page, reason = _page_for_location(getattr(change, f"source_{side}"), status, output, synctex)
                 result["changes"][change.id][side] = {"page": page, "reason": reason}
     _write_managed(output, Path("pages/visual.json"),
                    content=(json.dumps(result, ensure_ascii=False, sort_keys=True, indent=2) + "\n").encode())
