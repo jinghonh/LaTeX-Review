@@ -3,7 +3,11 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, replace
+import base64
 from html import escape
+from importlib.resources import files
+import json
+import mimetypes
 import os
 from pathlib import Path
 import re
@@ -24,6 +28,8 @@ _IMAGE_SUFFIXES = {".png", ".jpg", ".jpeg", ".svg", ".webp", ".gif"}
 _KIND_LABELS = {"added": "新增", "removed": "删除", "modified": "修改", "moved": "移动"}
 _CATEGORY_LABELS = {"text": "正文", "equation": "公式", "figure": "图", "table": "表格", "citation": "引用", "comment": "注释"}
 _SEVERITY_LABELS = {"info": "提示", "warning": "警告", "error": "错误"}
+_MAX_EMBEDDED_ASSET = 25 * 1024 * 1024
+_MAX_EMBEDDED_TOTAL = 100 * 1024 * 1024
 
 
 class ReportPathError(OSError):
@@ -34,6 +40,7 @@ class ReportPathError(OSError):
 class ReportResult:
     directory: Path
     document: ReviewDocument
+    single_html: Path | None = None
 
     @property
     def html(self) -> Path:
@@ -46,6 +53,67 @@ class ReportResult:
 
 def _e(value: object) -> str:
     return escape(str(value), quote=True)
+
+
+def _editor_link(project: ParsedProject, location: SourceLocation | None,
+                 template: str | None) -> str | None:
+    if not template or not location or not location.file or not location.start_line:
+        return None
+    source = project.expanded.source
+    if source.identity.kind == "git":
+        return None
+    root = source.worktree_origin or source.root
+    path = (root / location.file).resolve()
+    if not path.is_relative_to(root.resolve()) or not path.is_file():
+        return None
+    return template.format(path=quote(str(path), safe="/"), line=location.start_line,
+                           column=location.start_column or 1)
+
+
+def _source_actions(old: ParsedProject, new: ParsedProject,
+                    old_location: SourceLocation | None, new_location: SourceLocation | None,
+                    template: str | None) -> str:
+    parts = []
+    for side, label, project, location in (("old", "旧", old, old_location), ("new", "新", new, new_location)):
+        if location is None:
+            continue
+        copy = f'<button type="button" class="copy-source" data-location="{_e(_location(location))}">复制{label}侧位置</button>'
+        link = _editor_link(project, location, template)
+        if link:
+            copy += f'<a class="editor-link" href="{_e(link)}" title="在编辑器中打开{label}侧源码">在编辑器打开{label}侧</a>'
+        parts.append(copy)
+    return '<div class="source-actions">' + " ".join(parts) + '</div>' if parts else ""
+
+
+def _validate_editor_template(template: str | None) -> None:
+    if template is None:
+        return
+    if not re.fullmatch(r"vscode://file/\{path\}:\{line\}(?::\{column\})?", template):
+        raise ValueError("编辑器模板仅支持 vscode://file/{path}:{line}[:{column}]")
+
+
+def _single_file_html(html: str, directory: Path) -> str:
+    """仅内嵌报告自身生成的受管资源，不将任意外部路径带入单文件。"""
+    embedded_total = 0
+    def replace_url(match: re.Match[str]) -> str:
+        nonlocal embedded_total
+        attr, url = match.group(1), match.group(2)
+        from urllib.parse import unquote
+        relative = Path(unquote(url))
+        if (relative.is_absolute() or ".." in relative.parts or
+                relative.parts[0] not in {"assets", "previews"}):
+            raise ReportPathError("单文件报告包含不安全的本地资源路径")
+        path = directory / relative
+        if path.is_symlink() or not path.is_file() or not path.resolve().is_relative_to(directory):
+            raise ReportPathError(f"单文件资源无法内嵌：{relative}")
+        size = path.stat().st_size
+        embedded_total += size
+        if size > _MAX_EMBEDDED_ASSET or embedded_total > _MAX_EMBEDDED_TOTAL:
+            raise ReportPathError(f"单文件资源超出内嵌上限：{relative}")
+        media = mimetypes.guess_type(path.name)[0] or "application/octet-stream"
+        encoded = base64.b64encode(path.read_bytes()).decode("ascii")
+        return f'{attr}="data:{media};base64,{encoded}"'
+    return re.sub(r'(src|href)="((?:assets|previews)/[^\"]+)"', replace_url, html)
 
 
 def _location(location: SourceLocation | None) -> str:
@@ -239,7 +307,8 @@ def _diagnostics_html(document: ReviewDocument) -> str:
            f'<h3>诊断 {len(items)}</h3>{body}</section>'
 
 
-def _change_cards(document: ReviewDocument, anchors: set[str]) -> str:
+def _change_cards(document: ReviewDocument, anchors: set[str], old: ParsedProject,
+                  new: ParsedProject, editor_template: str | None) -> str:
     cards = []
     for change in document.changes:
         categories = sorted(set(change.categories) | {detail.category for detail in change.details})
@@ -256,7 +325,8 @@ def _change_cards(document: ReviewDocument, anchors: set[str]) -> str:
                            f'data-new-location="{_e(_location(new_source))}">'
                            f'{_e(_CATEGORY_LABELS.get(detail.category, detail.category))} · '
                            f'{_e(_KIND_LABELS.get(detail.kind, detail.kind))}：{_e(detail.summary)}</button>'
-                           f'<small>{_e(detail.old_text or "∅")} → {_e(detail.new_text or "∅")}</small></li>')
+                           f'<small>{_e(detail.old_text or "∅")} → {_e(detail.new_text or "∅")}</small>'
+                           f'{_source_actions(old, new, old_source, new_source, editor_template)}</li>')
         cards.append(f'<article class="change-card" id="{_e(change.id)}" data-kind="{_e(change.kind)}" '
                      f'data-categories="{_e(" ".join(categories))}">'
                      f'<button type="button" class="change-jump" data-old="{_e(old_id)}" data-new="{_e(new_id)}" '
@@ -266,11 +336,14 @@ def _change_cards(document: ReviewDocument, anchors: set[str]) -> str:
                      f'<strong>{_e(change.summary)}</strong></button>'
                      f'<p class="card-meta">{badges} · 匹配置信度 {change.matching_confidence:.2f}</p>'
                      f'<p class="card-source">旧：{_e(_location(change.source_old))}<br>新：{_e(_location(change.source_new))}</p>'
+                     f'{_source_actions(old, new, change.source_old, change.source_new, editor_template)}'
                      f'<ul class="detail-list">{"".join(details)}</ul></article>')
     return "".join(cards) or '<p class="empty-list">没有检测到主变更。</p>'
 
 
-def _report_html(document: ReviewDocument, preview_html: str) -> str:
+def _report_html(document: ReviewDocument, preview_html: str, old: ParsedProject,
+                 new: ParsedProject, editor_template: str | None,
+                 pairs: tuple[tuple[str, str], ...]) -> str:
     # 预览层拥有节点 HTML 和公式降级逻辑；报告仅将它们嵌入三栏容器。
     style = re.search(r"<style>(.*?)</style>", preview_html, re.S)
     main = re.search(r"<main>(.*?)</main>", preview_html, re.S)
@@ -280,15 +353,18 @@ def _report_html(document: ReviewDocument, preview_html: str) -> str:
     counts = document.summary
     category_counts = " · ".join(f"{_CATEGORY_LABELS.get(key, key)} {value}" for key, value in counts.category_hits.items())
     anchors = set(re.findall(r'\bid="([^"]+)"', main.group(1)))
-    cards = _change_cards(document, anchors)
+    cards = _change_cards(document, anchors, old, new, editor_template)
     diagnostics_html = _diagnostics_html(document)
+    interaction = files("latex_review").joinpath("report_interaction.js").read_text(encoding="utf-8")
+    pairs_json = json.dumps(pairs, ensure_ascii=False).replace("<", "\\u003c")
+    document_json = dumps(document).replace("<", "\\u003c")
     return f'''<!doctype html>
 <html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>LaTeX 三栏审阅报告</title><style>{style.group(1)}
 body{{background:#f3f4f6;color:#17212d}}header{{padding:.8rem 1.2rem}}header h1{{font-size:1.25rem}}
 .summary{{margin:.3rem 0;font-weight:650}}.summary-extra{{margin:.2rem 0;color:#374151}}
 main{{grid-template-columns:repeat(3,minmax(0,1fr));gap:.7rem;padding:.7rem;align-items:start}}
-.preview-side,.changes-side{{height:calc(100vh - 11rem);max-height:none;overflow:auto;background:white;border:1px solid #b8c0ca;border-radius:.35rem;padding:1rem}}
+.preview-side,.changes-side{{height:calc(100vh - 16rem);min-height:20rem;max-height:none;overflow:auto;background:white;border:1px solid #b8c0ca;border-radius:.35rem;padding:1rem}}
 .changes-side h2{{margin:0 0 .8rem}}.preview-side .is-highlighted{{outline:3px solid #9a5700;outline-offset:3px;background:#fff5d9}}
 .change-card{{border:1px solid #adb7c4;border-radius:.35rem;margin:.6rem 0;padding:.7rem;background:#fff}}
 .change-card[hidden]{{display:none}}.change-card:focus-within{{outline:2px solid #244e9b}}
@@ -310,56 +386,36 @@ button,select{{font:inherit}}button:focus-visible,select:focus-visible,a:focus-v
 .report-diagnostics{{border:1px solid #a9b4c1;background:#f8fafc;padding:.5rem;margin:.6rem 0}}
 .report-diagnostics h3{{margin:.1rem 0}}.report-diagnostics ul{{margin:.3rem 0;padding-left:1.2rem}}
 .report-diagnostics li{{margin:.4rem 0;overflow-wrap:anywhere}}.report-diagnostics small{{display:block;color:#374151}}
+.report-controls{{display:flex;gap:1rem;flex-wrap:wrap;margin:.4rem 0}}.source-actions{{display:flex;gap:.45rem;flex-wrap:wrap;margin:.25rem 0}}
+.source-actions button,.source-actions a{{font-size:.8rem}}.context-hidden{{display:none!important}}
 @media(max-width:1000px){{main{{grid-template-columns:1fr}}.preview-side,.changes-side{{height:auto;max-height:none}}}}
 </style></head><body><header><h1>LaTeX 三栏审阅报告</h1>
 <p class="notice">内容预览供审阅，不代表最终编译版式；来源位置可能为近似值。</p>
 <p class="summary" id="report-summary" data-changes="{counts.changes}">主变更 {counts.changes} · 正文增加 {counts.added_words} 词 · 删除 {counts.removed_words} 词</p>
 <p class="summary-extra">{_e(category_counts)}</p>
+<div class="report-controls"><label><input type="checkbox" id="sync-scroll"> 同步滚动</label>
+<label>阅读范围 <select id="reading-mode"><option value="full">完整文档</option><option value="context">变更上下文</option></select></label>
+<button type="button" id="previous-change">上一变更</button><button type="button" id="next-change">下一变更</button></div>
+<p class="notice">按 Alt+↑ / Alt+↓ 可跳到上一项 / 下一项；输入时快捷键不生效。公式排版可能需要联网。</p>
 <p id="math-status" role="status">正在加载在线公式排版；原始 TeX 可直接阅读。</p></header>
 <main>{main.group(1)}<section class="changes-side" aria-label="变更" id="changes-side"><h2>变更</h2>
 <div class="filters"><label>操作 <select id="kind-filter"><option value="all">全部</option><option value="added">新增</option><option value="removed">删除</option><option value="modified">修改</option></select></label>
 <label>类别 <select id="category-filter"><option value="all">全部</option><option value="text">正文</option><option value="equation">公式</option><option value="figure">图</option><option value="table">表格</option><option value="citation">引用</option><option value="comment">注释</option></select></label></div>
 <p id="filter-count" role="status"></p><p id="jump-status" class="jump-status" role="status"></p>{diagnostics_html}{cards}</section></main>
-<script>(function(){{
-const cards=Array.from(document.querySelectorAll('.change-card'));
-const kind=document.getElementById('kind-filter'),category=document.getElementById('category-filter');
-const count=document.getElementById('filter-count'),status=document.getElementById('jump-status');
-function filter(){{let shown=0;cards.forEach(function(card){{
- const visible=(kind.value==='all'||card.dataset.kind===kind.value)&&
- (category.value==='all'||card.dataset.categories.split(' ').includes(category.value));
- card.hidden=!visible;if(visible)shown++;
-}});count.textContent='显示 '+shown+' / '+cards.length+' 项主变更';}}
-kind.addEventListener('change',filter);category.addEventListener('change',filter);filter();
-document.querySelectorAll('.preview-side').forEach(function(side){{
- const empty=document.createElement('p');empty.className='side-empty';empty.setAttribute('role','status');
- side.insertBefore(empty,side.querySelector('h2').nextSibling);
-}});
-document.getElementById('changes-side').addEventListener('click',function(event){{
- const button=event.target.closest('button[data-old][data-new]');if(!button)return;
- document.querySelectorAll('.preview-side .is-highlighted').forEach(function(node){{node.classList.remove('is-highlighted');}});
- const messages=[];
- [['old','修改前'],['new','修改后']].forEach(function(pair){{
-   const side=pair[0],label=pair[1],id=button.dataset[side];
-   const panel=document.querySelector('.preview-side[data-side="'+side+'"]');
-   const empty=panel.querySelector('.side-empty');
-   const node=id?document.getElementById(side+'-'+id):null;
-   if(node){{empty.classList.remove('is-visible');node.classList.add('is-highlighted');node.scrollIntoView({{block:'center',behavior:'auto'}});}}
-   else{{empty.textContent=label+'侧无对应节点';empty.classList.add('is-visible');}}
-   messages.push(label+'：'+button.dataset[side+'Location']);
- }});
- status.textContent=messages.join('；');
-}});
-}})();</script>
+<script type="application/json" id="review-data">{document_json}</script>
+<script>window.reviewNodePairs={pairs_json};</script><script>{interaction}</script>
 {scripts.group(1)}
 </body></html>'''
 
 
 def write_report(old: ParsedProject, new: ParsedProject, comparison: ComparisonResult,
                  output_dir: str | Path, *, pdf_converter: str | None = None,
-                 conversion_timeout: float = 8.0) -> ReportResult:
+                 conversion_timeout: float = 8.0, editor_url_template: str | None = None,
+                 single_file: bool = False) -> ReportResult:
     """在来源快照有效期内写入 report.html、diff.json、diagnostics.json 和双侧资源。"""
     if conversion_timeout <= 0:
         raise ValueError("转换超时必须为正数")
+    _validate_editor_template(editor_url_template)
     requested_directory = Path(output_dir)
     if requested_directory.is_symlink():
         raise ReportPathError("报告输出目录不可为符号链接")
@@ -376,9 +432,12 @@ def write_report(old: ParsedProject, new: ParsedProject, comparison: ComparisonR
     diagnostics = tuple(dict.fromkeys((*comparison.document.diagnostics, *preview.diagnostics, *asset_diagnostics)))
     document = replace(comparison.document, diagnostics=diagnostics)
     diff_json = dumps(document)
-    html = _report_html(document, preview.html)
+    pairs = tuple((pair.old_id, pair.new_id) for pair in comparison.mapping.pairs)
+    html = _report_html(document, preview.html, old, new, editor_url_template, pairs)
     _write_managed(directory, Path("diff.json"), content=diff_json.encode("utf-8"))
     _write_managed(directory, Path("diagnostics.json"),
                    content=dumps(DiagnosticsDocument(diagnostics)).encode("utf-8"))
     _write_managed(directory, Path("report.html"), content=html.encode("utf-8"))
-    return ReportResult(directory, document)
+    single = (_write_managed(directory, Path("report-single.html"),
+                             content=_single_file_html(html, directory).encode("utf-8")) if single_file else None)
+    return ReportResult(directory, document, single)

@@ -1,0 +1,191 @@
+(function () {
+  'use strict';
+  const cards = Array.from(document.querySelectorAll('.change-card'));
+  const panels = Object.fromEntries(['old', 'new'].map(side =>
+    [side, document.querySelector('.preview-side[data-side="' + side + '"]')]));
+  const nodes = Object.fromEntries(['old', 'new'].map(side =>
+    [side, Array.from(panels[side].querySelectorAll('.review-node'))]));
+  const paired = {old: new Map(), new: new Map()};
+  (window.reviewNodePairs || []).forEach(([oldId, newId]) => {
+    paired.old.set(oldId, newId); paired.new.set(newId, oldId);
+  });
+  cards.forEach(card => {
+    const jump = card.querySelector('.change-jump');
+    if (jump.dataset.old && jump.dataset.new) {
+      paired.old.set(jump.dataset.old, jump.dataset.new);
+      paired.new.set(jump.dataset.new, jump.dataset.old);
+    }
+  });
+  const kind = document.getElementById('kind-filter');
+  const category = document.getElementById('category-filter');
+  const mode = document.getElementById('reading-mode');
+  const sync = document.getElementById('sync-scroll');
+  const count = document.getElementById('filter-count');
+  const status = document.getElementById('jump-status');
+  let selected = -1;
+  let mutedUntil = 0;
+
+  for (const side of ['old', 'new']) {
+    const empty = document.createElement('p');
+    empty.className = 'side-empty'; empty.setAttribute('role', 'status');
+    panels[side].insertBefore(empty, panels[side].querySelector('h2').nextSibling);
+  }
+  function visibleCards() { return cards.filter(card => !card.hidden); }
+  function topNode(node, side) {
+    while (node && node.parentElement !== panels[side]) node = node.parentElement.closest('.review-node');
+    return node;
+  }
+  function context() {
+    const keep = {old: new Set(), new: new Set()};
+    for (const card of visibleCards()) {
+      const jump = card.querySelector('.change-jump');
+      for (const side of ['old', 'new']) {
+        const target = jump.dataset[side] && document.getElementById(side + '-' + jump.dataset[side]);
+        const root = target && topNode(target, side);
+        if (!root) continue;
+        keep[side].add(root);
+        const siblings = nodes[side].filter(node => node.parentElement === panels[side]);
+        const index = siblings.indexOf(root);
+        if (index > 0) keep[side].add(siblings[index - 1]);
+        if (index + 1 < siblings.length) keep[side].add(siblings[index + 1]);
+      }
+    }
+    for (const side of ['old', 'new']) {
+      nodes[side].forEach(node => {
+        if (node.parentElement === panels[side])
+          node.classList.toggle('context-hidden', mode.value === 'context' && !keep[side].has(node));
+      });
+    }
+  }
+  function filter() {
+    let shown = 0;
+    cards.forEach(card => {
+      const visible = (kind.value === 'all' || card.dataset.kind === kind.value) &&
+        (category.value === 'all' || card.dataset.categories.split(' ').includes(category.value));
+      card.hidden = !visible; if (visible) shown++;
+    });
+    count.textContent = '显示 ' + shown + ' / ' + cards.length + ' 项主变更';
+    if (selected >= 0 && cards[selected].hidden) selected = -1;
+    context();
+  }
+  kind.addEventListener('change', filter);
+  category.addEventListener('change', filter);
+  mode.addEventListener('change', context);
+  filter();
+
+  function jump(button) {
+    document.querySelectorAll('.preview-side .is-highlighted').forEach(node => node.classList.remove('is-highlighted'));
+    const messages = [];
+    for (const [side, label] of [['old', '修改前'], ['new', '修改后']]) {
+      const panel = panels[side];
+      const empty = panel.querySelector('.side-empty');
+      const id = button.dataset[side];
+      const node = id ? document.getElementById(side + '-' + id) : null;
+      if (node) {
+        if (mode.value === 'context') {
+          const root = topNode(node, side);
+          if (root) root.classList.remove('context-hidden');
+        }
+        empty.classList.remove('is-visible');
+        node.classList.add('is-highlighted');
+        panel.scrollTop += node.getBoundingClientRect().top - panel.getBoundingClientRect().top - panel.clientHeight / 3;
+      } else {
+        empty.textContent = label + '侧无对应节点'; empty.classList.add('is-visible');
+      }
+      messages.push(label + '：' + button.dataset[side + 'Location']);
+    }
+    mutedUntil = performance.now() + 350;
+    status.textContent = messages.join('；');
+  }
+  document.getElementById('changes-side').addEventListener('click', event => {
+    const copy = event.target.closest('.copy-source');
+    if (copy) {
+      const value = copy.dataset.location;
+      function legacyCopy() {
+        const input = document.createElement('textarea');
+        input.value = value; input.style.position = 'fixed'; input.style.opacity = '0';
+        document.body.appendChild(input); input.select();
+        const done = document.execCommand('copy'); input.remove();
+        status.textContent = done ? '已复制：' + value : '无法自动复制，请从卡片位置文字复制。';
+      }
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(value).then(
+          () => { status.textContent = '已复制：' + value; }, legacyCopy);
+      } else legacyCopy();
+      return;
+    }
+    const button = event.target.closest('button[data-old][data-new]');
+    if (!button) return;
+    const card = button.closest('.change-card');
+    selected = cards.indexOf(card);
+    jump(button);
+  });
+  function step(direction) {
+    const visible = visibleCards();
+    if (!visible.length) { status.textContent = '当前筛选没有变更。'; return; }
+    let index = visible.indexOf(cards[selected]);
+    index = Math.max(0, Math.min(visible.length - 1, index + direction));
+    if (selected < 0) index = direction > 0 ? 0 : visible.length - 1;
+    const card = visible[index];
+    selected = cards.indexOf(card);
+    card.scrollIntoView({block: 'nearest', behavior: 'auto'});
+    card.querySelector('.change-jump').focus({preventScroll: true});
+    jump(card.querySelector('.change-jump'));
+  }
+  document.getElementById('previous-change').addEventListener('click', () => step(-1));
+  document.getElementById('next-change').addEventListener('click', () => step(1));
+  document.addEventListener('keydown', event => {
+    const target = event.target;
+    if (event.defaultPrevented || target.isContentEditable ||
+        /^(INPUT|TEXTAREA|SELECT)$/.test(target.tagName)) return;
+    if (event.altKey && !event.ctrlKey && !event.metaKey &&
+        (event.key === 'ArrowUp' || event.key === 'ArrowDown')) {
+      event.preventDefault(); step(event.key === 'ArrowUp' ? -1 : 1);
+    }
+  });
+
+  function nearestAnchor(side, active) {
+    const source = nodes[side].filter(node => node.parentElement === panels[side] && !node.classList.contains('context-hidden'));
+    const other = side === 'old' ? 'new' : 'old';
+    let index = source.indexOf(active);
+    if (index < 0) index = source.findIndex(node => node.contains(active));
+    if (index < 0) return null;
+    for (let offset = 0; offset < source.length; offset++) {
+      for (const candidate of [index - offset, index + offset]) {
+        if (candidate < 0 || candidate >= source.length) continue;
+        const id = paired[side].get(source[candidate].dataset.nodeId);
+        const match = id && document.getElementById(other + '-' + id);
+        if (match && !match.classList.contains('context-hidden')) return [source[candidate], match];
+      }
+    }
+    return null;
+  }
+  function align(side) {
+    if (!sync.checked || performance.now() < mutedUntil || window.matchMedia('(max-width:1000px)').matches) return;
+    const panel = panels[side];
+    const other = panels[side === 'old' ? 'new' : 'old'];
+    const reference = panel.getBoundingClientRect().top + panel.clientHeight / 2;
+    const candidates = nodes[side].filter(node => node.parentElement === panel && !node.classList.contains('context-hidden'));
+    if (!candidates.length) return;
+    const active = candidates.reduce((best, node) =>
+      Math.abs(node.getBoundingClientRect().top - reference) < Math.abs(best.getBoundingClientRect().top - reference) ? node : best);
+    const anchor = nearestAnchor(side, active);
+    if (!anchor) return;
+    const [from, to] = anchor;
+    const fraction = Math.max(0, Math.min(1, (reference - from.getBoundingClientRect().top) / Math.max(1, from.offsetHeight)));
+    const desired = other.scrollTop + to.getBoundingClientRect().top - other.getBoundingClientRect().top +
+      fraction * to.offsetHeight - other.clientHeight / 2;
+    if (Math.abs(desired - other.scrollTop) > 2) {
+      mutedUntil = performance.now() + 180;
+      other.scrollTop = desired;
+    }
+  }
+  for (const side of ['old', 'new']) {
+    let scheduled = false;
+    panels[side].addEventListener('scroll', () => {
+      if (scheduled) return;
+      scheduled = true;
+      requestAnimationFrame(() => { scheduled = false; align(side); });
+    }, {passive: true});
+  }
+})();
