@@ -19,8 +19,8 @@ _VERBATIM_STARTS = (r"\begin{verbatim", r"\begin{Verbatim", r"\begin{lstlisting"
 
 
 def _is_text_node(node: ReviewNode) -> bool:
-    return node.type in _TEXT_TYPES or (node.type in {"environment", "fallback"} and
-                                         node.raw_latex.startswith(_VERBATIM_STARTS))
+    return node.type in _TEXT_TYPES or (node.type == "fallback" and node.parent_id is None) or (
+        node.type in {"environment", "fallback"} and node.raw_latex.startswith(_VERBATIM_STARTS))
 
 
 @dataclass(frozen=True)

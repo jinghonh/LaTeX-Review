@@ -203,6 +203,23 @@ def test_paragraph_whitespace_chinese_counts_and_verbatim_content(tmp_path):
     assert all(change.source_old and change.source_new for change in result.document.changes)
 
 
+def test_top_level_unknown_environment_content_is_not_silently_skipped(tmp_path):
+    for side, abstract in (("old", "Old abstract claim."), ("new", "Revised abstract claim.")):
+        root = tmp_path / side
+        root.mkdir()
+        (root / "main.tex").write_text(
+            "\\begin{document}\\begin{frontmatter}\\begin{abstract}" + abstract +
+            "\\end{abstract}\\end{frontmatter}\n"
+            "\\section{Body}Stable body.\\end{document}\n")
+    with resolve_sources(entry="main.tex", old_dir=tmp_path / "old", new_dir=tmp_path / "new") as pair:
+        result = compare_projects(parse_project(pair.old.expand()), parse_project(pair.new.expand()))
+    assert result.document.summary.changes == 1
+    change = result.document.changes[0]
+    assert change.node_type == "fallback" and "text" in change.categories
+    assert change.source_old.file == change.source_new.file == "main.tex"
+    assert any(detail.old_text == "Old" and detail.new_text == "Revised" for detail in change.details)
+
+
 def test_comment_switch_inline_standalone_and_escaped_percent(tmp_path):
     old, new = next(_projects(tmp_path, "Value \\% literal. % inline old\n\n% standalone old\n",
                               "Value \\% literal. % inline new\n\n% standalone new\n"))
