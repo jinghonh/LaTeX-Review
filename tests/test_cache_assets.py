@@ -1,9 +1,14 @@
 import json
 import os
 from pathlib import Path
+import shutil
 import subprocess
 import sys
 import tempfile
+
+import latex_review.cache as cache_module
+from latex_review.sources import resolve_sources
+from latex_review.structure import ParsedProject
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -282,3 +287,31 @@ def test_graphicspath_changes_resolved_path_with_same_bytes(tmp_path):
     assert rerun.returncode == 0, rerun.stderr
     details = json.loads((output / "diff.json").read_text())["changes"][0]["details"]
     assert sum("图资源路径变化" in detail["summary"] for detail in details) == 1
+
+
+def test_cache_module_change_invalidates_parse_key(tmp_path, monkeypatch):
+    module_root = tmp_path / "module-copy"
+    module_root.mkdir()
+    original_root = Path(cache_module.__file__).parent
+    for name in (*cache_module._PARSER_FILES, *cache_module._RENDERER_FILES):
+        shutil.copy2(original_root / name, module_root / name)
+    monkeypatch.setattr(cache_module, "__file__", str(module_root / "cache.py"))
+    source_root = tmp_path / "paper"
+    source_root.mkdir()
+    write(source_root, "main.tex", "\\section{A}\nStable.\n")
+    with resolve_sources(entry="main.tex", old_dir=source_root, new_dir=source_root) as pair:
+        expanded = pair.old.expand()
+        directory = tmp_path / "parse-cache"
+        parse = lambda project: ParsedProject(project, (), (), {})
+        cold = cache_module.ParseCache(directory)
+        cold.parse(expanded, parser=parse)
+        assert cold.events[0]["state"] == "miss"
+        warm = cache_module.ParseCache(directory)
+        warm.parse(expanded, parser=parse)
+        assert warm.events[0]["state"] == "hit"
+        (module_root / "cache.py").write_bytes((module_root / "cache.py").read_bytes() + b"\n# serialization update\n")
+        changed = cache_module.ParseCache(directory)
+        changed.parse(expanded, parser=parse)
+        assert changed.events[0]["state"] == "miss"
+        assert changed.events[0]["parse_key"] != cold.events[0]["parse_key"]
+        assert changed.versions["parser"] != cold.versions["parser"]
