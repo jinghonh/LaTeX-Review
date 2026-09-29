@@ -11,9 +11,9 @@ import os
 from pathlib import Path
 import re
 import secrets
+import stat
 
 from .contract import Diagnostic, ReviewNode, SourceLocation
-from .source_map import MappedRange, OriginRange
 from .sources import ExpandedProject, SourceError
 from .structure import ParsedNode, ParsedProject, parse_project
 
@@ -78,7 +78,14 @@ def is_owned_stage(directory: Path, path: Path, secret: bytes | None) -> bool:
     if secret is None:
         return False
     match = re.fullmatch(re.escape(stage_prefix(directory)) + r"([0-9a-f]{32})-([0-9a-f]{32})\.tmp", path.name)
-    return bool(match and hmac.compare_digest(match.group(2), _stage_signature(secret, match.group(1))))
+    if not match or path.is_symlink():
+        return False
+    try:
+        mode = path.stat()
+    except OSError:
+        return False
+    return (stat.S_ISREG(mode.st_mode) and mode.st_uid == os.getuid() and mode.st_mode & 0o077 == 0 and
+            hmac.compare_digest(match.group(2), _stage_signature(secret, match.group(1))))
 
 
 def _write_stage(path: Path, content: bytes) -> None:
@@ -143,9 +150,12 @@ def _location(data: dict | None) -> SourceLocation | None:
     return SourceLocation(**data) if data is not None else None
 
 
-def _diagnostic(data: dict) -> Diagnostic:
-    return Diagnostic(data["code"], data["severity"], data["message"],
-                      _location(data.get("source_old")), _location(data.get("source_new")))
+def _diagnostic(data: dict, side: str) -> Diagnostic:
+    old, new = _location(data.get("source_old")), _location(data.get("source_new"))
+    if (old is None) != (new is None):
+        location = old or new
+        old, new = (location, None) if side == "old" else (None, location)
+    return Diagnostic(data["code"], data["severity"], data["message"], old, new)
 
 
 def _parsed_from_json(expanded: ExpandedProject, data: dict) -> ParsedProject:
@@ -159,13 +169,13 @@ def _parsed_from_json(expanded: ExpandedProject, data: dict) -> ParsedProject:
         if (not 0 <= item["expanded_start"] <= item["expanded_end"] <= len(expanded.text) or
                 review.raw_latex != expanded.text[item["expanded_start"]:item["expanded_end"]]):
             raise ValueError("缓存节点与来源不一致")
-        origins = tuple(MappedRange(origin["expanded_start"], origin["expanded_end"],
-                                    OriginRange(**origin["origin"])) for origin in item["origins"])
+        origins = expanded.origin_ranges(item["expanded_start"], item["expanded_end"])
         nodes.append(ParsedNode(review, item["expanded_start"], item["expanded_end"], origins,
                                 tuple(item["labels"]), tuple(item["citations"]),
                                 tuple(item["references"]), tuple(item["assets"]),
-                                tuple(_diagnostic(value) for value in item["diagnostics"])))
-    return ParsedProject(expanded, tuple(nodes), tuple(_diagnostic(value) for value in data["diagnostics"]),
+                                tuple(_diagnostic(value, expanded.source.side) for value in item["diagnostics"])))
+    return ParsedProject(expanded, tuple(nodes),
+                         tuple(_diagnostic(value, expanded.source.side) for value in data["diagnostics"]),
                          dict(data["labels"]))
 
 
@@ -186,6 +196,11 @@ def _parse_dependencies(expanded: ExpandedProject) -> list[str]:
     return sorted(visited)
 
 
+def _canonical_instance(instance: str, side: str) -> str:
+    prefix = f"{side}:"
+    return instance[len(prefix):] if instance.startswith(prefix) else instance
+
+
 class ParseCache:
     def __init__(self, directory: Path, *, enabled: bool = True, config: dict | None = None):
         self.directory = directory
@@ -197,20 +212,34 @@ class ParseCache:
     def parse(self, expanded: ExpandedProject, *, parser=parse_project) -> ParsedProject:
         fingerprints = dependency_fingerprints(expanded)
         graph = [{"kind": dep.kind, "file": dep.file, "from": dep.referenced_from,
-                  "instance": dep.include_instance} for dep in expanded.dependencies]
+                  "instance": _canonical_instance(dep.include_instance, expanded.source.side)}
+                 for dep in expanded.dependencies]
         tex_files = _parse_dependencies(expanded)
+        segments = [{**asdict(segment),
+                     "include_instance": _canonical_instance(segment.include_instance, expanded.source.side)}
+                    for segment in expanded.source_map.segments]
+        issues = [{**asdict(issue), "side": "source"} for issue in expanded.diagnostics]
         parse_input = {"format": CACHE_FORMAT, "versions": self.versions, "entry": expanded.source.entry,
-                       "side": expanded.source.side, "config": self.config,
+                       "config": self.config,
                        "files": {name: fingerprints[name] for name in tex_files},
                        "text": _digest(expanded.text.encode("utf-8")),
-                       "segments": [asdict(segment) for segment in expanded.source_map.segments],
-                       "diagnostics": [asdict(issue) for issue in expanded.diagnostics]}
+                       "segments": segments, "diagnostics": issues}
         parse_key = _digest(_json(parse_input))
         review_key = _digest(_json({"parse": parse_key, "dependencies": fingerprints, "graph": graph}))
         path = self.directory / f"{parse_key}.json"
         state = "bypass" if not self.enabled else "miss"
+        cache_active = self.enabled
+        if cache_active:
+            try:
+                self.directory.mkdir(mode=0o700, parents=True, exist_ok=True)
+                if self.directory.is_symlink():
+                    raise OSError("缓存目录不可为链接")
+                os.chmod(self.directory, 0o700)
+            except OSError:
+                cache_active = False
+                state = "unavailable"
         parsed = None
-        if self.enabled:
+        if cache_active:
             try:
                 envelope = _read_envelope(path, parse_key)
                 parsed = _parsed_from_json(expanded, envelope["parsed"])
@@ -221,7 +250,7 @@ class ParseCache:
                 state = "corrupt"
         if parsed is None:
             parsed = parser(expanded)
-            if self.enabled:
+            if cache_active:
                 payload = {"nodes": [asdict(node) for node in parsed.nodes],
                            "diagnostics": [asdict(diagnostic) for diagnostic in parsed.diagnostics],
                            "labels": parsed.labels}
@@ -229,7 +258,6 @@ class ParseCache:
                             "checksum": _digest(_json(payload))}
                 staging = pending = None
                 try:
-                    self.directory.mkdir(parents=True, exist_ok=True)
                     secret = _ensure_owner_secret(self.directory)
                     staging = self.directory.parent / owned_stage_name(self.directory, secret)
                     _write_stage(staging, _json(envelope))

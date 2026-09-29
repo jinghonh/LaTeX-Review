@@ -301,7 +301,7 @@ with resolve_sources(entry='main.tex', old_dir=sys.argv[1], new_dir=sys.argv[1])
         assert run(paper, "--cache-dir", str(cache_dir), "--clear-cache").returncode == 0
         assert not owned[0].exists()
         final_entries = list(cache_dir.glob("*.json"))
-        assert len(final_entries) == 2
+        assert len(final_entries) == 1  # 双侧内容相同时共用一份角色无关的解析缓存。
         assert all(stat.S_IMODE(path.stat().st_mode) == 0o600 for path in final_entries)
         assert other_stage.is_file()
 
@@ -344,7 +344,7 @@ def test_clear_cache_rejects_hex_named_foreign_file_without_partial_delete(tmp_p
     cache_dir = tmp_path / "custom-cache"
     assert run(paper, "--cache-dir", str(cache_dir)).returncode == 0
     valid_entries = {entry.name for entry in cache_dir.iterdir()}
-    assert len(valid_entries) == 3
+    assert len(valid_entries) == 2
     foreign = cache_dir / ("a" * 64 + ".json")
     foreign.write_text("普通文本文件", encoding="utf-8")
     rejected = run(paper, "--cache-dir", str(cache_dir), "--clear-cache")
@@ -353,7 +353,7 @@ def test_clear_cache_rejects_hex_named_foreign_file_without_partial_delete(tmp_p
     assert valid_entries <= {entry.name for entry in cache_dir.iterdir()}
     foreign.unlink()
     assert run(paper, "--cache-dir", str(cache_dir), "--clear-cache").returncode == 0
-    assert states(paper) == ["miss", "miss"]
+    assert states(paper) == ["miss", "hit"]
 
 
 def test_graphicspath_changes_resolved_path_with_same_bytes(tmp_path):
@@ -414,3 +414,59 @@ def test_cache_module_change_invalidates_parse_key(tmp_path, monkeypatch):
         assert changed.events[0]["state"] == "miss"
         assert changed.events[0]["parse_key"] != cold.events[0]["parse_key"]
         assert changed.versions["parser"] != cold.versions["parser"]
+
+
+def test_cache_secret_is_private_and_valid_name_foreign_stage_is_rejected(tmp_path):
+    fixture(tmp_path)
+    assert run(tmp_path).returncode == 0
+    cache_dir = tmp_path / ".latex-review/cache"
+    assert stat.S_IMODE(cache_dir.stat().st_mode) == 0o700
+    cache_dir.chmod(0o755)  # 模拟旧缓存目录；下次命中前须重新收紧权限。
+    assert run(tmp_path).returncode == 0
+    assert states(tmp_path) == ["hit", "hit"]
+    assert stat.S_IMODE(cache_dir.stat().st_mode) == 0o700
+    cached_names = {path.name for path in cache_dir.glob("*.json")}
+    secret = cache_module.read_owner_secret(cache_dir)
+    forged = cache_dir.parent / cache_module.owned_stage_name(cache_dir, secret)
+    forged.write_text("外部普通文件", encoding="utf-8")
+    forged.chmod(0o644)
+    assert run(tmp_path, "--clear-cache").returncode == 64
+    assert forged.read_text(encoding="utf-8") == "外部普通文件"
+    assert {path.name for path in cache_dir.glob("*.json")} == cached_names
+
+
+def test_git_revision_reused_when_switching_from_new_to_old_side(tmp_path):
+    git(tmp_path, "init", "-q")
+    git(tmp_path, "config", "user.email", "review@example.invalid")
+    git(tmp_path, "config", "user.name", "Review")
+    write(tmp_path, ".gitignore", ".latex-review/\n")
+    write(tmp_path, "main.tex", "\\begin{document}\n\\input{part}\n\\end{document}\n")
+    write(tmp_path, "part.tex", "\\section{B}\nA text.\n")
+    git(tmp_path, "add", ".")
+    git(tmp_path, "commit", "-qm", "A")
+    revision_a = git(tmp_path, "rev-parse", "HEAD")
+    figure = "\\begin{figure}\\includegraphics{fig/p.png}\\caption{Sample}\\end{figure}\n"
+    write(tmp_path, "fig/p.png", b"\x89PNG\r\n\x1a\nimage")
+    write(tmp_path, "part.tex", "\\section{B}\nB text.\n" + figure + "\\includegraphics{missing.png}\n")
+    git(tmp_path, "add", ".")
+    git(tmp_path, "commit", "-qm", "B")
+    revision_b = git(tmp_path, "rev-parse", "HEAD")
+    write(tmp_path, "part.tex", "\\section{B}\nC text.\n" + figure)
+    git(tmp_path, "add", ".")
+    git(tmp_path, "commit", "-qm", "C")
+    revision_c = git(tmp_path, "rev-parse", "HEAD")
+    assert run(tmp_path, "--old", revision_a, "--new", revision_b).returncode == 2
+    first = meta(tmp_path)
+    assert [side["state"] for side in first["sides"]] == ["miss", "miss"]
+    assert run(tmp_path, "--old", revision_b, "--new", revision_c).returncode == 2
+    second = meta(tmp_path)
+    assert [side["state"] for side in second["sides"]] == ["hit", "miss"]
+    assert first["sides"][1]["parse_key"] == second["sides"][0]["parse_key"]
+    data = diff(tmp_path)
+    assert any(node["type"] == "figure" and node["source"]["file"] == "part.tex"
+               and node["source"]["start_line"] == 3 for node in data["nodes_old"])
+    assert any(item["code"] == "missing_dependency" and item["source_old"]["file"] == "part.tex"
+               and item["source_new"] is None for item in data["diagnostics"])
+    assert any(change["source_old"] and change["source_old"]["file"] == "part.tex"
+               for change in data["changes"])
+    assert (tmp_path / ".latex-review/latest/assets/old/fig/p.png").is_file()
