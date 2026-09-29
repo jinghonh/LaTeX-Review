@@ -221,6 +221,13 @@ def figure_details(left: ParsedNode | None, right: ParsedNode | None,
         new_value = ", ".join(new) if isinstance(new, tuple) else new
         _detail(details, "figure", _kind(old if old else None, new if new else None), old_value or None,
                 new_value or None, f"图{name}变化", left, right)
+    if left and right and left.assets == right.assets:
+        for asset in left.assets:
+            old_resolved = (old_fingerprints or {}).get(asset)
+            new_resolved = (new_fingerprints or {}).get(asset)
+            if old_resolved and new_resolved and old_resolved[0] != new_resolved[0]:
+                _detail(details, "figure", "modified", old_resolved[0], new_resolved[0],
+                        f"图资源路径变化：{asset} 的实际解析路径", left, right)
     for asset in sorted(set(left.assets if left else ()) & set(right.assets if right else ())):
         old_resolved = (old_fingerprints or {}).get(asset)
         new_resolved = (new_fingerprints or {}).get(asset)

@@ -181,3 +181,58 @@ def test_same_bytes_new_path_keeps_path_change_and_missing_is_distinct(tmp_path)
     assert any(item["code"] == "missing_dependency" for item in data["diagnostics"])
     assert not any("图资源内容变化" in detail["summary"] for change in data["changes"]
                    for detail in change["details"])
+
+
+def test_clear_cache_rejects_source_directory_and_keeps_files(tmp_path):
+    old, new = tmp_path / "old", tmp_path / "new"
+    for root in (old, new):
+        root.mkdir()
+        write(root, "main.tex", "\\section{A}\nSource remains.\n")
+        write(root, "chapters/part.tex", "Source chapter remains.\n")
+    for cache_dir in (old, old / "chapters"):
+        result = subprocess.run([sys.executable, "-m", "latex_review.cli", "--old-dir", str(old),
+                                 "--new-dir", str(new), "--entry", "main.tex", "--output", str(tmp_path / "report"),
+                                 "--cache-dir", str(cache_dir), "--clear-cache"],
+                                cwd=tmp_path, env=dict(os.environ, PYTHONPATH=str(ROOT / "src")),
+                                capture_output=True, text=True)
+        assert result.returncode == 64, result.stderr
+        assert (old / "main.tex").read_text() == "\\section{A}\nSource remains.\n"
+        assert (old / "chapters/part.tex").read_text() == "Source chapter remains.\n"
+    git_root = tmp_path / "git-paper"
+    git_root.mkdir()
+    fixture(git_root)
+    assert run(git_root, "--cache-dir", str(git_root), "--clear-cache").returncode == 64
+    assert (git_root / "main.tex").is_file()
+    assert (git_root / "chapters/one.tex").is_file()
+
+
+def test_graphicspath_changes_resolved_path_with_same_bytes(tmp_path):
+    old, new = tmp_path / "old", tmp_path / "new"
+    for root, folder in ((old, "fig/old"), (new, "fig/new")):
+        root.mkdir()
+        write(root, "main.tex", "\\graphicspath{{" + folder + "/}}\n"
+              "\\begin{document}\\begin{figure}\\includegraphics{image.png}"
+              "\\caption{Same}\\end{figure}\\end{document}\n")
+        write(root, folder + "/image.png", b"\x89PNG\r\n\x1a\nsame")
+    output = tmp_path / "report"
+    result = subprocess.run([sys.executable, "-m", "latex_review.cli", "--old-dir", str(old),
+                             "--new-dir", str(new), "--entry", "main.tex", "--output", str(output)],
+                            cwd=tmp_path, env=dict(os.environ, PYTHONPATH=str(ROOT / "src")),
+                            capture_output=True, text=True)
+    assert result.returncode == 0, result.stderr
+    data = json.loads((output / "diff.json").read_text())
+    assert data["summary"]["changes"] == 1
+    details = data["changes"][0]["details"]
+    assert len([detail for detail in details if "图资源路径变化" in detail["summary"]]) == 1
+    path_detail = next(detail for detail in details if "图资源路径变化" in detail["summary"])
+    assert path_detail["old_text"] == "fig/old/image.png"
+    assert path_detail["new_text"] == "fig/new/image.png"
+    assert not any("图资源内容变化" in detail["summary"] for detail in details)
+    assert "图资源路径变化" in (output / "report.html").read_text()
+    write(new, "fig/new/renamed.png", b"\x89PNG\r\n\x1a\nsame")
+    write(new, "main.tex", (new / "main.tex").read_text().replace("image.png", "renamed.png"))
+    rerun = subprocess.run(result.args, cwd=tmp_path,
+                           env=dict(os.environ, PYTHONPATH=str(ROOT / "src")), capture_output=True, text=True)
+    assert rerun.returncode == 0, rerun.stderr
+    details = json.loads((output / "diff.json").read_text())["changes"][0]["details"]
+    assert sum("图资源路径变化" in detail["summary"] for detail in details) == 1

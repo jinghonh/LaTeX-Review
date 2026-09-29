@@ -8,7 +8,9 @@ from importlib.metadata import version
 import json
 import os
 from pathlib import Path
+import re
 import shutil
+import subprocess
 import sys
 import tomllib
 
@@ -116,6 +118,41 @@ def _check_output_separate(path: Path, options: dict) -> None:
         raise ConfigurationError("输出目录不能覆盖论文来源目录或其上级目录")
 
 
+def _source_roots(options: dict) -> tuple[Path, ...]:
+    if "old_dir" in options:
+        return tuple(Path(options[key]).expanduser().resolve() for key in ("old_dir", "new_dir"))
+    if "old_file" in options:
+        return tuple(Path(options[key]).expanduser().resolve().parent for key in ("old_file", "new_file"))
+    entry = Path(options["entry"]).expanduser().resolve()
+    try:
+        probe = subprocess.run(("git", "-C", str(entry.parent), "rev-parse", "--show-toplevel"),
+                               capture_output=True, check=False)
+    except OSError:
+        return (entry.parent,)
+    return (Path(os.fsdecode(probe.stdout.strip())).resolve() if probe.returncode == 0 else entry.parent,)
+
+
+def _clear_cache(directory: Path, options: dict, *, managed_default: bool) -> None:
+    """只删除缓存格式文件；任何来源根目录或非缓存内容都拒绝递归清理。"""
+    roots = _source_roots(options)
+    if any(directory == root or directory in root.parents for root in roots):
+        raise ConfigurationError("缓存清理目录不能覆盖论文来源目录")
+    if not managed_default and any(root in directory.parents for root in roots):
+        raise ConfigurationError("指定缓存目录位于论文来源内，拒绝清理")
+    if not directory.exists():
+        return
+    if not directory.is_dir():
+        raise ConfigurationError("缓存路径已存在且不是目录")
+    entries = tuple(directory.iterdir())
+    if any(entry.is_symlink() or not entry.is_file() or
+           not (re.fullmatch(r"[0-9a-f]{64}\.json", entry.name) or
+                re.fullmatch(r"\.write-[A-Za-z0-9_-]+\.tmp", entry.name)) for entry in entries):
+        raise ConfigurationError("缓存目录含非缓存文件，拒绝清理")
+    for entry in entries:
+        entry.unlink()
+    directory.rmdir()
+
+
 def _inspect(options: dict) -> int:
     with resolve_sources(**options) as pair:
         def view(source):
@@ -219,10 +256,8 @@ def main(argv: list[str] | None = None) -> int:
             raise ConfigurationError("缓存目录不能与报告目录重叠")
         if cache_dir.is_symlink() or any(parent.is_symlink() for parent in cache_dir.parents):
             raise ConfigurationError("缓存路径不能包含符号链接")
-        if args.clear_cache and cache_dir.exists():
-            if not cache_dir.is_dir():
-                raise ConfigurationError("缓存路径已存在且不是目录")
-            shutil.rmtree(cache_dir)
+        if args.clear_cache:
+            _clear_cache(cache_dir, options, managed_default=args.cache_dir is None)
         _prepare_output(output)
         output_ready = True
         cache = ParseCache(cache_dir, enabled=not args.no_cache,
