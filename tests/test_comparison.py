@@ -33,8 +33,9 @@ def test_single_node_diff_failure_keeps_raw_and_other_changes(tmp_path, monkeypa
     assert any(item.code == "node_diff_fallback" for item in result.document.diagnostics)
     assert any("FAIL" in detail.old_text for change in result.document.changes
                for detail in change.details if detail.old_text)
-    assert any("Stable" in (detail.old_text or "") for change in result.document.changes
-               for detail in change.details)
+    assert any("Stable" in old.by_id()[change.old_node_id].review.raw_latex and
+               any(detail.old_text == "before" and detail.new_text == "after" for detail in change.details)
+               for change in result.document.changes if change.old_node_id)
 
 
 def test_inserted_paragraph_numbered_heading_and_repeated_body_stay_one_to_one(tmp_path):
@@ -215,7 +216,7 @@ def test_top_level_unknown_environment_content_is_not_silently_skipped(tmp_path)
         result = compare_projects(parse_project(pair.old.expand()), parse_project(pair.new.expand()))
     assert result.document.summary.changes == 1
     change = result.document.changes[0]
-    assert change.node_type == "fallback" and "text" in change.categories
+    assert change.node_type == "paragraph" and "text" in change.categories
     assert change.source_old.file == change.source_new.file == "main.tex"
     assert any(detail.old_text == "Old" and detail.new_text == "Revised" for detail in change.details)
 

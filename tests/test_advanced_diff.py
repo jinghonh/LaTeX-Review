@@ -52,7 +52,8 @@ def test_table_row_insertion_matrix_and_ambiguous_fallback(tmp_path):
         r"\[\begin{pmatrix}a&b\\c&d\end{pmatrix}\]",
         r"\[\begin{pmatrix}a&x\\c&d\end{pmatrix}\]")
     assert matrix.document.summary.changes == 1
-    assert matrix.document.summary.category_hits["table"] == 1
+    assert matrix.document.summary.category_hits["equation"] == 1
+    assert "table" not in matrix.document.summary.category_hits
     assert any(detail.row_old == 1 and detail.column_old == 2 for detail in matrix.document.changes[0].details)
 
     _, _, ambiguous = _compare(tmp_path / "ambiguous",

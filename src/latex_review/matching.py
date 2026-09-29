@@ -141,6 +141,23 @@ def match_nodes(old: ParsedProject, new: ParsedProject) -> NodeMapping:
         if len(options) == 1:
             add(i, options[0], .99, "两侧唯一标签、类型和章节一致")
 
+    # 前言与摘要是结构容器；同一已配对父节点下唯一的同类容器可以可靠对应。
+    # 先建立父容器，再允许其内部段落用常规内容和邻域证据配对。
+    for kind in ("frontmatter", "abstract", "keywords"):
+        for i, item in enumerate(a):
+            if i in used_a or item.review.type != kind:
+                continue
+            options = [j for j, candidate in enumerate(b) if j not in used_b and candidate.review.type == kind
+                       and parents_match(i, j) and scope_compatible(i, j)]
+            peers = [k for k, candidate in enumerate(a) if k not in used_a and candidate.review.type == kind
+                     and candidate.review.parent_id == item.review.parent_id and a_scope[k] == a_scope[i]]
+            if len(options) == len(peers) == 1:
+                add(i, options[0], .95, "同一父结构内唯一前言容器对应")
+
+    def short_heading(raw: str) -> str | None:
+        match = re.fullmatch(r"\s*\\(?:paragraph|subparagraph)\*?\s*\{([^{}]+)\}\s*", raw)
+        return _title(match.group(1).rstrip(".．:： ")) if match else None
+
     # 唯一规范化内容不依赖绝对序号；重复正文留给邻域阶段。
     for i, item in enumerate(a):
         if i in used_a or not a_text[i]:
@@ -151,6 +168,68 @@ def match_nodes(old: ParsedProject, new: ParsedProject) -> NodeMapping:
               and scope_compatible(i, k) and n.review.type == item.review.type and b_text[k] == a_text[i]]
         if len(ai) == len(bj) == 1:
             add(i, bj[0], .98, "章节、类型和规范化内容唯一一致")
+
+    # 单独的短标题以标题文字为身份；先配对父章节，再比较末尾标点。
+    for i, item in enumerate(a):
+        heading = short_heading(item.review.raw_latex)
+        if i in used_a or item.review.type != "paragraph" or not heading:
+            continue
+        options = [j for j, candidate in enumerate(b) if j not in used_b and
+                   candidate.review.type == "paragraph" and short_heading(candidate.review.raw_latex) == heading and
+                   parents_match(i, j) and scope_compatible(i, j)]
+        peers = [k for k, candidate in enumerate(a) if k not in used_a and
+                 candidate.review.type == "paragraph" and short_heading(candidate.review.raw_latex) == heading and
+                 candidate.review.parent_id == item.review.parent_id]
+        if len(options) == len(peers) == 1:
+            add(i, options[0], .98, "同一父结构内唯一短标题对应")
+
+    def leading_label(raw: str) -> str | None:
+        match = re.match(r"\s*\\label\s*\{([^{}]+)\}", raw)
+        return match.group(1) if match else None
+
+    for i, item in enumerate(a):
+        label = leading_label(item.review.raw_latex)
+        if i in used_a or item.review.type != "paragraph" or not label:
+            continue
+        options = [j for j, candidate in enumerate(b) if j not in used_b and
+                   candidate.review.type == "paragraph" and leading_label(candidate.review.raw_latex) == label and
+                   parents_match(i, j) and scope_compatible(i, j)]
+        if len(options) == 1:
+            j = options[0]
+            similarity = SequenceMatcher(None, a_text[i], b_text[j], autojunk=False).ratio()
+            if similarity >= .3:
+                add(i, j, .94, "同一父结构内段首标签与正文共同确认")
+
+    # 大段改写后，邻段尚未配对会干扰打分；先接受双方明显占优的正文对应。
+    for i, item in enumerate(a):
+        if i in used_a or item.review.type != "paragraph":
+            continue
+        options = [(SequenceMatcher(None, a_text[i], b_text[j], autojunk=False).ratio(), j)
+                   for j, candidate in enumerate(b) if j not in used_b and candidate.review.type == "paragraph"
+                   and parents_match(i, j) and scope_compatible(i, j)]
+        options.sort(reverse=True)
+        if not options or options[0][0] < .62 or (len(options) > 1 and options[0][0] - options[1][0] < .15):
+            continue
+        similarity, j = options[0]
+        reverse = sorted((SequenceMatcher(None, a_text[k], b_text[j], autojunk=False).ratio(), k)
+                         for k, candidate in enumerate(a) if k not in used_a and candidate.review.type == "paragraph"
+                         and parents_match(k, j) and scope_compatible(k, j))
+        if reverse[-1][1] == i and (len(reverse) == 1 or reverse[-1][0] - reverse[-2][0] >= .15):
+            add(i, j, min(.97, .55 + .4 * similarity), "双方唯一占优的正文相似度")
+
+    # 已配对父结构内只剩一对相似段落时，允许较大幅度的局部改写。
+    for i, item in enumerate(a):
+        if i in used_a or item.review.type != "paragraph" or not item.review.parent_id:
+            continue
+        old_peers = [k for k, candidate in enumerate(a) if k not in used_a and candidate.review.type == "paragraph"
+                     and candidate.review.parent_id == item.review.parent_id]
+        new_peers = [j for j, candidate in enumerate(b) if j not in used_b and candidate.review.type == "paragraph"
+                     and parents_match(i, j) and scope_compatible(i, j)]
+        if len(old_peers) == len(new_peers) == 1:
+            j = new_peers[0]
+            similarity = SequenceMatcher(None, a_text[i], b_text[j], autojunk=False).ratio()
+            if similarity >= .35:
+                add(i, j, .65, "已配对父结构内唯一剩余相似段落")
 
     # 图表与独立公式按同一父结构内的剩余顺序配对；只有两侧剩余数量相等才使用
     # 此锚点。多项内部字段同时改变时，原始字符串相似度不足以可靠建立配对。
@@ -202,9 +281,9 @@ def match_nodes(old: ParsedProject, new: ParsedProject) -> NodeMapping:
             options.sort(reverse=True)
         eligible = []
         for (i, j), (value, reason) in candidates.items():
+            old_options, new_options = by_old[i], by_new[j]
             if value < .45:
                 continue
-            old_options, new_options = by_old[i], by_new[j]
             other_a = old_options[0][0] if old_options[0][1] != j else (
                 old_options[1][0] if len(old_options) > 1 else 0)
             other_b = new_options[0][0] if new_options[0][1] != i else (

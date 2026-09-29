@@ -532,7 +532,27 @@ def expand_project(source: ProjectSource) -> ExpandedProject:
             for item in arguments:
                 resolved, problem = candidate_file(file, item, extensions, paths=tuple(graphics_paths) if name == "includegraphics" else ())
                 if problem:
-                    issue(problem, f"无法确定或读取资源 {item}；包含链：{' → '.join(chain)}", file, start, end, chain)
+                    if name == "bibliographystyle" and problem == "missing_dependency":
+                        resolver = shutil.which("kpsewhich")
+                        filename = item if item.endswith(".bst") else f"{item}.bst"
+                        provided = False
+                        if resolver and re.fullmatch(r"[A-Za-z0-9_.-]+", filename) and not filename.startswith("-"):
+                            try:
+                                found = subprocess.run((resolver, filename), capture_output=True, timeout=2, check=False)
+                                provided = found.returncode == 0 and bool(found.stdout.strip())
+                            except (OSError, subprocess.TimeoutExpired):
+                                pass
+                        if provided:
+                            issue("tex_distribution_style", f"样式 {item} 由 TeX 发行版提供，项目无需包含此文件",
+                                  file, start, end, chain, "exact")
+                        elif resolver:
+                            issue("missing_dependency", f"项目及当前 TeX 发行版均未找到样式 {item}",
+                                  file, start, end, chain)
+                        else:
+                            issue("tex_style_unverified", f"样式 {item} 不在项目中；未检测到 TeX 发行版，无法确认外部样式",
+                                  file, start, end, chain)
+                    else:
+                        issue(problem, f"无法确定或读取资源 {item}；包含链：{' → '.join(chain)}", file, start, end, chain)
                 else:
                     dependencies.append(Dependency("graphic" if name == "includegraphics" else "bibliography",
                                                    resolved, file, instance, item, start, end))

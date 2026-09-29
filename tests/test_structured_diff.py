@@ -179,21 +179,20 @@ def test_table_row_insert_is_one_whole_change(tmp_path):
     assert result.document.changes[0].node_type == "table"
 
 
-def test_array_inside_equation_has_table_detail_and_reading_preview(tmp_path):
+def test_array_inside_equation_has_math_detail_and_reading_preview(tmp_path):
     old, new, result = _compare(
         tmp_path,
         r"\begin{equation}\begin{array}{cc}a&b\\c&d\end{array}\end{equation}",
         r"\begin{equation}\begin{array}{cc}a&x\\c&d\end{array}\end{equation}",
     )
-    assert any(node.review.type == "table" and node.review.parent_id for node in old.nodes)
-    assert any(node.review.type == "table" and node.review.parent_id for node in new.nodes)
+    assert any(node.review.type == "math_array" and node.review.parent_id for node in old.nodes)
+    assert any(node.review.type == "math_array" and node.review.parent_id for node in new.nodes)
     assert result.document.summary.changes == 1
-    assert result.document.summary.category_hits["table"] == 1
-    table_detail = next(detail for detail in result.document.changes[0].details if detail.category == "table")
+    assert result.document.summary.category_hits["equation"] == 1
+    table_detail = next(detail for detail in result.document.changes[0].details if detail.row_old is not None)
     assert "a&b" in table_detail.old_text and "a&x" in table_detail.new_text
     preview = render_preview(old, new).html
-    assert preview.count('class="table-preview"') == 2
-    assert 'class="review-node node-table"' in preview
+    assert 'class="review-node node-math_array"' in preview
 
 
 @pytest.mark.parametrize(("before", "after", "kind"), [
@@ -205,8 +204,10 @@ def test_table_add_remove_array_and_column_insert(tmp_path, before, after, kind)
     old, new, result = _compare(tmp_path, before, after)
     assert result.document.summary.changes == 1
     assert result.document.changes[0].kind == kind
-    assert result.document.summary.category_hits == {"table": 1}
-    assert "table-preview" in render_preview(old, new).html
+    expected = "equation" if "array" in before else "table"
+    assert result.document.summary.category_hits == {expected: 1}
+    if expected == "table":
+        assert "table-preview" in render_preview(old, new).html
 
 
 def test_equation_local_fallback_preserves_other_changes(tmp_path):

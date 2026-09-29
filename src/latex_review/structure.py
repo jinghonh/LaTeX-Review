@@ -13,6 +13,7 @@ from .sources import ExpandedProject, SourceIssue
 from .text_diff import CITATION_COMMANDS
 from .bibliography import BibliographyEntry, read_bibliography
 from .macros import MacroPlaceholder
+from .latex_commands import MATH_COMMANDS, REFERENCE_COMMANDS, TEXT_COMMANDS
 
 
 _COMMAND = re.compile(r"\\([A-Za-z@]+|.)")
@@ -20,12 +21,13 @@ _ENV = re.compile(r"\\(begin|end)\s*\{([^{}\s]+)\}")
 _HEADING = {"part": 0, "chapter": 1, "section": 2, "subsection": 3, "subsubsection": 4}
 _MATH_ENV = {"equation", "equation*", "align", "align*", "gather", "gather*", "multline", "multline*", "displaymath", "math"}
 _LIST_ENV = {"itemize", "enumerate", "description"}
-_TABLE_ENV = {"table", "table*", "tabular", "tabular*", "longtable", "array",
-              "matrix", "pmatrix", "bmatrix", "Bmatrix", "vmatrix", "Vmatrix"}
+_TABLE_ENV = {"table", "table*", "tabular", "tabular*", "longtable"}
+_MATH_ARRAY_ENV = {"array", "matrix", "pmatrix", "bmatrix", "Bmatrix", "vmatrix", "Vmatrix"}
+_CONTAINER_ENV = {"frontmatter", "abstract", "keyword", "keywords"}
 _FIGURE_ENV = {"figure", "figure*"}
 _THEOREM_ENV = {"theorem", "lemma", "proposition", "corollary", "definition", "remark", "proof", "example", "claim"}
 _SAFE_COMMANDS = {
-    "documentclass", "usepackage", "begin", "end", "label", "ref", "eqref", "autoref", "pageref", *CITATION_COMMANDS,
+    "documentclass", "usepackage", "begin", "end", "label", *REFERENCE_COMMANDS, *CITATION_COMMANDS,
     "includegraphics", "caption", "centering", "item", "bibitem", "bibliography", "bibliographystyle", "addbibresource", "printbibliography",
     "tag", "notag", "nonumber",
     "input", "include", "graphicspath", "textbf", "textit", "emph", "texttt", "underline", "footnote", "url", "href", "hfill",
@@ -33,6 +35,7 @@ _SAFE_COMMANDS = {
     "maketitle", "title", "author", "date", "abstract", "thanks", "today", "and", "quad", "qquad", "ldots", "cdots",
     "newcommand", "renewcommand", "providecommand", "DeclareRobustCommand", "newenvironment", "renewenvironment", "provideenvironment",
     "newtheorem", "def", "gdef", "edef", "xdef", "setlength", "setcounter", "numberwithin", "tableofcontents",
+    *MATH_COMMANDS, *TEXT_COMMANDS,
 }
 
 
@@ -193,7 +196,7 @@ def _metadata(raw: str) -> tuple[tuple[str, ...], tuple[str, ...], tuple[str, ..
         return tuple(dict.fromkeys(values))
     citation_pattern = r"\\(?:" + "|".join(CITATION_COMMANDS) + r")(?![A-Za-z@])(?:\s*\[[^\]]*\])*\s*\{([^{}]+)\}"
     return (groups(r"\\label\s*\{([^{}]+)\}"), groups(citation_pattern),
-            groups(r"\\(?:ref|eqref|autoref|pageref)\s*\{([^{}]+)\}"),
+            groups(r"\\(?:" + "|".join(sorted(REFERENCE_COMMANDS)) + r")\s*\{([^{}]+)\}"),
             groups(r"\\includegraphics\*?(?:\s*\[[^\]]*\])?\s*\{([^{}]+)\}"))
 
 
@@ -208,14 +211,10 @@ def _plain(raw: str) -> str:
 
 def _plastex_unknown(text: str) -> tuple[set[str], str | None]:
     # 全文只做静态识别；把论文原文交给 TeX 解释器会执行包/宏代码。
-    math_names = {"alpha", "beta", "gamma", "delta", "epsilon", "theta", "lambda", "mu", "pi", "sigma",
-                  "omega", "sum", "prod", "int", "frac", "sqrt", "left", "right", "mathrm", "mathbf",
-                  "mathbb", "mathcal", "text", "cdot", "times", "leq", "geq", "infty", "partial",
-                  "nabla", "ell", "operatorname", "overline", "hat", "bar", "tilde"}
-    known = _SAFE_COMMANDS | set(_HEADING) | math_names
+    known = _SAFE_COMMANDS | set(_HEADING)
     unknown = {match.group(1) for match in _COMMAND.finditer(_masked(text))
                if match.group(1).isalpha() and match.group(1) not in known}
-    known_env = _MATH_ENV | _LIST_ENV | _TABLE_ENV | _FIGURE_ENV | _THEOREM_ENV | {"document", "thebibliography"}
+    known_env = _MATH_ENV | _MATH_ARRAY_ENV | _LIST_ENV | _TABLE_ENV | _FIGURE_ENV | _THEOREM_ENV | _CONTAINER_ENV | {"document", "thebibliography"}
     unknown.update(match.group(2) for match in _ENV.finditer(_masked(text))
                    if match.group(2) not in known_env)
     return unknown, None
@@ -313,7 +312,7 @@ class _Builder:
             if match:
                 name = match.group(1)
                 arg = _argument(self.mask, match.end())
-                if name in {*CITATION_COMMANDS, "ref", "eqref", "autoref", "pageref"} and arg:
+                if name in {*CITATION_COMMANDS, *REFERENCE_COMMANDS} and arg:
                     self.add("citation" if name in CITATION_COMMANDS else "reference", i, arg[0], parent)
                     i = arg[0]
                     continue
@@ -335,6 +334,8 @@ class _Builder:
             start += 1
         while end > start and self.mask[end - 1].isspace():
             end -= 1
+        if re.fullmatch(r"\\(?:FloatBarrier|par|newpage|clearpage)\s*", self.mask[start:end]):
+            return
         if self.mask[start:end].strip():
             node = self.add("paragraph", start, end, parent)
             self._inline(node, start, end)
@@ -388,23 +389,25 @@ class _Builder:
                 i += 1
 
     def _array_children(self, parent: str, start: int, end: int) -> None:
-        """数学块中的 array 和矩阵是从属表格，保留独立来源和预览节点。"""
+        """数学块中的数组和矩阵保留来源，但不作为论文表格。"""
         i = start
         while match := _ENV.search(self.mask, i, end):
             i = match.end()
-            if match.group(1) != "begin" or match.group(2) not in {"array", "matrix", "pmatrix", "bmatrix", "Bmatrix", "vmatrix", "Vmatrix"}:
+            if match.group(1) != "begin" or match.group(2) not in _MATH_ARRAY_ENV:
                 continue
             extent = _environment_end(self.mask, match.start(), end)
             if extent:
-                self.add("table", match.start(), extent[1], parent)
+                self.add("math_array", match.start(), extent[1], parent)
                 i = extent[1]
 
-    def scan(self, start: int, end: int, parent: str | None = None, *, sections: bool = True) -> None:
+    def scan(self, start: int, end: int, parent: str | None = None, *, sections: bool = True,
+             frontmatter: bool = False) -> None:
         i, pending = start, start
         while i < end:
             blank = re.match(r"(?:[ \t]*\r?\n){2,}", self.mask[i:end])
             if blank:
-                self._flush(pending, i, parent)
+                if not frontmatter:
+                    self._flush(pending, i, parent)
                 i += blank.end()
                 pending = i
                 continue
@@ -419,13 +422,20 @@ class _Builder:
                         i = extent[1]
                         pending = i
                         continue
-                    self._flush(pending, i, parent)
-                    kind = ("equation" if name in _MATH_ENV else "list" if name in _LIST_ENV else
+                    if not frontmatter:
+                        self._flush(pending, i, parent)
+                    kind = ("frontmatter" if name == "frontmatter" else "abstract" if name == "abstract" else
+                            "keywords" if name in {"keyword", "keywords"} else
+                            "equation" if name in _MATH_ENV | _MATH_ARRAY_ENV else "list" if name in _LIST_ENV else
                             "figure" if name in _FIGURE_ENV else "table" if name in _TABLE_ENV else
                             "bibliography" if name == "thebibliography" else "theorem" if name in self.theorem_envs else
                             "fallback" if name in self.unknown else "environment")
                     node = self.add(kind, i, extent[1], parent)
-                    if kind == "list":
+                    if kind == "frontmatter":
+                        self.scan(env.end(), extent[0], node, sections=False, frontmatter=True)
+                    elif kind in {"abstract", "keywords"}:
+                        self.scan(env.end(), extent[0], node, sections=False)
+                    elif kind == "list":
                         self._split_items(env.end(), extent[0], node, "item", "list_item")
                     elif kind == "bibliography":
                         self._split_items(env.end(), extent[0], node, "bibitem", "bibliography_entry")
@@ -466,6 +476,23 @@ class _Builder:
             command = _COMMAND.match(self.mask, i)
             if command:
                 name = command.group(1)
+                if frontmatter and name in {"title", "author", "date", "affiliation", "address", "ead", "corref", "cortext", "fnref", "fntext", "journal"}:
+                    arg = _argument(self.mask, command.end())
+                    finish = arg[0] if arg else command.end()
+                    self.add("metadata", i, finish, parent)
+                    i = finish
+                    pending = i
+                    continue
+                if name in {"keyword", "keywords"}:
+                    arg = _argument(self.mask, command.end())
+                    if arg:
+                        if not frontmatter:
+                            self._flush(pending, i, parent)
+                        node = self.add("keywords", i, arg[0], parent)
+                        self._flush(arg[2], arg[0] - 1, node)
+                        i = arg[0]
+                        pending = i
+                        continue
                 if sections and name in _HEADING:
                     arg = _argument(self.mask, command.end())
                     if arg:
@@ -501,7 +528,8 @@ class _Builder:
                 i = close
             else:
                 i += 1
-        self._flush(pending, end, parent)
+        if not frontmatter:
+            self._flush(pending, end, parent)
 
     def finish(self) -> ParsedProject:
         source_diagnostics = [_diagnostic(issue.code, issue.message, _issue_location(self.project, issue), issue.side)
@@ -535,7 +563,7 @@ def parse_project(project: ExpandedProject, *, macros: dict[str, MacroPlaceholde
     if error:
         unknown.update(match.group(1) for match in _COMMAND.finditer(_masked(project.text))
                        if match.group(1) not in _SAFE_COMMANDS and match.group(1) not in _HEADING)
-        known_environments = _MATH_ENV | _LIST_ENV | _TABLE_ENV | _FIGURE_ENV | theorem_envs | {"document", "thebibliography"}
+        known_environments = _MATH_ENV | _MATH_ARRAY_ENV | _LIST_ENV | _TABLE_ENV | _FIGURE_ENV | _CONTAINER_ENV | theorem_envs | {"document", "thebibliography"}
         unknown.update(match.group(2) for match in _ENV.finditer(_masked(project.text))
                        if match.group(2) not in known_environments)
     builder = _Builder(project, unknown, theorem_envs)
