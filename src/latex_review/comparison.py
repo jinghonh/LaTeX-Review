@@ -11,7 +11,8 @@ from typing import Mapping
 from .contract import ChangeDetail, Diagnostic, PrimaryChange, ReviewDocument, ReviewNode, SourceLocation, build_summary
 from .matching import NodeMapping, _semantic_raw, match_nodes
 from .structure import ParsedNode, ParsedProject
-from .structured_diff import align_inline_sites, citation_details, equation_details, figure_details, table_details
+from .structured_diff import (align_inline_sites, citation_details, equation_details, figure_details,
+                              inline_sentence_numbers, table_details)
 from .text_diff import TokenEdit, normalized_text, scan_latex, split_sentences, token_edits
 
 
@@ -198,7 +199,8 @@ def compare_projects(old: ParsedProject, new: ParsedProject, *, review_comments:
             categories.append("citation")
             details.append(ChangeDetail(f"detail-{len(details) + 1:03d}", detail.category, detail.kind,
                                         detail.old_text, detail.new_text, detail.summary,
-                                        detail.source_old, detail.source_new))
+                                        detail.source_old, detail.source_new,
+                                        old_sentences=detail.old_sentences, new_sentences=detail.new_sentences))
         old_math = [a[child] for child in left.child_ids if a[child].review.type == "inline_math"] if left else []
         new_math = [b[child] for child in right.child_ids if b[child].review.type == "inline_math"] if right else []
         for old_index, new_index in align_inline_sites(a[left.id] if left else None,
@@ -211,7 +213,9 @@ def compare_projects(old: ParsedProject, new: ParsedProject, *, review_comments:
                 categories.append("equation")
                 details.append(ChangeDetail(f"detail-{len(details) + 1:03d}", detail.category, detail.kind,
                                             detail.old_text, detail.new_text, detail.summary,
-                                            detail.source_old, detail.source_new))
+                                            detail.source_old, detail.source_new,
+                                            old_sentences=inline_sentence_numbers(a[left.id] if left else None, left_inline),
+                                            new_sentences=inline_sentence_numbers(b[right.id] if right else None, right_inline)))
         # 站点边界独立于正文词元编辑；即使同段另有词或空白变化也保留此明细。
         if left and right:
             for site_kind in ("citation", "inline_math"):

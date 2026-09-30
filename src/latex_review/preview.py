@@ -8,6 +8,7 @@ from html import escape
 import re
 from typing import Mapping
 
+from plasTeX import Command
 from plasTeX.TeX import TeX
 
 from .contract import Diagnostic, ReviewNode, SourceLocation
@@ -147,9 +148,19 @@ def _parse_dom(raw: str):
     if any(match.group(1) not in _INLINE_SAFE for match in re.finditer(r"\\([A-Za-z@]+)", raw)):
         raise ValueError("片段含未允许的宏，已显示占位")
     tex = TeX()
+    # 片段没有论文的导言区；仅注册预览所需的字面参数，不加载论文包或执行宏。
+    for name in CITATION_COMMANDS:
+        tex.ownerDocument.context.addGlobal(name, type(name, (Command,), {
+            "args": "* [ prenote:str ] [ postnote:str ] keys:str",
+        }))
+    for name in REFERENCE_COMMANDS:
+        tex.ownerDocument.context.addGlobal(name, type(name, (Command,), {"args": "* key:str"}))
+    tex.ownerDocument.context.addGlobal("sep", type("sep", (Command,), {"args": ""}))
     tex.input("\\begin{document}\n" + raw + "\n\\end{document}")
-    with _quiet_plastex():
+    with _quiet_plastex() as quiet:
         document = tex.parse()
+    if quiet.errors:
+        raise ValueError(quiet.errors[0])
     return next((child for child in document.childNodes if getattr(child, "nodeName", "") == "document"), document)
 
 
@@ -642,6 +653,7 @@ figcaption,.table-caption{{font-style:italic}}.asset,.fallback-label{{color:#755
      settled=true;
      status.textContent=errors ? '部分公式暂无法预览。' : '公式排版完成。';
      status.dataset.state=errors ? 'partial' : 'ready';
+     if(window.dispatchEvent)window.dispatchEvent(new Event('review-math-ready'));
    }},failed);
  }};
 }})();

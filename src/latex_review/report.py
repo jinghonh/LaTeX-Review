@@ -87,6 +87,8 @@ def _sentence_card_html(raw: str | None, project: ParsedProject, side: str,
         rendered_parts.append(_inline_html(sentence.text, project, side, contained, source=parent.review.source,
                                            base_start=parent.expanded_start + sentence.start))
     rendered = " ".join(rendered_parts)
+    # 明细是正文的副本，导航锚点只保留在原文中。
+    rendered = re.sub(r'\s+id="[^"]*"', "", rendered)
     # 明细本身是按钮，行内引用在这里保留文字但不嵌套交互链接。
     return re.sub(r"<a\b[^>]*>", "<span>", rendered).replace("</a>", "</span>").strip()
 
@@ -652,10 +654,13 @@ def write_report(old: ParsedProject, new: ParsedProject, comparison: ComparisonR
                                        *check_rules(old, new), *asset_diagnostics,
                                        *fragment_diagnostics, *extra_diagnostics)))
     document = replace(comparison.document, diagnostics=diagnostics)
-    diff_json = dumps(document)
     pairs = tuple((pair.old_id, pair.new_id) for pair in comparison.mapping.pairs)
     from .translation import build_units
-    units = build_units(document, old, new)
+    translation_diagnostics = []
+    units = build_units(document, old, new, diagnostics=translation_diagnostics)
+    diagnostics = tuple(dict.fromkeys((*diagnostics, *translation_diagnostics)))
+    document = replace(document, diagnostics=diagnostics)
+    diff_json = dumps(document)
     html = _report_html(document, preview.html, old, new, editor_url_template, pairs,
                         rendering=rendering, statuses=statuses, translation_units=units)
     _write_managed(directory, Path("diff.json"), content=diff_json.encode("utf-8"))

@@ -6,6 +6,15 @@
 latex-review-preview .latex-review/latest
 ```
 
+也可以传入 `report.html`，或在生成报告时的工作目录中传入论文入口：
+
+```sh
+latex-review-preview .latex-review/latest/report.html
+latex-review-preview neural_networks/main.tex
+```
+
+传入 `.tex` 时只打开已有报告，采用启动目录配置中的 `output`，未配置则使用 `.latex-review/latest`。`--config` 可以选择项目配置。若生成报告时使用了 `--output`，请直接传入对应的报告目录；预览不会重新生成报告。
+
 更新安装项目后即可获得该入口。也可在已安装本项目的 Python 环境运行：
 
 ```sh
@@ -16,7 +25,7 @@ python -m latex_review.serve .latex-review/latest
 
 服务提供完整报告目录，保留图片和预览的相对路径；关闭目录列表并拒绝解析到报告目录外的符号链接。预览期间保持报告目录稳定，避免同时重新生成或移动目录。响应禁用缓存，以便重新加载后看到当前资源。服务不会改变报告文件或自动打开浏览器。
 
-配置 `[translation]` 后，本机服务也提供按需翻译接口。页面点击才请求模型，结果独立缓存在报告目录同级；报告文件仍保留原文，可通过“导出含译文报告”保存中文阅读结果。密钥从环境变量读取。使用 `--config` 指定项目配置，`--translation-cache-dir` 可指定独立翻译缓存；详见[变更内容翻译](translation.md)。
+配置 `[translation]` 后，本机服务也提供按需翻译接口。所有项目自动读取用户全局翻译默认值，并叠加当前目录或 `--config` 指定的项目配置；项目字段和同名术语优先。页面点击才请求模型，结果独立缓存在报告目录同级；报告文件仍保留原文，可通过“导出含译文报告”保存中文阅读结果。密钥从环境变量读取。`--translation-cache-dir` 可指定独立翻译缓存；详见[变更内容翻译](translation.md)。
 
 ## 阅读与对照
 

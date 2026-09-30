@@ -122,9 +122,10 @@ def test_pdf_converter_uses_next_tool_and_reports_failure(tmp_path):
     pdf = tmp_path / "input.pdf"
     pdf.write_bytes(_two_page_pdf())
     bad = tmp_path / "bad"
-    bad.write_text(f"#!{sys.executable}\nimport sys\nsys.exit(7)\n")
+    # 这些脚本只使用标准库；真实解释器路径避免虚拟环境路径中的空格拆开 shebang。
+    bad.write_text(f"#!{Path(sys.executable).resolve()}\nimport sys\nsys.exit(7)\n")
     good = tmp_path / "good"
-    good.write_text(f"#!{sys.executable}\nimport pathlib,sys\npathlib.Path(sys.argv[-1]+'.png').write_bytes(b'PNG')\n")
+    good.write_text(f"#!{Path(sys.executable).resolve()}\nimport pathlib,sys\npathlib.Path(sys.argv[-1]+'.png').write_bytes(b'PNG')\n")
     bad.chmod(0o755)
     good.chmod(0o755)
     output = tmp_path / "out"
@@ -168,7 +169,7 @@ def test_fragment_compile_timeout_is_bounded(tmp_path, monkeypatch):
     output = tmp_path / "report"
     output.mkdir()
     slow = tmp_path / "slow-tex"
-    slow.write_text(f"#!{sys.executable}\nimport sys,time\n"
+    slow.write_text(f"#!{Path(sys.executable).resolve()}\nimport sys,time\n"
                     "print('pdfTeX') if '--version' in sys.argv else time.sleep(5)\n")
     slow.chmod(0o755)
     monkeypatch.setattr("latex_review.fragment_render._program", lambda *_: str(slow))

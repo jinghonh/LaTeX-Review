@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
 from difflib import SequenceMatcher
 import re
 
@@ -9,6 +10,7 @@ from .contract import ChangeDetail, Diagnostic
 from .math_structure import structure_summary
 from .structure import ParsedNode, ParsedProject, _argument, _masked
 from .table_model import parse_table, table_edits
+from .text_diff import split_sentences
 
 
 _MATH_TOKEN = re.compile(r"\\(?:[A-Za-z@]+|.)|[A-Za-z]+|[0-9]+|[^\s]")
@@ -23,6 +25,15 @@ def _detail(details: list[ChangeDetail], category: str, kind: str, old: str | No
 
 def _kind(left: object | None, right: object | None) -> str:
     return "modified" if left is not None and right is not None else "removed" if left is not None else "added"
+
+
+def inline_sentence_numbers(parent: ParsedNode | None, site: ParsedNode | None) -> tuple[int, ...]:
+    """按段落内的真实偏移定位站点，重复公式或引用也不会串位。"""
+    if parent is None or site is None or parent.review.type != "paragraph":
+        return ()
+    start, end = site.expanded_start - parent.expanded_start, site.expanded_end - parent.expanded_start
+    return tuple(number for number, sentence in enumerate(split_sentences(parent.review.raw_latex), 1)
+                 if sentence.start < end and start < sentence.end)
 
 
 def _site_context(parent: ParsedNode | None, sites: list[ParsedNode], by_id: dict[str, ParsedNode]) -> list[tuple[tuple[str, ...], tuple[str, ...]]]:
@@ -201,6 +212,8 @@ def citation_details(left: ParsedNode | None, right: ParsedNode | None,
         summary = f"第 {position + 1} 处引用：删 {', '.join(removed) or '无'}；增 {', '.join(added) or '无'}"
         _detail(details, "citation", _kind(old_site, new_site), ", ".join(sorted(old_keys)) or None,
                 ", ".join(sorted(new_keys)) or None, summary, old_site, new_site)
+        details[-1] = replace(details[-1], old_sentences=inline_sentence_numbers(left, old_site),
+                              new_sentences=inline_sentence_numbers(right, new_site))
     return details
 
 

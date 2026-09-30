@@ -238,14 +238,25 @@ def _safe_plastex_input(project: ExpandedProject) -> str:
     return "".join(chars)
 
 
-class _quiet_plastex:
+class _quiet_plastex(logging.Filter):
     def __enter__(self):
-        self.log = logging.getLogger("plasTeX")
-        self.level = self.log.level
-        self.log.setLevel(logging.ERROR)
+        from plasTeX.Logging import getLogger
+        self.errors = []
+        self.logs = (getLogger(), getLogger("status"), getLogger("(status)"))
+        self.levels = tuple(log.level for log in self.logs)
+        for log in self.logs:
+            log.setLevel(logging.ERROR)
+            log.addFilter(self)
+        return self
+
+    def filter(self, record):
+        self.errors.append(record.getMessage())
+        return False
 
     def __exit__(self, *_):
-        self.log.setLevel(self.level)
+        for log, level in zip(self.logs, self.levels):
+            log.removeFilter(self)
+            log.setLevel(level)
 
 
 class _Builder:

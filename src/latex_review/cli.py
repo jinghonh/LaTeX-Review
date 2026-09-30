@@ -34,7 +34,16 @@ class ConfigurationError(ValueError):
     pass
 
 
-def _config(path: Path, explicit: bool) -> dict:
+def global_config_path() -> Path:
+    """用户级翻译默认配置；项目位置和比较设置继续由项目选择。"""
+    configured = os.environ.get("XDG_CONFIG_HOME")
+    directory = Path(configured).expanduser() if configured else Path.home() / ".config"
+    if not directory.is_absolute():
+        raise ConfigurationError("XDG_CONFIG_HOME 必须是绝对路径")
+    return directory / "latex-review" / "config.toml"
+
+
+def _read_config(path: Path, explicit: bool) -> dict:
     if not path.exists() and not explicit:
         return {}
     try:
@@ -42,6 +51,29 @@ def _config(path: Path, explicit: bool) -> dict:
             data = tomllib.load(stream)
     except (OSError, tomllib.TOMLDecodeError) as exc:
         raise ConfigurationError(f"配置文件 {path} 无法读取或解析：{exc}") from exc
+    return data
+
+
+def _merge_translation(global_values: dict, project_values: dict) -> dict:
+    for values in (global_values, project_values):
+        if not isinstance(values, dict):
+            raise ConfigurationError("配置 [translation] 必须是表")
+        if "glossary" in values and not isinstance(values["glossary"], dict):
+            raise ConfigurationError("翻译术语表必须是表")
+    merged = {**global_values, **project_values}
+    if "glossary" in global_values or "glossary" in project_values:
+        merged["glossary"] = {**global_values.get("glossary", {}), **project_values.get("glossary", {})}
+    return merged
+
+
+def _config(path: Path, explicit: bool) -> dict:
+    global_path = global_config_path()
+    shared = _read_config(global_path, False)
+    if extra := set(shared) - {"translation"}:
+        raise ConfigurationError(f"全局配置 {global_path} 仅支持 [translation]，含未知字段：{', '.join(sorted(extra))}")
+    data = _read_config(path.expanduser(), explicit)
+    if "translation" in shared or "translation" in data:
+        data["translation"] = _merge_translation(shared.get("translation", {}), data.get("translation", {}))
     allowed = {"entry", "ignore", "render", "diff", "git", "output", "macros", "compile", "translation"}
     if extra := set(data) - allowed:
         raise ConfigurationError(f"配置含未知字段：{', '.join(sorted(extra))}")
@@ -246,7 +278,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--clear-cache", action="store_true", help="本次运行前清理解析缓存")
     parser.add_argument("--math", help="公式排版依赖，首版仅支持 mathjax")
     parser.add_argument("--format", help="输出格式，首版仅支持 html,json")
-    parser.add_argument("--config", help="配置文件，默认当前目录 .latex-review.toml")
+    parser.add_argument("--config", help="项目配置文件，默认当前目录 .latex-review.toml；翻译设置覆盖用户全局默认值")
     parser.add_argument("--comments", action=argparse.BooleanOptionalAction, default=None,
                         help="审阅源码注释变化；--no-comments 可覆盖配置")
     parser.add_argument("--inspect-sources", action="store_true", help="仅输出双侧展开来源 JSON")

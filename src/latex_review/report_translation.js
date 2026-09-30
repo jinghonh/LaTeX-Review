@@ -9,10 +9,12 @@
   const cancel = document.getElementById('translation-cancel');
   const exportButton = document.getElementById('translation-export');
   let results = JSON.parse(document.getElementById('translation-results').textContent);
-  let states = {}, token = '', active = false, polling = false;
+  const blockedStates = Object.fromEntries(units.filter(unit => unit.error)
+    .map(unit => [unit.id, {state: 'blocked', message: unit.error}]));
+  let states = {...blockedStates}, token = '', active = false, polling = false, available = true;
   const installed = new Set();
   const localService = location.protocol === 'http:' && location.hostname === '127.0.0.1';
-  const labels = {pending: '等待翻译', running: '正在翻译', ready: '译文已完成', failed: '翻译失败，可重试', cancelled: '已停止，可重试'};
+  const labels = {pending: '等待翻译', running: '正在翻译', ready: '译文已完成', failed: '翻译失败，可重试', cancelled: '已停止，可重试', blocked: '此段无法翻译'};
 
   function applyResults() {
     Object.values(results).forEach(result => {
@@ -50,6 +52,11 @@
       installed.add(result.id);
     });
     document.body.classList.toggle('bilingual-view', mode.value === 'bilingual');
+    renderTranslatedMath();
+    window.dispatchEvent(new Event('resize'));
+  }
+
+  function renderTranslatedMath() {
     if (window.MathJax && window.MathJax.tex2chtmlPromise) {
       document.querySelectorAll('.translation-block .math-tex:not([data-translation-math])').forEach(math => {
         math.dataset.translationMath = 'true';
@@ -62,16 +69,17 @@
           }).catch(() => { math.textContent = '此处暂无法预览'; math.classList.add('preview-unavailable'); });
       });
     }
-    window.dispatchEvent(new Event('resize'));
   }
+  window.addEventListener('review-math-ready', renderTranslatedMath);
 
   function refreshButtons() {
     document.querySelectorAll('[data-translate-change]').forEach(button => {
       const selected = units.filter(unit => unit.change_id === button.dataset.translateChange);
       const pending = selected.some(unit => ['running', 'pending'].includes((states[unit.id] || {}).state));
       const complete = selected.every(unit => results[unit.id]);
-      button.disabled = pending;
-      button.textContent = complete ? '显示译文' : pending ? '正在翻译…' : '翻译此处';
+      const blocked = selected.every(unit => unit.error);
+      button.disabled = pending || blocked || (!available && !complete);
+      button.textContent = blocked ? '此段无法翻译' : complete ? '显示译文' : pending ? '正在翻译…' : '翻译此处';
       const text = button.parentElement.querySelector('.translation-item-status');
       if (text) text.textContent = selected.map(unit => {
         const state = states[unit.id] || (results[unit.id] ? {state: 'ready'} : {});
@@ -80,7 +88,7 @@
       }).join('；');
     });
     cancel.disabled = !active;
-    all.disabled = active || !units.length;
+    all.disabled = active || !available || !units.some(unit => !unit.error);
   }
 
   async function api(path, body) {
@@ -104,12 +112,16 @@
         installed.delete(id);
       }
     });
-    results = incoming; states = data.states || {};
+    results = incoming; states = {...blockedStates, ...(data.states || {})};
+    available = Boolean(data.enabled) && data.available !== false;
     active = Object.values(states).some(state => ['pending', 'running'].includes(state.state));
     const count = Object.keys(results).length;
     const failed = Object.values(states).filter(state => state.state === 'failed').length;
+    const blocked = Object.values(blockedStates).length;
     status.textContent = data.enabled ? '译文 ' + count + ' / ' + units.length + ' 段' +
-      (active ? ' · 正在处理' : '') + (failed ? ' · ' + failed + ' 段失败，可逐项重试' : '') :
+      (active ? ' · 正在处理' : '') + (failed ? ' · ' + failed + ' 段失败，可逐项重试' : '') +
+      (blocked ? ' · ' + blocked + ' 段无法翻译，请查看逐项说明' : '') +
+      (!available && data.message ? ' · ' + data.message : '') :
       (data.message || '请在项目配置中设置翻译接口后重新启动本机服务。');
     applyResults(); refreshButtons();
   }
@@ -128,11 +140,12 @@
 
   async function translate(ids) {
     mode.value = 'bilingual'; applyResults();
-    const remaining = ids.filter(id => !results[id]);
+    const remaining = ids.filter(id => !results[id] && !blockedStates[id]);
     if (!remaining.length) return;
     try {
       const configuration = await api('status');
-      if (!configuration.enabled) throw new Error(configuration.message);
+      accept(configuration);
+      if (!available) throw new Error(configuration.message);
       accept(await api('start', {units: remaining}));
       await poll();
     } catch (error) { status.textContent = error.message; }

@@ -88,3 +88,39 @@ def test_invalid_report_and_occupied_port(report, tmp_path):
     with create_server(report) as server:
         with pytest.raises(OSError):
             create_server(report, server.server_port)
+
+
+@pytest.mark.parametrize('input_kind', ['html', 'tex', 'configured_tex'])
+def test_cli_accepts_report_file_or_paper_entry(tmp_path, input_kind):
+    configured = input_kind == 'configured_tex'
+    directory = tmp_path / ('自定义报告' if configured else '.latex-review/latest')
+    directory.mkdir(parents=True)
+    (directory / 'report.html').write_text('<h1>已有审阅报告</h1>', encoding='utf-8')
+    entry = tmp_path / 'neural_networks/main.tex'
+    entry.parent.mkdir()
+    entry.write_text(r'\begin{document}论文\end{document}', encoding='utf-8')
+    target = directory / 'report.html' if input_kind == 'html' else entry.relative_to(tmp_path)
+    command = [sys.executable, '-m', 'latex_review.serve', str(target)]
+    if configured:
+        config = tmp_path / 'selected.toml'
+        config.write_text('output="自定义报告"\n', encoding='utf-8')
+        command.extend(['--config', str(config)])
+    process = subprocess.Popen(command, cwd=tmp_path, stdout=subprocess.PIPE,
+                               stderr=subprocess.PIPE, text=True)
+    try:
+        with ThreadPoolExecutor() as pool:
+            pending = pool.submit(process.stdout.readline)
+            try:
+                address = pending.result(timeout=10).strip()
+            except TimeoutError:
+                process.kill()
+                raise
+        assert address.startswith('http://127.0.0.1:'), process.stderr.read()
+        with urlopen(address, timeout=3) as response:
+            assert '已有审阅报告' in response.read().decode()
+        process.send_signal(signal.SIGTERM)
+        assert process.wait(timeout=5) == 0
+    finally:
+        if process.poll() is None:
+            process.kill()
+        process.communicate()

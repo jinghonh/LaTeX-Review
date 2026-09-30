@@ -164,10 +164,10 @@ def _group_end(text: str, start: int, opening: str, closing: str) -> int | None:
 def _math_end(text: str, start: int, opening: str, closing: str) -> int | None:
     index = start + len(opening)
     while index < len(text):
+        if text.startswith(closing, index):
+            return index + len(closing)
         if text[index] == "\\":
             index += 2
-        elif text.startswith(closing, index):
-            return index + len(closing)
         else:
             index += 1
     return None

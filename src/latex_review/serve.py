@@ -15,7 +15,7 @@ from socketserver import TCPServer
 import sys
 from urllib.parse import urlsplit
 
-from .translation import TranslationConfig, TranslationError, TranslationManager
+from .translation import RULE_VERSION, TranslationConfig, TranslationError, TranslationManager
 
 
 class ReportHandler(SimpleHTTPRequestHandler):
@@ -44,7 +44,7 @@ class ReportHandler(SimpleHTTPRequestHandler):
         manager = self.server.translation
         if path == "/api/translation/status":
             value = manager.snapshot() if manager else {"enabled": False, "states": {}, "results": {},
-                "message": "请配置 [translation] 的接口地址和模型，然后重新启动本机预览服务。"}
+                "message": "请在全局或项目配置中设置 [translation] 的接口地址和模型，然后重新启动本机预览服务。"}
             value["token"] = self.server.translation_token
             self._json(value)
         elif path == "/api/translation/export":
@@ -147,6 +147,9 @@ def create_server(directory: Path, port: int = 0, *, translation_config: Transla
             raise ValueError("翻译清单不可为符号链接")
         if manifest.is_file():
             units = json.loads(manifest.read_text(encoding="utf-8"))
+            if (not isinstance(units, list) or any(not isinstance(unit, dict)
+                    or unit.get("rule_version") != RULE_VERSION for unit in units)):
+                raise ValueError("翻译清单的保护规则已更新或格式无效，请重新生成报告后启动预览服务")
         cache_directory = (cache_directory or root.parent / "translation-cache").expanduser().absolute()
         if (cache_directory == root or cache_directory in root.parents or root in cache_directory.parents
                 or any(p.is_symlink() for p in (cache_directory, *cache_directory.parents))):
@@ -162,11 +165,27 @@ def create_server(directory: Path, port: int = 0, *, translation_config: Transla
     return server
 
 
+def _report_directory(path: Path, config: dict) -> Path:
+    """论文入口复用启动目录的输出配置；不重新生成审阅报告。"""
+    path = path.expanduser()
+    if path.is_file() and path.name == "report.html":
+        return path.parent
+    if path.suffix.lower() == ".tex" and not path.is_dir():
+        if not path.is_file():
+            raise ValueError(f"论文入口不存在：{path}")
+        directory = Path(config.get("output", ".latex-review/latest")).expanduser()
+        if not (directory / "report.html").is_file():
+            raise ValueError(f"尚未找到已有报告：{directory / 'report.html'}；请先运行 latex-review，"
+                             "使用 --output 生成的报告请直接传入报告目录")
+        return directory
+    return path
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="在本机预览已生成的报告，按 Ctrl+C 停止。")
-    parser.add_argument("directory", type=Path, help="包含 report.html 的报告目录")
+    parser.add_argument("directory", type=Path, help="报告目录、report.html，或论文 .tex 入口（预览当前目录的已有报告）")
     parser.add_argument("--port", type=int, default=0, help="监听端口，默认 0 表示自动选择")
-    parser.add_argument("--config", type=Path, help="项目配置文件，默认当前目录的 .latex-review.toml")
+    parser.add_argument("--config", type=Path, help="项目配置文件，默认当前目录 .latex-review.toml；翻译设置覆盖用户全局默认值")
     parser.add_argument("--translation-cache-dir", type=Path, help="翻译缓存目录，默认报告目录同级的 translation-cache")
     args = parser.parse_args(argv)
     if not 0 <= args.port <= 65535:
@@ -175,7 +194,8 @@ def main(argv: list[str] | None = None) -> int:
         from .cli import _config
         config = _config(args.config or Path(".latex-review.toml"), bool(args.config))
         translation = TranslationConfig.from_mapping(config["translation"]) if "translation" in config else None
-        server = create_server(args.directory, args.port, translation_config=translation,
+        directory = _report_directory(args.directory, config)
+        server = create_server(directory, args.port, translation_config=translation,
                                cache_directory=args.translation_cache_dir)
     except (OSError, ValueError, RuntimeError) as exc:
         print(f"预览启动失败：{exc}", file=sys.stderr)
