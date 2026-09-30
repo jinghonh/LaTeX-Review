@@ -46,6 +46,11 @@ button:focus-visible,select:focus-visible,a:focus-visible,summary:focus-visible 
   outline-offset:3px;
 }
 
+.change-trigger:focus-visible {
+  outline:2px solid var(--accent);
+  outline-offset:3px;
+}
+
 a {
   color:var(--accent);
 }
@@ -234,6 +239,20 @@ main {
   border-bottom:1px solid #88aa96;
 }
 
+.reading-view .change-trigger {
+  cursor:pointer;
+  border-bottom:1px solid #88aa96;
+  padding-bottom:2px;
+  box-decoration-break:clone;
+  -webkit-box-decoration-break:clone;
+}
+
+.reading-view .change-trigger:hover,
+.reading-view .change-trigger.is-active-change {
+  background:var(--added);
+  border-bottom:2px solid var(--accent);
+}
+
 .preview-side .is-highlighted,
 .preview-side[data-side="new"] .is-highlighted {
   outline:0;
@@ -400,14 +419,51 @@ main {
   clear:both;
 }
 
+.change-anchor {
+  position:relative;
+}
+
+.deletion-marker {
+  padding:2px 6px;
+  margin:4px 0;
+  color:#9e5943;
+  font:11px/1.7 var(--ui);
+  border-bottom:1px dashed #cfaaa0;
+}
+
+.deletion-marker.is-active-change {
+  background:var(--removed);
+}
+
 .inline-change>summary {
   color:var(--accent);
   list-style:none;
-  display:flex;
+  display:grid;
+  grid-template-columns:16px auto 1fr;
   align-items:center;
   gap:10px;
   padding:4px 0;
   font-size:11px;
+}
+
+.change-excerpt {
+  grid-column:2 / -1;
+  color:var(--muted);
+  font-size:12px;
+  line-height:1.7;
+  display:-webkit-box;
+  -webkit-line-clamp:2;
+  -webkit-box-orient:vertical;
+  overflow:hidden;
+  overflow-wrap:anywhere;
+}
+
+.inline-change>summary .kind-removed {
+  color:#9e5943;
+}
+
+.inline-change>summary .kind-moved {
+  color:#6c6896;
 }
 
 .inline-change>summary::before {
@@ -443,10 +499,13 @@ main {
   margin:18px 0 10px;
 }
 
-.old-excerpt {
+.old-excerpt,.new-excerpt {
   font:17px/1.8 var(--text);
-  color:#6e5148;
   overflow-x:auto;
+}
+
+.old-excerpt {
+  color:#6e5148;
 }
 
 .old-excerpt .review-node {
@@ -617,6 +676,89 @@ main {
   display:none;
 }
 
+.compare-view .deletion-marker {
+  display:none;
+}
+
+.reading-view.margin-notes main {
+  max-width:1184px;
+  padding:36px 36px calc(64px + var(--margin-overflow,0px));
+}
+
+.reading-view.margin-notes .preview-side[data-side="new"] {
+  margin-left:0;
+  margin-right:324px;
+  padding:48px 56px;
+  max-width:none;
+}
+
+.margin-notes .change-anchor:not(.has-deletion) {
+  height:0;
+}
+
+.margin-notes .inline-change {
+  position:absolute;
+  left:var(--change-left,100%);
+  top:var(--change-top,0px);
+  box-sizing:border-box;
+  width:300px;
+  margin:0;
+  padding:12px 14px;
+  background:var(--paper);
+  border:1px solid var(--line);
+  border-left:2px solid #a1b9a9;
+  overflow-wrap:anywhere;
+}
+
+.margin-notes .inline-change[aria-current="true"] {
+  border-color:#a1b9a9;
+  border-left-color:var(--accent);
+  box-shadow:0 3px 16px #2231280a;
+}
+
+.margin-notes .inline-change[data-kind="removed"] {
+  border-left-color:#cfaaa0;
+}
+
+.margin-notes .inline-change>summary {
+  grid-template-columns:12px auto 1fr;
+  gap:6px 8px;
+  padding:0;
+}
+
+.margin-notes .inline-change>summary .change-label {
+  font-size:10px;
+}
+
+.margin-notes .inline-change[open] {
+  background:#f8faf6;
+}
+
+.margin-notes .inline-change[open]>summary {
+  padding-bottom:12px;
+  margin-bottom:12px;
+}
+
+.margin-notes .inline-change .old-excerpt,
+.margin-notes .inline-change .new-excerpt {
+  font-size:14px;
+  line-height:1.8;
+}
+
+.margin-notes .inline-change .old-excerpt {
+  padding:1px 10px;
+  background:var(--removed);
+}
+
+.margin-notes .inline-change .new-excerpt {
+  padding:1px 10px;
+  background:var(--added);
+}
+
+.margin-notes .inline-change .table-preview td {
+  padding:.3rem .4rem;
+}
+
 .compare-view .preview-side>h2 {
   margin-bottom:20px;
 }
@@ -747,7 +889,7 @@ main {
   .report-controls,.changes-side,.report-help,.inline-close {
     display:none!important;
   }
-  main,.compare-view main {
+  main,.compare-view main,.reading-view.margin-notes main {
     display:block;
     padding:0;
     transform:none!important;
@@ -766,6 +908,20 @@ main {
   }
   .report-header {
     position:static;
+  }
+  .reading-view.margin-notes .preview-side[data-side="new"] {
+    margin:0;
+    padding:24px;
+  }
+  .margin-notes .change-anchor:not(.has-deletion) {
+    height:auto;
+  }
+  .margin-notes .inline-change {
+    position:static;
+    width:auto;
+    margin:12px 0;
+    break-inside:avoid;
+    box-shadow:none;
   }
 }
 

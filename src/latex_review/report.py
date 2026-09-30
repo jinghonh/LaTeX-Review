@@ -548,7 +548,7 @@ def _report_html(document: ReviewDocument, preview_html: str, old: ParsedProject
 <p>内容预览供审阅，不代表最终编译版式；来源位置可能为近似值。</p>
 <p>同键文献字段变化单独计入引用主变更，不累计为正文变化。分类命中可重叠。</p>
 <p class="summary-extra">{_e(category_counts)}</p>
-<p>点击正文旁的变更标记，展开旧文与明细。按 Alt+↑ / Alt+↓ 可跳到上一项 / 下一项；输入时快捷键不生效。公式排版可能需要联网。</p>
+<p>右侧页边卡片显示变更摘要。点击正文划线或卡片，展开修改前后对比；窄屏卡片显示在对应段落下方。按 Alt+↑ / Alt+↓ 可跳到上一项 / 下一项；输入时快捷键不生效。公式排版可能需要联网。</p>
 <p id="math-status" role="status">正在加载在线公式排版。</p>
 </div></details></header>
 <nav class="report-controls" aria-label="审阅工具">

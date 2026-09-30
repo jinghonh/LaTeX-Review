@@ -1,4 +1,4 @@
-"""新稿阅读模式、内联对照及筛选的浏览器回归。"""
+"""新稿阅读模式、页边对照及筛选的浏览器回归。"""
 from pathlib import Path
 
 import pytest
@@ -13,6 +13,26 @@ def reading_report(tmp_path):
         old, new = parse_project(pair.old.expand()), parse_project(pair.new.expand())
         report = write_report(old, new, compare_projects(old, new), tmp_path / 'report', pdf_converter='', single_file=True)
     return report
+
+
+@pytest.fixture
+def sentence_report(tmp_path):
+    versions = {
+        'old': '审阅过程以完整段落为基本单位。颜色用于提示已经改变的句子，正文的层级、间距与章节关系保持连续。\n\n'
+               '我们以新稿作为主要阅读对象，将旧文与变更说明放在对应段落附近。连续阅读时呈现必要的标记，需要检查细节时再展开完整对照。',
+        'new': '审阅过程以完整段落为基本单位。细线用于提示已经改变的句子，正文的层级、间距与章节关系保持连续。\n\n'
+               '我们以新稿作为主要阅读对象，将旧文与变更说明放在对应段落右侧。连续阅读时呈现必要的标记，需要检查细节时再展开完整对照。',
+    }
+    for side, text in versions.items():
+        directory = tmp_path / side
+        directory.mkdir()
+        (directory / 'main.tex').write_text(
+            '\\documentclass{article}\n\\begin{document}\n\\section{阅读与定位}\n' + text + '\n\\end{document}\n',
+            encoding='utf-8',
+        )
+    with resolve_sources(entry='main.tex', old_dir=tmp_path / 'old', new_dir=tmp_path / 'new') as pair:
+        old, new = parse_project(pair.old.expand()), parse_project(pair.new.expand())
+        return write_report(old, new, compare_projects(old, new), tmp_path / 'report', pdf_converter='', single_file=True)
 
 
 @pytest.fixture
@@ -50,6 +70,8 @@ def test_reading_inline_navigation_and_filters(reading_report, browser_page):
     assert page.evaluate("document.activeElement.tagName === 'SUMMARY'")
     page.keyboard.press('Alt+ArrowDown')
     assert page.locator('#current-change').inner_text().startswith('第 2 /')
+    assert first.get_attribute('open') is None
+    assert page.locator('.inline-change[open]').count() == 1
 
     page.set_viewport_size({'width': 1600, 'height': 1000})
     page.locator('#toggle-changes').click()
@@ -62,8 +84,13 @@ def test_reading_inline_navigation_and_filters(reading_report, browser_page):
     detail = page.locator('#inline-' + card_id)
     assert detail.get_attribute('open') is not None
     assert detail.locator('.old-excerpt').inner_text().strip()
+    assert detail.locator('.new-excerpt').count() == 0
+    assert page.locator('.deletion-marker.is-active-change').count() == 1
     page.locator('#close-changes').click()
     assert page.locator('.inline-change:visible').count() == sum(c.kind == 'removed' for c in reading_report.document.changes)
+    detail.locator('.inline-close').click()
+    page.locator('.deletion-marker').first.click()
+    assert detail.get_attribute('open') is not None
 
     page.locator('#toggle-changes').click()
     page.locator('#kind-filter').select_option('all')
@@ -102,3 +129,95 @@ def test_single_file_narrow_layout_and_math_failure(reading_report, browser_page
     assert page.locator('#changes-side').is_hidden()
     assert page.locator('#toggle-changes').get_attribute('aria-expanded') == 'false'
     assert page.locator('#math-status').get_attribute('data-state') == 'failed'
+
+
+def assert_margin_notes_do_not_overlap(page):
+    boxes = page.locator('.inline-change:visible').evaluate_all(
+        '(notes) => notes.map(note => { const rect = note.getBoundingClientRect(); '
+        'return {top: rect.top, bottom: rect.bottom, left: rect.left}; })'
+    )
+    paper = page.locator('.preview-side[data-side="new"]').bounding_box()
+    for box in boxes:
+        assert box['left'] >= paper['x'] + paper['width'] + 20
+    for previous, following in zip(boxes, boxes[1:]):
+        assert following['top'] >= previous['bottom'] + 10
+    assert not page.evaluate('document.documentElement.scrollWidth > innerWidth')
+
+
+def test_underlined_sentence_opens_matching_margin_comparison(sentence_report, browser_page):
+    page = browser_page
+    errors = []
+    page.on('pageerror', lambda error: errors.append(str(error)))
+    page.goto(sentence_report.html.as_uri())
+    assert 'margin-notes' in page.locator('body').get_attribute('class')
+    assert_margin_notes_do_not_overlap(page)
+    sentences = page.locator('.change-trigger')
+    assert sentences.count() > 1
+    change, sentence_detail = next(
+        (change, detail) for change in sentence_report.document.changes for detail in change.details
+        if change.kind == 'modified' and detail.old_sentences and detail.new_sentences
+    )
+    first = page.locator(f'#new-{change.new_node_id}-sentence-{sentence_detail.new_sentences[0]}')
+    detail_id = first.get_attribute('aria-controls')
+    detail = page.locator('#' + detail_id)
+    first.click()
+    assert detail.get_attribute('open') is not None
+    assert detail.get_attribute('aria-current') == 'true'
+    assert first.get_attribute('aria-expanded') == 'true'
+    assert 'is-highlighted' in first.get_attribute('class')
+    assert detail.locator('.old-excerpt').inner_text().strip()
+    assert detail.locator('.new-excerpt').inner_text().strip()
+    assert detail.locator('.old-excerpt .is-highlighted').count() > 0
+    assert detail.locator('.new-excerpt .is-highlighted').count() > 0
+    summary = detail.locator('summary').bounding_box()
+    toolbar = page.locator('.report-controls').bounding_box()
+    assert toolbar['y'] + toolbar['height'] <= summary['y'] < page.viewport_size['height']
+    assert 0 <= detail.locator('.new-excerpt').bounding_box()['y'] < page.viewport_size['height']
+    assert_margin_notes_do_not_overlap(page)
+
+    page.locator('#layout-mode').select_option('compare')
+    assert first.get_attribute('tabindex') == '-1'
+    assert first.get_attribute('role') is None
+    page.locator('#layout-mode').select_option('reading')
+    assert first.get_attribute('tabindex') == '0'
+    assert first.get_attribute('role') == 'button'
+
+    other = page.locator('.change-trigger:not([aria-controls="' + detail_id + '"])').first
+    other.focus()
+    page.keyboard.press('Enter')
+    assert detail.get_attribute('open') is None
+    assert first.get_attribute('aria-expanded') == 'false'
+    assert other.get_attribute('aria-expanded') == 'true'
+    assert page.locator('.inline-change[open]').count() == 1
+    opened = page.locator('.inline-change[open]')
+    opened.locator('.inline-close').click()
+    assert other.get_attribute('aria-expanded') == 'false'
+    other.focus()
+    page.keyboard.press('Space')
+    assert page.locator('.inline-change[open]').count() == 1
+    assert_margin_notes_do_not_overlap(page)
+
+    page.set_viewport_size({'width': 390, 'height': 844})
+    page.wait_for_function('!document.body.classList.contains("margin-notes")')
+    assert not page.evaluate('document.documentElement.scrollWidth > innerWidth')
+    assert page.locator('.inline-change[open]').evaluate('note => getComputedStyle(note).position') == 'static'
+    assert not errors
+
+
+def test_sentence_reveals_filtered_card_and_print_restores_flow(sentence_report, browser_page):
+    page = browser_page
+    page.goto(sentence_report.single_html.as_uri())
+    first = page.locator('.change-trigger').first
+    detail = page.locator('#' + first.get_attribute('aria-controls'))
+    page.locator('#toggle-changes').click()
+    page.locator('#kind-filter').select_option('removed')
+    assert detail.is_hidden()
+    page.locator('#close-changes').click()
+    first.click()
+    assert page.locator('#kind-filter').input_value() == 'all'
+    assert detail.is_visible()
+    assert detail.get_attribute('open') is not None
+    assert_margin_notes_do_not_overlap(page)
+    page.emulate_media(media='print')
+    assert detail.evaluate('note => getComputedStyle(note).position') == 'static'
+    assert detail.bounding_box()['width'] <= page.locator('.preview-side[data-side="new"]').bounding_box()['width']
