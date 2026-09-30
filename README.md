@@ -29,6 +29,8 @@ python -m pip install '.[test]'
 
 浏览器工具无法打开本地文件页面时，运行 `latex-review-preview .latex-review/latest`，打开输出的 `http://127.0.0.1:端口/report.html`。服务仅监听本机，自动选择端口，并提供完整报告目录；按 Ctrl+C 停止。详细行为及智能体验收流程见[报告预览](Docs/report-preview.md)。
 
+报告可通过本机服务按需调用配置的 LLM 接口，把两版中包含变化的完整段落、标题和图注译为中文。支持逐项或批量翻译、英中对照、术语表、本机缓存及含译文报告导出；默认不自动请求 API，第一版不翻译表格。接口地址和模型配置在 `[translation]`，密钥来自环境变量。配置与使用步骤见[变更内容翻译](Docs/translation.md)。
+
 GitHub 拉取请求的报告产物与评论发布须由仓库维护者按[工作流启用说明](Docs/github-actions.md)显式配置。模板默认不在本仓库运行。
 
 需要查看实际版式时，显式传入 `--compile`。命令会在两个私有副本中调用已安装的 `latexmk`，保留各侧编译文档、日志、状态及页面预览；`--compile-new-only` 只编译修改后版本。`--tex-engine` 可选 `pdflatex`、`xelatex` 或 `lualatex`。复杂宏和绘图可再加 `--sandbox-render`，要求 macOS 的隔离机制通过自检，否则拒绝高级执行。工具不会自动安装 TeX；缺少工具或某侧编译失败时，结构报告仍会保留。详细用法和产物见[真实编译、页面对比与沙箱渲染](Docs/compiled-rendering.md)。

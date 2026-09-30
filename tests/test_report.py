@@ -68,7 +68,8 @@ New text \cite{b}.
     assert "图缺失：fig/missing.png" in html and "Missing image" in html
     assert "data-old-location=" in html and "data-new-location=" in html
     assert 'id="old-comment-old-000001"' in html and 'id="new-comment-new-000001"' in html
-    assert "fetch(" not in html
+    assert 'id="translation-units"' in html
+    assert "location.protocol === 'http:'" in html
     assert (report.directory / "assets/old/fig/same.png").read_bytes() != (report.directory / "assets/new/fig/same.png").read_bytes()
     moved = tmp_path / "moved"
     shutil.move(report.directory, moved)

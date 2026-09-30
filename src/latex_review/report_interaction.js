@@ -260,6 +260,8 @@
           (!row || cell.dataset.row === row) && (!column || cell.dataset.column === column));
       });
       arrangeInlineChanges();
+      const toolbar = document.querySelector('.report-controls');
+      detail.style.scrollMarginTop = (toolbar && getComputedStyle(toolbar).position === 'sticky' ? toolbar.offsetHeight + 16 : 16) + 'px';
       detail.scrollIntoView({block: 'start', behavior: 'auto'});
     }
   }

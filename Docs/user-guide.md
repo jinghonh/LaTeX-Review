@@ -59,6 +59,8 @@ latex-review ./before.tex ./after.tex --output ./review-output
 
 ### 配置
 
+报告的按需中文翻译通过 `[translation]` 设置兼容接口、模型、并发和可选术语表，密钥由环境变量提供。需要启动本机预览服务后点击翻译；完整配置、缓存及导出步骤见[变更内容翻译](translation.md)。
+
 CLI 默认读取当前目录的 `.latex-review.toml`，也可用 `--config path/to/config.toml` 指定。命令行选项覆盖配置，配置覆盖默认值。常用配置如下：
 
 ```toml

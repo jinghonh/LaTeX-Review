@@ -518,7 +518,7 @@ def _rendering_html(rendering: dict | None, statuses: tuple | None) -> str:
 def _report_html(document: ReviewDocument, preview_html: str, old: ParsedProject,
                  new: ParsedProject, editor_template: str | None,
                  pairs: tuple[tuple[str, str], ...], *, rendering: dict | None = None,
-                 statuses: tuple | None = None) -> str:
+                 statuses: tuple | None = None, translation_units: list[dict] | None = None) -> str:
     # 预览层拥有节点 HTML 和公式降级逻辑；报告提供以新稿为主体的阅读容器。
     style = re.search(r"<style>(.*?)</style>", preview_html, re.S)
     main = re.search(r"<main>(.*?)</main>", preview_html, re.S)
@@ -532,6 +532,11 @@ def _report_html(document: ReviewDocument, preview_html: str, old: ParsedProject
     interaction = files("latex_review").joinpath("report_interaction.js").read_text(encoding="utf-8")
     pairs_json = json.dumps(pairs, ensure_ascii=False).replace("<", "\\u003c")
     report_style = files("latex_review").joinpath("report.css").read_text(encoding="utf-8")
+    from .translation import build_units
+    translation_units = json.dumps([{k: v for k, v in unit.items() if k != "sentences"}
+                                   for unit in (translation_units if translation_units is not None else build_units(document, old, new))],
+                                   ensure_ascii=False).replace("<", "\\u003c")
+    translation_script = files("latex_review").joinpath("report_translation.js").read_text(encoding="utf-8")
     severity_labels = {"error": "错误", "warning": "提醒", "info": "说明"}
     diagnostics_html = "".join(
         f'<li><strong>{_e(severity_labels.get(item.severity, item.severity))}</strong> · {_e(item.message)}</li>'
@@ -556,6 +561,9 @@ def _report_html(document: ReviewDocument, preview_html: str, old: ParsedProject
 <div class="reading-options"><label>阅读范围 <select id="reading-mode"><option value="full">完整文档</option><option value="context">变更上下文</option></select></label>
 <label>对照方式 <select id="layout-mode"><option value="reading">新稿阅读</option><option value="compare">双稿对照</option></select></label>
 <label class="sync-option"><input type="checkbox" id="sync-scroll"> 同步滚动</label></div>
+<div class="translation-controls"><label>译文 <select id="translation-mode"><option value="original">英文原文</option><option value="bilingual">英中对照</option></select></label>
+<button type="button" id="translate-all">翻译全部变更</button><button type="button" id="translation-cancel" disabled>停止翻译</button>
+<button type="button" id="translation-export">导出含译文报告</button><span id="translation-status" role="status">点击后翻译变更段落、标题和图注；表格暂不翻译。</span></div>
 <div class="step-controls"><span id="current-change" role="status">尚未选择变更</span><button type="button" id="previous-change" aria-label="上一变更">↑ 上一处</button><button type="button" id="next-change" aria-label="下一变更">下一处 ↓</button></div>
 </nav>
 <main>{main.group(1)}<section class="changes-side" aria-label="变更" id="changes-side"><div class="directory-heading"><h2>变更目录</h2><button type="button" id="close-changes" aria-label="收起变更目录">收起</button></div>
@@ -567,6 +575,9 @@ def _report_html(document: ReviewDocument, preview_html: str, old: ParsedProject
 </details>
 {('<details class="report-supplement" id="compiled-pages"><summary>编译页面与视觉差异</summary>' + _rendering_html(rendering, statuses) + '</details>') if rendering is not None and statuses is not None else ''}
 <script>window.reviewNodePairs={pairs_json};</script><script>{interaction}</script>
+<script type="application/json" id="translation-units">{translation_units}</script>
+<script type="application/json" id="translation-results">{{}}</script>
+<script>{translation_script}</script>
 {scripts.group(1)}
 </body></html>'''
 
@@ -643,12 +654,16 @@ def write_report(old: ParsedProject, new: ParsedProject, comparison: ComparisonR
     document = replace(comparison.document, diagnostics=diagnostics)
     diff_json = dumps(document)
     pairs = tuple((pair.old_id, pair.new_id) for pair in comparison.mapping.pairs)
+    from .translation import build_units
+    units = build_units(document, old, new)
     html = _report_html(document, preview.html, old, new, editor_url_template, pairs,
-                        rendering=rendering, statuses=statuses)
+                        rendering=rendering, statuses=statuses, translation_units=units)
     _write_managed(directory, Path("diff.json"), content=diff_json.encode("utf-8"))
     _write_managed(directory, Path("diagnostics.json"),
                    content=dumps(DiagnosticsDocument(diagnostics)).encode("utf-8"))
     _write_managed(directory, Path("report.html"), content=html.encode("utf-8"))
+    _write_managed(directory, Path("translation-units.json"),
+                   content=json.dumps(units, ensure_ascii=False).encode("utf-8"))
     single = (_write_managed(directory, Path("report-single.html"),
                              content=_single_file_html(html, directory).encode("utf-8")) if single_file else None)
     return ReportResult(directory, document, single)

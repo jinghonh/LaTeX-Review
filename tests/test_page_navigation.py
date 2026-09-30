@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from threading import Thread
+import os
 
 import pytest
 
@@ -53,7 +54,7 @@ def test_page_link_reveals_filtered_change_and_updates_preview(tmp_path, report_
                               rendering=rendering, statuses=statuses)
     with browser_api.sync_playwright() as playwright:
         try:
-            browser = playwright.chromium.launch(headless=True)
+            browser = playwright.chromium.launch(headless=True, executable_path=os.environ.get("LATEX_REVIEW_BROWSER"))
         except browser_api.Error as exc:
             pytest.skip(f"浏览器运行环境不可用：{exc}")
         try:

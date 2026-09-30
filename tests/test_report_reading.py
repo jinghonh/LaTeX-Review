@@ -1,5 +1,6 @@
 """新稿阅读模式、页边对照及筛选的浏览器回归。"""
 from pathlib import Path
+import os
 
 import pytest
 
@@ -40,7 +41,7 @@ def browser_page():
     api = pytest.importorskip('playwright.sync_api')
     with api.sync_playwright() as playwright:
         try:
-            browser = playwright.chromium.launch()
+            browser = playwright.chromium.launch(executable_path=os.environ.get("LATEX_REVIEW_BROWSER"))
         except api.Error as exc:
             pytest.skip(f'浏览器运行环境不可用：{exc}')
         page = browser.new_page(viewport={'width': 1280, 'height': 900})

@@ -932,3 +932,15 @@ main {
 .preview-side .old-excerpt .is-highlighted {
   background:var(--removed);
 }
+/* 翻译是段落内的阅读辅助；中文沿用英文的变更范围。 */
+.translation-controls { display:flex; flex-wrap:wrap; align-items:center; gap:8px; flex-basis:100%; }
+#translation-status { font-size:12px; color:var(--muted, #64748b); }
+.translation-item-controls { display:flex; flex-wrap:wrap; gap:8px; align-items:center; margin:10px 0; }
+.translation-item-status { font-size:12px; color:var(--muted, #64748b); }
+.translation-block { display:none; border-left:3px solid #8b9caa; padding:10px 14px; margin:10px 0 18px; background:#f4f7fa; font-size:.95em; line-height:1.8; }
+.bilingual-view .translation-block { display:block; }
+.translation-label { display:block; font-size:11px; color:#617485; letter-spacing:.08em; margin-bottom:5px; }
+.translation-block .sentence-changed { background:#e7f0f4; text-decoration:underline; text-decoration-color:#698696; text-underline-offset:4px; }
+.preview-side[data-side="old"] .translation-block .sentence-changed,.old-excerpt .translation-block .sentence-changed { background:#faecea; text-decoration-color:#b5776c; }
+.translated-sentence.sentence-changed { cursor:pointer; }
+.translation-block .math-tex { visibility:visible; }

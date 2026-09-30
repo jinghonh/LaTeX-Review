@@ -42,7 +42,7 @@ def _config(path: Path, explicit: bool) -> dict:
             data = tomllib.load(stream)
     except (OSError, tomllib.TOMLDecodeError) as exc:
         raise ConfigurationError(f"配置文件 {path} 无法读取或解析：{exc}") from exc
-    allowed = {"entry", "ignore", "render", "diff", "git", "output", "macros", "compile"}
+    allowed = {"entry", "ignore", "render", "diff", "git", "output", "macros", "compile", "translation"}
     if extra := set(data) - allowed:
         raise ConfigurationError(f"配置含未知字段：{', '.join(sorted(extra))}")
     for key in ("entry", "output"):
@@ -74,6 +74,9 @@ def _config(path: Path, explicit: bool) -> dict:
             raise ConfigurationError(f"首版不支持 [{section}].{key} 的该值")
     try:
         validate_macros(data.get("macros", {}))
+        if "translation" in data:
+            from .translation import TranslationConfig
+            TranslationConfig.from_mapping(data["translation"])
     except ValueError as exc:
         raise ConfigurationError(str(exc)) from exc
     return data
@@ -295,9 +298,10 @@ def main(argv: list[str] | None = None) -> int:
         if compile_enabled:
             output.mkdir(parents=True, exist_ok=True)
         cache = ParseCache(cache_dir, enabled=not args.no_cache,
-                           config={"config": config, "math": args.math or "mathjax",
+                           config={"config": {key: value for key, value in config.items() if key != "translation"}, "math": args.math or "mathjax",
                                    "comments": args.comments if args.comments is not None else config.get("diff", {}).get("comments", False)})
-        with resolve_sources(**options, excluded_paths=(output, cache_dir), ignore_patterns=tuple(config.get("ignore", ()))) as pair:
+        with resolve_sources(**options, excluded_paths=(output, cache_dir, output.parent / "translation-cache"),
+                             ignore_patterns=tuple(config.get("ignore", ()))) as pair:
             old_expanded, new_expanded = pair.old.expand(), pair.new.expand()
             macros = validate_macros(config.get("macros", {}))
             failures = []
