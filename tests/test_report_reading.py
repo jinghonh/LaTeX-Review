@@ -84,6 +84,8 @@ def test_reading_inline_navigation_and_filters(reading_report, browser_page):
     removed.first.locator('.change-jump').click()
     detail = page.locator('#inline-' + card_id)
     assert detail.get_attribute('open') is not None
+    assert detail.locator('.old-excerpt').is_hidden()
+    detail.locator('.inline-full-context > summary').click()
     assert detail.locator('.old-excerpt').inner_text().strip()
     assert detail.locator('.new-excerpt').count() == 0
     assert page.locator('.deletion-marker.is-active-change').count() == 1
@@ -166,14 +168,23 @@ def test_underlined_sentence_opens_matching_margin_comparison(sentence_report, b
     assert detail.get_attribute('aria-current') == 'true'
     assert first.get_attribute('aria-expanded') == 'true'
     assert 'is-highlighted' in first.get_attribute('class')
-    assert detail.locator('.old-excerpt').inner_text().strip()
-    assert detail.locator('.new-excerpt').inner_text().strip()
+    assert detail.locator('.old-excerpt').is_hidden()
+    assert detail.locator('.new-excerpt').is_hidden()
+    assert detail.locator('.compact-diff').is_visible()
+    assert detail.locator('.detail-jump.is-selected-detail').count() == 1
+    assert detail.locator('.diff-removed').inner_text() == '颜色'
+    assert detail.locator('.diff-added').inner_text() == '细线'
+    assert '审阅过程以完整段落为基本单位' not in detail.locator('.compact-diff').inner_text()
     assert detail.locator('.old-excerpt .is-highlighted').count() > 0
     assert detail.locator('.new-excerpt .is-highlighted').count() > 0
-    summary = detail.locator('summary').bounding_box()
+    summary = detail.locator(':scope > summary').bounding_box()
     toolbar = page.locator('.report-controls').bounding_box()
     assert toolbar['y'] + toolbar['height'] <= summary['y'] < page.viewport_size['height']
-    assert 0 <= detail.locator('.new-excerpt').bounding_box()['y'] < page.viewport_size['height']
+    detail.locator('.inline-full-context > summary').click()
+    assert detail.locator('.old-excerpt').is_visible()
+    assert detail.locator('.new-excerpt').is_visible()
+    detail.locator('.inline-full-context > summary').click()
+    assert detail.locator('.old-excerpt').is_hidden()
     assert_margin_notes_do_not_overlap(page)
 
     page.locator('#layout-mode').select_option('compare')
@@ -222,3 +233,55 @@ def test_sentence_reveals_filtered_card_and_print_restores_flow(sentence_report,
     page.emulate_media(media='print')
     assert detail.evaluate('note => getComputedStyle(note).position') == 'static'
     assert detail.bounding_box()['width'] <= page.locator('.preview-side[data-side="new"]').bounding_box()['width']
+
+
+@pytest.mark.parametrize('before,after,removed,added,groups', [
+    ('A shared opening has many ordinary words before we find a small gain using '
+     'the same sequence of observations across all experiments with an unchanged '
+     'protocol and a stable result followed by many more ordinary words at the end.',
+     'A shared opening has many ordinary words before we find a large gain using '
+     'the same sequence of observations across all experiments with an unchanged '
+     'protocol and a robust result followed by many more ordinary words at the end.',
+     ['small', 'stable'], ['large', 'robust'], 2),
+    ('We repeat the same same small finding.', 'We repeat the same same large finding.',
+     ['small'], ['large'], 1),
+    ('Keep this. End here.', 'Keep this. Add this. End here.', [], ['Add this.'], 1),
+    ('Keep this. Remove this. End here.', 'Keep this. End here.', ['Remove this.'], [], 1),
+    (r'We use $x_1$ and cite \cite{alpha}.', r'We use $x_2$ and cite \cite{beta}.',
+     None, None, 1),
+    (' '.join(['shared'] * 600) + ' small result.', ' '.join(['shared'] * 600) + ' large result.',
+     ['small'], ['large'], 1),
+])
+def test_compact_comparison_preserves_changes_and_limits_context(tmp_path, browser_page,
+                                                               before, after, removed, added, groups):
+    for side, text in (('old', before), ('new', after)):
+        folder = tmp_path / side
+        folder.mkdir()
+        (folder / 'main.tex').write_text('\\begin{document}\n' + text + '\n\\end{document}')
+    with resolve_sources(entry='main.tex', old_dir=tmp_path / 'old', new_dir=tmp_path / 'new') as pair:
+        old, new = parse_project(pair.old.expand()), parse_project(pair.new.expand())
+        report = write_report(old, new, compare_projects(old, new), tmp_path / 'report', pdf_converter='')
+    page = browser_page
+    errors = []
+    page.on('pageerror', lambda error: errors.append(str(error)))
+    page.goto(report.html.as_uri())
+    page.locator('#next-change').click()
+    note = page.locator('.inline-change[open]')
+    assert note.locator('.diff-group').count() == groups
+    assert note.locator('.inline-full-context').get_attribute('open') is None
+    if removed is not None:
+        assert note.locator('.diff-removed').all_text_contents() == removed
+        assert note.locator('.diff-added').all_text_contents() == added
+    else:
+        assert note.locator('.diff-removed .math-tex').count() == 1
+        assert note.locator('.diff-added .math-tex').count() == 1
+        assert note.locator('.diff-removed .citation').inner_text() == '[alpha]'
+        assert note.locator('.diff-added .citation').inner_text() == '[beta]'
+    if groups == 2:
+        text = note.locator('.compact-diff').inner_text()
+        assert 'A shared opening' not in text and 'at the end' not in text
+    assert not page.evaluate('document.documentElement.scrollWidth > innerWidth')
+    note.locator('.inline-full-context > summary').click()
+    assert note.locator('.old-excerpt').is_visible()
+    assert note.locator('.new-excerpt').is_visible()
+    assert not errors

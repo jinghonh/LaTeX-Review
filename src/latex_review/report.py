@@ -419,7 +419,7 @@ def _change_cards(document: ReviewDocument, anchors: set[str], old: ParsedProjec
             old_location = "所属段落；" + _location(old_source) if detail.old_sentences else _location(old_source)
             new_location = "所属段落；" + _location(new_source) if detail.new_sentences else _location(new_source)
             details.append(f'<li><button type="button" class="detail-jump" data-old="{_e(detail_old_id)}" '
-                           f'data-new="{_e(detail_new_id)}" data-old-location="{_e(old_location)}" '
+                           f'data-new="{_e(detail_new_id)}" data-detail-category="{_e(detail.category)}" data-old-location="{_e(old_location)}" '
                            f'data-new-location="{_e(new_location)}" '
                            f'data-old-sentences="{_e(old_sentence_ids)}" data-new-sentences="{_e(new_sentence_ids)}" '
                            f'data-old-row="{detail.row_old or ""}" data-old-column="{detail.column_old or ""}" '

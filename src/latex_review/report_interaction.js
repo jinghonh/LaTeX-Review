@@ -248,6 +248,15 @@
     mutedUntil = performance.now() + 350;
     status.textContent = messages.join('；');
     if (readingView() && detail) {
+      let selectedDetail = null;
+      detail.querySelectorAll('.detail-list:not(.supplemental-details) .detail-jump').forEach(copy => {
+        const matches = sentenceJump && copy.dataset.oldSentences === button.dataset.oldSentences &&
+          copy.dataset.newSentences === button.dataset.newSentences;
+        copy.classList.toggle('is-selected-detail', !!matches);
+        if (matches && !selectedDetail) selectedDetail = copy;
+      });
+      if (button.classList.contains('detail-jump') && !sentenceJump)
+        detail.querySelector('.inline-full-context').open = true;
       detail.querySelectorAll('[data-original-id]').forEach(copy => {
         const original = document.getElementById(copy.dataset.originalId);
         copy.classList.toggle('is-highlighted', !!original?.classList.contains('is-highlighted'));
@@ -263,6 +272,10 @@
       const toolbar = document.querySelector('.report-controls');
       detail.style.scrollMarginTop = (toolbar && getComputedStyle(toolbar).position === 'sticky' ? toolbar.offsetHeight + 16 : 16) + 'px';
       detail.scrollIntoView({block: 'start', behavior: 'auto'});
+      if (selectedDetail) {
+        selectedDetail.style.scrollMarginTop = detail.style.scrollMarginTop;
+        selectedDetail.scrollIntoView({block: 'nearest', behavior: 'auto'});
+      }
     }
   }
   document.getElementById('changes-side').addEventListener('click', event => {
@@ -420,10 +433,140 @@
       }
       return null;
     }
+    // Compare the already-safe preview DOM. Math and references stay indivisible,
+    // and cloned inline formatting never passes through an HTML string builder.
+    function diffTokens(source) {
+      const tokens = [];
+      if (!source) return tokens;
+      let firstText = true;
+      function visit(node, wrappers) {
+        if (node.nodeType === Node.TEXT_NODE) {
+          let text = node.textContent;
+          if (firstText) { text = text.replace(/^修改[前后]：/, ''); firstText = false; }
+          const parts = text.match(/\s+|\p{Script=Han}|[\p{L}\p{N}_]+|[^\s]/gu) || [];
+          parts.forEach(part => {
+            const value = /^\s+$/.test(part) ? ' ' : part;
+            tokens.push({key: wrappers.map(item => item.tagName).join('/') + ':' + value,
+              node: document.createTextNode(value), wrappers, space: value === ' '});
+          });
+          return;
+        }
+        if (node.nodeType !== Node.ELEMENT_NODE) return;
+        if (node.matches('.math-tex,.citation,.cross-ref,.unresolved-ref,.preview-unavailable')) {
+          firstText = false;
+          tokens.push({key: node.className + ':' + node.textContent, node, wrappers, space: false});
+          return;
+        }
+        node.childNodes.forEach(child => visit(child, [...wrappers, node]));
+      }
+      source.childNodes.forEach(node => visit(node, []));
+      return tokens;
+    }
+    function diffOperations(before, after) {
+      const n = before.length, m = after.length;
+      const operations = [];
+      function add(kind, a, b, c, d) {
+        const previous = operations[operations.length - 1];
+        if (previous && previous.kind === kind) { previous.b = b; previous.d = d; }
+        else operations.push({kind, a, b, c, d});
+      }
+      // Bound work for unusually long paragraphs; their common edges still
+      // remain context, and the differing middle is shown without losing text.
+      if (n * m > 250000) {
+        let start = 0, end = 0;
+        while (start < n && start < m && before[start].key === after[start].key) start++;
+        while (end < n - start && end < m - start && before[n - end - 1].key === after[m - end - 1].key) end++;
+        add('equal', 0, start, 0, start);
+        add('replace', start, n - end, start, m - end);
+        add('equal', n - end, n, m - end, m);
+        return operations.filter(op => op.a !== op.b || op.c !== op.d);
+      }
+      const lengths = Array.from({length: n + 1}, () => new Uint16Array(m + 1));
+      for (let a = n - 1; a >= 0; a--) for (let c = m - 1; c >= 0; c--)
+        lengths[a][c] = before[a].key === after[c].key ? lengths[a + 1][c + 1] + 1 :
+          Math.max(lengths[a + 1][c], lengths[a][c + 1]);
+      let a = 0, c = 0;
+      while (a < n || c < m) {
+        if (a < n && c < m && before[a].key === after[c].key) {
+          add('equal', a, a + 1, c, c + 1); a++; c++;
+        } else if (c < m && (a === n || lengths[a][c + 1] > lengths[a + 1][c])) {
+          add('insert', a, a, c, c + 1); c++;
+        } else { add('delete', a, a + 1, c, c); a++; }
+      }
+      return operations;
+    }
+    function compactDiff(beforeSource, afterSource, firstNumber) {
+      const before = diffTokens(beforeSource), after = diffTokens(afterSource);
+      let operations = diffOperations(before, after);
+      // A source-only change may have identical displayed labels. Keep the
+      // complete sentence visible rather than presenting an empty comparison.
+      if (!operations.some(op => op.kind !== 'equal'))
+        operations = [{kind: 'replace', a: 0, b: before.length, c: 0, d: after.length}];
+      function edge(tokens, position, direction) {
+        let count = 0;
+        while ((position > 0 && direction < 0) || (position < tokens.length && direction > 0)) {
+          const token = tokens[direction < 0 ? --position : position++];
+          if (!token.space && ++count === 6) break;
+        }
+        return position;
+      }
+      const groups = [];
+      operations.filter(op => op.kind !== 'equal').forEach(op => {
+        const range = {a: edge(before, op.a, -1), b: edge(before, op.b, 1),
+          c: edge(after, op.c, -1), d: edge(after, op.d, 1)};
+        const previous = groups[groups.length - 1];
+        if (previous && range.a <= previous.b && range.c <= previous.d) {
+          previous.b = range.b; previous.d = range.d;
+        } else groups.push(range);
+      });
+      const comparison = document.createElement('span'); comparison.className = 'compact-diff';
+      function snippet(tokens, start, end, side) {
+        const text = document.createElement('span'); text.className = 'diff-snippet';
+        if (!tokens.length) { text.classList.add('diff-empty'); text.textContent = '该侧无对应内容'; return text; }
+        if (start) text.append(document.createTextNode('… '));
+        let run, changedBefore;
+        for (let index = start; index < end; index++) {
+          const changed = operations.some(op => op.kind !== 'equal' &&
+            index >= op[side === 'old' ? 'a' : 'c'] && index < op[side === 'old' ? 'b' : 'd']);
+          if (!run || changed !== changedBefore) {
+            run = document.createElement(changed ? side === 'old' ? 'del' : 'ins' : 'span');
+            run.className = changed ? 'diff-' + (side === 'old' ? 'removed' : 'added') : 'diff-context';
+            text.append(run); changedBefore = changed;
+          }
+          const token = tokens[index];
+          let copy = token.node.cloneNode(true);
+          for (const wrapper of [...token.wrappers].reverse()) {
+            const parent = wrapper.cloneNode(false); parent.removeAttribute('id');
+            parent.append(copy); copy = parent;
+          }
+          run.append(copy);
+        }
+        if (end < tokens.length) text.append(document.createTextNode(' …'));
+        return text;
+      }
+      groups.forEach((range, index) => {
+        const group = document.createElement('span'); group.className = 'diff-group';
+        const title = document.createElement('span'); title.className = 'diff-group-title';
+        title.textContent = '改动 ' + (firstNumber + index);
+        group.append(title);
+        for (const [side, label, tokens, start, end] of [
+          ['old', '修改前', before, range.a, range.b], ['new', '修改后', after, range.c, range.d]]) {
+          const row = document.createElement('span'); row.className = 'diff-row diff-row-' + side;
+          const caption = document.createElement('span'); caption.className = 'diff-side-label'; caption.textContent = label;
+          if (tokens.length) row.append(caption, snippet(tokens, start, end, side));
+          else {
+            row.classList.add('diff-row-empty'); caption.textContent += ' · 无对应内容'; row.append(caption);
+          }
+          group.append(row);
+        }
+        comparison.append(group);
+      });
+      return comparison;
+    }
     cards.forEach((card, index) => {
       const button = card.querySelector('.change-jump');
-      const target = button.dataset.new && document.getElementById('new-' + button.dataset.new);
-      const oldNode = button.dataset.old && document.getElementById('old-' + button.dataset.old);
+      const target = button.dataset.new ? document.getElementById('new-' + button.dataset.new) : null;
+      const oldNode = button.dataset.old ? document.getElementById('old-' + button.dataset.old) : null;
       const slot = document.createElement('div'); slot.className = 'change-anchor';
       const detail = document.createElement('details');
       detail.className = 'inline-change'; detail.id = 'inline-' + card.id;
@@ -435,11 +578,11 @@
       label.className = 'change-kind kind-' + card.dataset.kind;
       label.textContent = kindText + ' · ' + String(index + 1).padStart(2, '0');
       const hint = document.createElement('span'); hint.className = 'change-label';
-      hint.textContent = card.dataset.kind === 'removed' ? '查看已删除内容' : '查看旧文与明细';
+      hint.textContent = '查看具体改动';
       summary.append(label, hint); detail.append(summary);
       const heading = document.createElement('p'); heading.className = 'inline-heading';
       const categories = Array.from(card.querySelectorAll('.badge')).map(badge => badge.textContent).join(' · ');
-      heading.textContent = categories + ' · ' + kindText;
+      heading.textContent = categories;
       const content = target || oldNode;
       const lead = content && content.querySelector('h2,h3,h4,p,figcaption');
       let excerptTitle = '';
@@ -450,10 +593,44 @@
       }
       button.querySelector('strong').textContent = excerptTitle ?
         excerptTitle.slice(0, 64) + (excerptTitle.length > 64 ? '…' : '') : categories + '内容';
-      const teaser = document.createElement('span'); teaser.className = 'change-excerpt';
-      teaser.textContent = button.querySelector('strong').textContent;
-      summary.append(teaser);
       detail.append(heading);
+      const list = card.querySelector('.detail-list').cloneNode(true);
+      const supplement = document.createElement('ul'); supplement.className = 'detail-list supplemental-details';
+      const seenSentences = new Set();
+      const covered = {old: new Set(), new: new Set()};
+      const sentenceDetails = Array.from(list.querySelectorAll('.detail-jump'));
+      const textDetail = button => button.dataset.detailCategory === 'text' ||
+        (!button.dataset.detailCategory && button.textContent.trim().startsWith('正文 ·'));
+      sentenceDetails.sort((a, b) => Number(textDetail(b)) - Number(textDetail(a)));
+      let groupCount = 0;
+      sentenceDetails.forEach(jumpButton => {
+        const pair = jumpButton.querySelector('.sentence-pair');
+        if (!pair) return;
+        const ids = Object.fromEntries(['old', 'new'].map(side =>
+          [side, (jumpButton.dataset[side + 'Sentences'] || '').split(' ').filter(Boolean)]));
+        const key = jumpButton.dataset.oldSentences + '|' + jumpButton.dataset.newSentences;
+        const alreadyShown = !textDetail(jumpButton) && ['old', 'new'].every(side => ids[side].every(id => covered[side].has(id)));
+        if (seenSentences.has(key) || alreadyShown) {
+          pair.hidden = true; supplement.append(jumpButton.closest('li')); return;
+        }
+        seenSentences.add(key);
+        ['old', 'new'].forEach(side => ids[side].forEach(id => covered[side].add(id)));
+        const comparison = compactDiff(jumpButton.dataset.oldSentences ? pair.querySelector('.sentence-before') : null,
+          jumpButton.dataset.newSentences ? pair.querySelector('.sentence-after') : null, groupCount + 1);
+        groupCount += comparison.children.length;
+        Array.from(jumpButton.childNodes).filter(node => node.nodeType === Node.TEXT_NODE).forEach(node => node.remove());
+        pair.hidden = true; jumpButton.append(comparison);
+      });
+      if (!groupCount && card.dataset.kind !== 'moved' &&
+          (oldNode?.classList.contains('node-paragraph') || target?.classList.contains('node-paragraph'))) {
+        const comparison = compactDiff(oldNode?.querySelector('p'), target?.querySelector('p'), 1);
+        groupCount = comparison.children.length; detail.append(comparison);
+      }
+      hint.textContent = groupCount ? groupCount + ' 处改动' : '查看变更明细';
+      detail.append(list);
+      const full = document.createElement('details'); full.className = 'inline-full-context';
+      const fullSummary = document.createElement('summary'); fullSummary.textContent = '完整段落对照';
+      full.append(fullSummary); detail.append(full);
       function appendExcerpt(node, side) {
         const title = document.createElement('p'); title.className = 'inline-heading';
         title.textContent = side === 'old' ? '修改前' : '修改后';
@@ -468,19 +645,19 @@
           element.classList.remove('review-node', 'context-hidden', 'is-highlighted');
           element.removeAttribute('data-node-id');
         });
-        excerpt.append(copy); detail.append(title, excerpt);
+        excerpt.append(copy); full.append(title, excerpt);
       }
       if (oldNode) {
         appendExcerpt(oldNode, 'old');
       } else {
-        const note = document.createElement('p'); note.textContent = '此处为新增内容，旧稿没有对应内容。'; detail.append(note);
+        const note = document.createElement('p'); note.textContent = '此处为新增内容，旧稿没有对应内容。'; full.append(note);
       }
       if (target) appendExcerpt(target, 'new');
       else {
-        const note = document.createElement('p'); note.textContent = '此处内容已从新稿删除。'; detail.append(note);
+        const note = document.createElement('p'); note.textContent = '此处内容已从新稿删除。'; full.append(note);
       }
-      const list = card.querySelector('.detail-list').cloneNode(true);
-      detail.append(list);
+      if (supplement.children.length) full.append(supplement);
+      full.addEventListener('toggle', () => arrangeInlineChanges());
       const pages = card.querySelector('.card-pages');
       if (pages) detail.append(pages.cloneNode(true));
       const close = document.createElement('button'); close.type = 'button';

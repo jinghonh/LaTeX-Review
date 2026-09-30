@@ -483,6 +483,8 @@ def test_browser_missing_key_shows_global_guidance_and_preserves_cached_translat
             button = page.locator(".change-card [data-translate-change]")
             assert button.is_enabled() and button.inner_text() == "显示译文"
             page.locator("#next-change").click()
+            assert page.locator('.inline-change[open] .inline-translation .translation-block').first.is_hidden()
+            page.locator('.inline-change[open] .inline-translation > summary').click()
             page.locator(".inline-change[open] [data-translate-change]").click()
             assert page.locator('.preview-side[data-side="new"] .translation-block').first.is_visible()
             assert len(calls) == 2
@@ -515,6 +517,8 @@ def test_browser_translation_inline_controls_highlights_and_static_export(provid
             page.locator("#translation-status").get_by_text("译文 0 / 2 段").wait_for()
             assert not calls
             page.locator("#next-change").click()
+            assert page.locator('.inline-change[open] .inline-translation').get_attribute('open') is None
+            page.locator('.inline-change[open] .inline-translation > summary').click()
             page.locator(".inline-change[open] [data-translate-change]").click()
             page.wait_for_function("document.querySelector('#translation-status').textContent.includes('译文 2 / 2 段')")
             assert len(calls) == 2
@@ -530,9 +534,13 @@ def test_browser_translation_inline_controls_highlights_and_static_export(provid
             assert 'is-highlighted' in page.locator('#' + new_unit['id'] + '-sentence-2').get_attribute('class')
             for number in (1, 3):
                 assert 'is-highlighted' not in page.locator('#' + new_unit['id'] + '-sentence-' + str(number)).get_attribute('class')
-            assert page.locator('.inline-change[open] .old-excerpt .translation-block').is_visible()
+            assert page.locator('.inline-change[open] .inline-translation-side[data-side="old"] .translation-block').is_visible()
+            assert page.locator('.inline-change[open] .old-excerpt').is_hidden()
             page.locator("#translation-mode").select_option("original")
             assert new_block.is_hidden()
+            assert page.locator('.inline-change[open] .inline-translation .translation-block').first.is_visible()
+            page.locator('.inline-change[open] .inline-translation > summary').click()
+            assert page.locator('.inline-change[open] .inline-translation .translation-block').first.is_hidden()
             page.locator("#translation-mode").select_option("bilingual")
             with page.expect_download() as pending:
                 page.locator("#translation-export").click()

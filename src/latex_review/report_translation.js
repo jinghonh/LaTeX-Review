@@ -47,8 +47,8 @@
         }
       }
       insert(target, block);
-      document.querySelectorAll('.inline-change [data-original-id="' + CSS.escape(result.id) + '"]').forEach(copy =>
-        insert(copy, block.cloneNode(true)));
+      document.querySelectorAll('.inline-translation-side[data-translation-node="' + CSS.escape(result.id) + '"]').forEach(copy =>
+        copy.append(block.cloneNode(true)));
       installed.add(result.id);
     });
     document.body.classList.toggle('bilingual-view', mode.value === 'bilingual');
@@ -158,7 +158,20 @@
     const text = document.createElement('span'); text.className = 'translation-item-status'; text.setAttribute('role', 'status');
     controls.append(button, text); card.append(controls);
     const inline = document.getElementById('inline-' + card.id);
-    if (inline) inline.append(controls.cloneNode(true));
+    if (inline) {
+      const translation = document.createElement('details'); translation.className = 'inline-translation';
+      const summary = document.createElement('summary'); summary.textContent = '中文译文';
+      translation.append(summary, controls.cloneNode(true));
+      units.filter(unit => unit.change_id === card.id).forEach(unit => {
+        const side = document.createElement('div'); side.className = 'inline-translation-side';
+        side.dataset.translationNode = unit.id; side.dataset.side = unit.side;
+        const label = document.createElement('p'); label.className = 'inline-heading';
+        label.textContent = unit.side === 'old' ? '修改前译文' : '修改后译文';
+        side.append(label); translation.append(side);
+      });
+      translation.addEventListener('toggle', () => window.dispatchEvent(new Event('resize')));
+      inline.insertBefore(translation, inline.querySelector('.inline-close'));
+    }
   });
   document.addEventListener('click', event => {
     const sentence = event.target.closest('.translated-sentence.sentence-changed');
@@ -180,6 +193,9 @@
     const button = event.target.closest('[data-translate-change]');
     if (!button) return;
     event.preventDefault();
+    const inline = document.getElementById('inline-' + button.dataset.translateChange);
+    const translation = inline && inline.querySelector('.inline-translation');
+    if (translation) translation.open = true;
     translate(units.filter(unit => unit.change_id === button.dataset.translateChange).map(unit => unit.id));
   });
   all.addEventListener('click', () => translate(units.map(unit => unit.id)));
