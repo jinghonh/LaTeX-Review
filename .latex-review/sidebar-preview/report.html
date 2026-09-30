@@ -30,6 +30,8 @@ figcaption,.table-caption{font-style:italic}.asset,.fallback-label{color:#75531e
   --accent:#32634f;
   --added:#edf5ef;
   --removed:#f9eeea;
+  --added-ink:#236540;
+  --removed-ink:#a04435;
   --ui:"Avenir Next","PingFang SC","Microsoft YaHei",sans-serif;
   --text:"Iowan Old Style","Palatino Linotype","Songti SC",Georgia,serif;
 }
@@ -79,10 +81,10 @@ a {
 }
 
 .report-header {
-  padding:22px 36px;
+  padding:28px 36px;
   display:flex;
   align-items:center;
-  gap:32px;
+  gap:28px;
   background:var(--paper);
   border-bottom:1px solid var(--line);
 }
@@ -90,37 +92,61 @@ a {
 .report-identity {
   min-width:0;
   flex:1;
+  border-left:3px solid var(--accent);
+  padding-left:22px;
 }
 
 .report-eyebrow {
   color:var(--accent);
   font-size:11px;
-  letter-spacing:.15em;
+  display:flex;
+  align-items:center;
+  gap:8px;
+  letter-spacing:.1em;
 }
 
+.report-mark { font-size:20px; line-height:1; }
+.report-edition { color:var(--muted); border-left:1px solid var(--line); padding-left:10px; letter-spacing:0; }
+.report-entry { margin:4px 0 14px; font-size:11px; color:var(--muted); overflow-wrap:anywhere; }
+.report-entry span { color:#535f56; margin-left:7px; }
+.report-versions { display:flex; gap:8px; flex-wrap:wrap; }
+.version-chip { display:flex; align-items:center; gap:8px; max-width:100%; min-width:0; padding:5px 10px; border:1px solid var(--line); border-radius:4px; font-size:11px; background:var(--canvas); }
+.version-chip>span { flex-shrink:0; color:var(--muted); }
+.version-chip strong { font-weight:500; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.version-new { border-color:#c5d8c9; background:var(--added); }
+.overview-meta { display:flex; align-items:center; flex-wrap:wrap; gap:8px 16px; margin-top:14px; font-size:11px; color:var(--muted); }
+.overview-kind strong { margin-left:3px; color:var(--ink); font-weight:600; font-variant-numeric:tabular-nums; }
+.overview-added strong { color:var(--added-ink); }
+.overview-removed strong { color:var(--removed-ink); }
+.overview-translation { padding:2px 8px; border-radius:3px; background:var(--canvas); }
+.overview-translation[data-complete="true"] { color:var(--added-ink); background:var(--added); }
+
 .report-header h1 {
-  font:600 21px/1.5 var(--text);
+  font:600 30px/1.3 var(--text);
   overflow-wrap:anywhere;
-  margin:2px 0 0;
+  margin:8px 0 0;
 }
 
 .summary {
   margin:0;
   color:var(--ink);
-  font-size:13px;
+  padding:18px 22px;
+  border:1px solid var(--line);
+  border-radius:6px;
+  background:var(--canvas);
+  font-size:12px;
   white-space:nowrap;
 }
 
-.summary strong {
-  font:28px var(--text);
-  margin-right:4px;
-}
-
-.summary span {
-  display:block;
-  color:var(--muted);
-  font-size:12px;
-}
+.summary-total { display:flex; gap:10px; align-items:baseline; }
+.summary-total strong { font:46px/1.1 var(--text); font-variant-numeric:tabular-nums; }
+.summary-total>span { color:var(--muted); }
+.word-summary { display:flex; gap:7px; align-items:baseline; flex-wrap:wrap; margin-top:12px; font-variant-numeric:tabular-nums; }
+.word-summary-label { flex-basis:100%; font-size:10px; color:var(--muted); }
+.word-added,.word-removed { font-size:16px; font-weight:600; }
+.word-added { color:var(--added-ink); }
+.word-removed { color:var(--removed-ink); }
+.word-divider,.word-unit { color:var(--muted); font-size:11px; }
 
 .report-help {
   position:relative;
@@ -153,41 +179,76 @@ a {
   position:sticky;
   top:0;
   z-index:10;
-  display:flex;
+  display:grid;
+  grid-template-columns:auto minmax(0,1fr) auto auto;
   align-items:center;
-  gap:20px;
-  flex-wrap:wrap;
-  padding:10px 30px;
-  background:var(--canvas);
+  gap:12px 18px;
+  padding:12px 36px;
+  background:#f7f7f2;
   border-bottom:1px solid var(--line);
+  box-shadow:0 4px 14px #22312805;
   font-size:12px;
 }
 
-.reading-options,.step-controls {
+.reading-options {
   display:flex;
-  gap:16px;
+  gap:6px;
   align-items:center;
+  min-width:0;
 }
 
+.control-field {
+  display:flex;
+  flex-direction:column;
+  gap:2px;
+  min-width:0;
+  padding:6px 10px;
+  border:1px solid var(--line);
+  border-radius:6px;
+  background:var(--paper);
+}
+.control-field>span { color:var(--muted); font-size:10px; line-height:1.4; }
+.control-field select { font-size:12px; padding:0 16px 0 0; max-width:100%; min-height:22px; font-weight:600; }
+.control-field:focus-within { border-color:var(--accent); box-shadow:0 0 0 2px #32634f14; }
+.control-icon { display:inline-block; flex-shrink:0; font-size:18px; line-height:1; }
+.report-controls button { display:inline-flex; align-items:center; justify-content:center; gap:7px; min-height:36px; border-radius:6px; white-space:nowrap; }
+.report-controls button:disabled { color:#8c928b; cursor:default; }
+.translation-actions { display:flex; align-items:center; flex-wrap:wrap; gap:6px; }
+.translation-actions button { border:1px solid var(--line); background:var(--paper); }
+#translation-export { color:var(--accent); border-color:#b7cdbd; background:var(--added); padding:8px 12px; }
+#translation-export:hover { background:#dcebdd; border-color:var(--accent); }
+
 .step-controls {
-  margin-left:auto;
-  gap:6px;
+  display:grid;
+  gap:4px;
+  justify-items:center;
+  border-left:1px solid var(--line);
+  padding-left:18px;
 }
 
 #current-change {
   color:var(--muted);
   font-variant-numeric:tabular-nums;
-  margin-right:10px;
+  font-size:10px;
+  line-height:1.4;
 }
+.step-buttons { display:flex; border:1px solid var(--line); border-radius:6px; background:var(--paper); overflow:hidden; }
+.step-buttons button { border-radius:0; min-height:30px; padding:4px 9px; }
+.step-buttons button+button { border-left:1px solid var(--line); }
+.step-buttons button>span { color:var(--accent); }
 
 #toggle-changes {
   border-color:var(--line);
   background:var(--paper);
+  padding:8px 12px;
 }
 
-#toggle-changes span {
+#toggle-changes .control-count {
   color:var(--muted);
-  margin-left:10px;
+  padding:1px 5px;
+  border-radius:3px;
+  background:var(--canvas);
+  font-size:10px;
 }
 
 select {
@@ -203,6 +264,9 @@ select {
 
 .compare-view .sync-option {
   display:block;
+  font-size:11px;
+  white-space:nowrap;
+  padding-left:6px;
 }
 
 main {
@@ -704,14 +768,14 @@ main {
 }
 
 .reading-view.margin-notes main {
-  max-width:1184px;
+  max-width:1504px;
   padding:36px 36px calc(64px + var(--margin-overflow,0px));
 }
 
 .reading-view.margin-notes .preview-side[data-side="new"] {
   margin-left:0;
-  margin-right:324px;
-  padding:48px 56px;
+  margin-right:544px;
+  padding:48px 40px;
   max-width:none;
 }
 
@@ -724,7 +788,7 @@ main {
   left:var(--change-left,100%);
   top:var(--change-top,0px);
   box-sizing:border-box;
-  width:300px;
+  width:520px;
   margin:0;
   padding:12px 14px;
   background:var(--paper);
@@ -815,7 +879,20 @@ main {
 
 .diff-group {
   margin:0 0 16px;
+  display:grid;
+  grid-template-columns:repeat(2,minmax(0,1fr));
+  gap:8px;
 }
+
+.diff-group>.detail-jump { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:8px; grid-column:1 / -1; }
+.diff-group>.group-translation { grid-column:1 / -1; }
+.diff-group-title { grid-column:1 / -1; }
+.diff-group>.diff-row { min-width:0; }
+.comparison-columns { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px; margin-bottom:12px; }
+.comparison-columns>div { min-width:0; }
+.comparison-columns .inline-heading { margin:0 0 8px; color:var(--accent); }
+.comparison-columns [data-side="old"]>.inline-heading { color:var(--removed-ink); }
+.comparison-empty { color:var(--muted); font:12px/1.8 var(--ui); padding:10px; background:var(--canvas); margin:0; }
 
 .diff-group-title {
   font:600 11px/1.6 var(--ui);
@@ -834,7 +911,7 @@ main {
 }
 
 .diff-row-new {
-  margin-top:4px;
+  margin-top:0;
   border-left-color:#9abca6;
   background:#f1f7f2;
 }
@@ -850,9 +927,9 @@ main {
 }
 
 .diff-row.diff-row-empty {
-  padding:0 0 4px;
-  border:0;
-  background:transparent;
+  padding:8px 10px;
+  border-left-color:var(--line);
+  background:var(--canvas);
 }
 
 .diff-row-empty .diff-side-label {
@@ -967,17 +1044,20 @@ main {
   }
 }
 
+@media(max-width:1199px) {
+  .report-controls { grid-template-columns:auto minmax(0,1fr) auto; gap:10px 14px; }
+  .reading-options { grid-column:1 / -1; grid-row:2; }
+  .translation-controls { grid-column:2; grid-row:1; justify-self:end; }
+  .step-controls { grid-column:3; grid-row:1; }
+}
+
 @media(max-width:800px) {
   .report-header {
     padding:18px 20px;
     gap:16px;
   }
-  .summary strong {
-    font-size:23px;
-  }
-  .summary span {
-    font-size:10px;
-  }
+  .summary { padding:14px 16px; }
+  .summary-total strong { font-size:36px; }
   .report-help summary {
     font-size:11px;
   }
@@ -986,16 +1066,7 @@ main {
     gap:8px;
   }
   .reading-options {
-    gap:10px;
-  }
-  .step-controls {
-    width:100%;
-    justify-content:flex-end;
-    border-top:1px solid var(--line);
-    padding-top:5px;
-  }
-  #current-change {
-    margin-right:auto;
+    gap:6px;
   }
   main {
     padding:20px 16px 36px;
@@ -1023,11 +1094,16 @@ main {
 
 @media(max-width:540px) {
   .report-header h1 {
-    font-size:18px;
+    font-size:26px;
   }
   .report-header {
     flex-wrap:wrap;
   }
+  .report-identity { flex-basis:100%; padding-left:14px; }
+  .report-edition { font-size:10px; }
+  .summary { flex:1; padding:12px 14px; }
+  .word-summary { margin-top:8px; }
+  .comparison-columns,.diff-group,.diff-group>.detail-jump { grid-template-columns:1fr; }
   .report-help {
     margin-left:auto;
   }
@@ -1039,18 +1115,18 @@ main {
   }
   .report-controls {
     font-size:11px;
+    grid-template-columns:1fr 1fr;
   }
-  .reading-options {
-    gap:5px;
-  }
-  .reading-options label {
-    font-size:0;
-  }
-  .reading-options select {
-    font-size:11px;
-  }
+  .reading-options { flex-wrap:wrap; }
+  .control-field { flex:1; padding:5px 8px; }
+  .control-field select { font-size:11px; }
+  #toggle-changes { justify-self:start; }
+  #translation-export { padding:7px 9px; }
+  .step-controls { grid-column:1 / -1; grid-row:3; display:flex; align-items:center; justify-content:space-between; border-left:0; border-top:1px solid var(--line); padding:7px 0 0; }
+  #current-change { font-size:11px; }
   .compare-view .sync-option {
     font-size:11px;
+    flex-basis:100%;
   }
   .preview-side {
     padding:24px 20px;
@@ -1064,10 +1140,6 @@ main {
   .compare-view .preview-side {
     height:55vh;
     min-height:280px;
-  }
-  .report-header .summary span {
-    max-width:160px;
-    white-space:normal;
   }
 }
 
@@ -1125,8 +1197,8 @@ main {
   background:var(--removed);
 }
 /* 翻译是段落内的阅读辅助；中文沿用英文的变更范围。 */
-.translation-controls { display:flex; flex-wrap:wrap; align-items:center; gap:8px; flex-basis:100%; }
-#translation-status { font-size:12px; color:var(--muted, #64748b); }
+.translation-controls { min-width:0; }
+#translation-status { grid-column:1 / -1; font-size:11px; color:var(--muted); padding:7px 10px; background:var(--paper); border-left:2px solid #b7cdbd; overflow-wrap:anywhere; }
 .translation-item-controls { display:flex; flex-wrap:wrap; gap:8px; align-items:center; margin:10px 0; }
 .translation-item-status { font-size:12px; color:var(--muted, #64748b); }
 .translation-block { display:none; border-left:3px solid #8b9caa; padding:10px 14px; margin:10px 0 18px; background:#f4f7fa; font-size:.95em; line-height:1.8; }
@@ -1150,11 +1222,16 @@ main {
 .group-translation .inline-heading { margin:8px 0 4px; }
 .group-translation-side[data-side="old"] .sentence-changed { background:#faecea; text-decoration-color:#b5776c; }
 .translation-placeholder { color:var(--muted); font:12px/1.7 var(--ui); margin:0 0 8px; }
-
 </style></head><body class="reading-view">
 <header class="report-header">
-<div class="report-identity"><span class="report-eyebrow">论文修改审阅</span><h1>neural_networks/main.tex</h1></div>
-<p class="summary" id="report-summary" data-changes="115"><strong>115</strong> 项主变更 <span>正文 +2894 / −1462 词</span></p>
+<div class="report-identity">
+<div class="report-eyebrow"><span class="report-mark" aria-hidden="true">↔</span> 论文修改审阅 <span class="report-edition">版本对照报告</span></div>
+<h1>neural_networks</h1><p class="report-entry" title="neural_networks/main.tex">入口 <span>neural_networks/main.tex</span></p>
+<div class="report-versions" aria-label="比较版本"><span class="version-chip version-old" title="原报告未记录版本来源"><span>修改前</span><strong>版本 · 原报告未记录版本来源</strong></span><span class="version-chip version-new" title="原报告未记录版本来源"><span>修改后</span><strong>版本 · 原报告未记录版本来源</strong></span></div>
+<div class="overview-meta" aria-label="审阅概览"><span class="overview-kind overview-added">新增 <strong>52</strong></span><span class="overview-kind overview-removed">删除 <strong>16</strong></span><span class="overview-kind overview-modified">修改 <strong>45</strong></span><span class="overview-kind overview-moved">移动 <strong>2</strong></span><span class="overview-translation" id="overview-translation" role="status">正在读取翻译状态</span></div>
+</div>
+<div class="summary" id="report-summary" data-changes="115"><div class="summary-total"><strong>115</strong><span>项主变更</span></div>
+<div class="word-summary"><span class="word-summary-label">正文变更词数</span><span class="word-added">+2894</span><span class="word-divider">/</span><span class="word-removed">−1462</span><span class="word-unit">词</span></div></div>
 <details class="report-help"><summary>报告说明</summary><div>
 <p>内容预览供审阅，不代表最终编译版式；来源位置可能为近似值。</p>
 <p>同键文献字段变化单独计入引用主变更，不累计为正文变化。分类命中可重叠。</p>
@@ -1163,14 +1240,17 @@ main {
 <p id="math-status" role="status">正在加载在线公式排版。</p>
 </div></details></header>
 <nav class="report-controls" aria-label="审阅工具">
-<button type="button" id="toggle-changes" aria-expanded="false" aria-controls="changes-side">变更目录 <span>115</span></button>
-<div class="reading-options"><label>阅读范围 <select id="reading-mode"><option value="full">完整文档</option><option value="context">变更上下文</option></select></label>
-<label>对照方式 <select id="layout-mode"><option value="reading">新稿阅读</option><option value="compare">双稿对照</option></select></label>
+<button type="button" id="toggle-changes" aria-expanded="false" aria-controls="changes-side"><span class="control-icon" aria-hidden="true">☷</span>变更目录 <span class="control-count">115</span></button>
+<div class="reading-options" role="group" aria-label="阅读设置">
+<label class="control-field"><span>阅读范围</span><select id="reading-mode"><option value="full">完整文档</option><option value="context">变更上下文</option></select></label>
+<label class="control-field"><span>对照方式</span><select id="layout-mode"><option value="reading">新稿阅读</option><option value="compare">双稿对照</option></select></label>
+<label class="control-field"><span>译文显示</span><select id="translation-mode"><option value="original">英文原文</option><option value="bilingual">英中对照</option></select></label>
 <label class="sync-option"><input type="checkbox" id="sync-scroll"> 同步滚动</label></div>
-<div class="translation-controls"><label>译文 <select id="translation-mode"><option value="original">英文原文</option><option value="bilingual">英中对照</option></select></label>
+<div class="translation-controls" role="group" aria-label="译文操作"><div class="translation-actions">
 <button type="button" id="translate-all">翻译全部变更</button><button type="button" id="translation-cancel" disabled>停止翻译</button>
-<button type="button" id="translation-export">导出含译文报告</button><span id="translation-status" role="status">点击后翻译变更段落、标题和图注；表格暂不翻译。</span></div>
-<div class="step-controls"><span id="current-change" role="status">尚未选择变更</span><button type="button" id="previous-change" aria-label="上一变更">↑ 上一处</button><button type="button" id="next-change" aria-label="下一变更">下一处 ↓</button></div>
+<button type="button" id="translation-export"><svg class="control-icon" width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M10 2v10m-4-4 4 4 4-4M3 12v5h14v-5"/></svg>导出译文报告</button></div></div>
+<div class="step-controls" role="group" aria-label="变更导航"><span id="current-change" role="status">尚未选择变更</span><div class="step-buttons"><button type="button" id="previous-change" aria-label="上一变更" title="上一处变更（Alt + ↑）"><span aria-hidden="true">↑</span>上一处</button><button type="button" id="next-change" aria-label="下一变更" title="下一处变更（Alt + ↓）">下一处<span aria-hidden="true">↓</span></button></div></div>
+<span id="translation-status" role="status">点击后翻译变更段落、标题和图注；表格暂不翻译。</span>
 </nav>
 <main><section class="preview-side" aria-label="修改前" data-side="old"><h2>修改前</h2><div class="review-node node-frontmatter" id="old-frontmatter-a3459db1e78ff23f" data-node-id="frontmatter-a3459db1e78ff23f" data-side="old"><div class="review-node node-metadata" id="old-metadata-eb1421b6d9a72add" data-node-id="metadata-eb1421b6d9a72add" data-side="old"></div><div class="review-node node-metadata" id="old-metadata-a144f7b6078eefa5" data-node-id="metadata-a144f7b6078eefa5" data-side="old"></div><div class="review-node node-metadata" id="old-metadata-7dbdb48188a5374d" data-node-id="metadata-7dbdb48188a5374d" data-side="old"></div><div class="review-node node-metadata" id="old-metadata-f93bdb7a953a7bea" data-node-id="metadata-f93bdb7a953a7bea" data-side="old"></div><div class="review-node node-metadata" id="old-metadata-699753ae9d551276" data-node-id="metadata-699753ae9d551276" data-side="old"></div><div class="review-node node-abstract" id="old-abstract-48b082b2291e09d2" data-node-id="abstract-48b082b2291e09d2" data-side="old"><h3>摘要</h3><div class="review-node node-paragraph" id="old-paragraph-742e27564b463a3e" data-node-id="paragraph-742e27564b463a3e" data-side="old"><p><span class="review-sentence sentence-changed" id="old-paragraph-742e27564b463a3e-sentence-1"> Dynamic convex sets describe reachable regions, uncertainty envelopes, and safety boundaries in control and autonomous systems. </span> <span class="review-sentence sentence-changed" id="old-paragraph-742e27564b463a3e-sentence-2"> Learning their evolution from sequential observations is challenging because the support values in different directions must jointly define a valid convex body. </span> <span class="review-sentence sentence-changed" id="old-paragraph-742e27564b463a3e-sentence-3"> Existing methods typically rely on discretized fields or independently predicted boundary samples, which may lose this global geometric coupling. </span> <span class="review-sentence sentence-changed" id="old-paragraph-742e27564b463a3e-sentence-4"> We formulate dynamic convex-set inference as a causal history-to-geometry operator-learning problem and represent each convex body using the spectral coefficients of its support function. </span> <span class="review-sentence sentence-changed" id="old-paragraph-742e27564b463a3e-sentence-5"> These coefficients provide compact geometry-carrying coordinates and enable analytic reconstruction of continuous boundary maps. </span> <span class="review-sentence sentence-changed" id="old-paragraph-742e27564b463a3e-sentence-6"> We propose the Geometry-Aware Causal Spectral Neural Operator (G-CSNO), which combines causal history encoding with joint spectral-coefficient mixing to infer the support spectrum at each query time. </span> <span class="review-sentence sentence-changed" id="old-paragraph-742e27564b463a3e-sentence-7"> An analytic decoder enables supervision at the coefficient, support-function, derivative, and boundary levels. </span> <span class="review-sentence sentence-changed" id="old-paragraph-742e27564b463a3e-sentence-8"> We further establish a sufficient condition for preserving strict convexity under coefficient perturbations and derive a bound relating coefficient error to Hausdorff boundary deviation. </span> <span class="review-sentence sentence-changed" id="old-paragraph-742e27564b463a3e-sentence-9"> Synthetic experiments in dimensions two to five improve spectral and geometric accuracy over sequence and operator baselines; reachable-set experiments on six held-out linear systems show strong Hausdorff tracking with metric-dependent nearest-neighbor results. </span></p></div></div><div class="review-node node-keywords" id="old-keywords-e86379bab639c696" data-node-id="keywords-e86379bab639c696" data-side="old"><h3>关键词</h3><div class="review-node node-paragraph" id="old-paragraph-0de8cacdec2d8a36" data-node-id="paragraph-0de8cacdec2d8a36" data-side="old"><p> neural operators  · convex geometry  · support functions  · spectral learning  · reachable sets </p></div></div></div><div class="review-node node-section" id="old-section-83f64136ba60893f" data-node-id="section-83f64136ba60893f" data-side="old"><h2> Introduction </h2><div class="review-node node-paragraph" id="old-paragraph-98cf2c232d498050" data-node-id="paragraph-98cf2c232d498050" data-side="old"><p>  </p></div><div class="review-node node-paragraph" id="old-paragraph-446de558af881ad5" data-node-id="paragraph-446de558af881ad5" data-side="old"><p><span class="review-sentence sentence-changed" id="old-paragraph-446de558af881ad5-sentence-1"> Evolving geometric regions arise in control, robotics, and data-driven scientific computing. </span> <span class="review-sentence sentence-changed" id="old-paragraph-446de558af881ad5-sentence-2"> A broad and important class of such regions can be represented as compact convex sets evolving over time, including reachable sets of linear dynamical systems, convex uncertainty regions, and safety envelopes based on convex invariant sets <span class="citation" id="old-citation-b9bc7c8a106adc9a" data-node-id="citation-b9bc7c8a106adc9a">[althoff2021setpropagation]</span> . </span> <span class="review-sentence sentence-changed" id="old-paragraph-446de558af881ad5-sentence-3"> Efficiently predicting and reconstructing the evolution of these sets is crucial for real-time analysis and decision-making, yet repeatedly computing their geometric evolution under varying system conditions can be computationally demanding. </span> <span class="review-sentence sentence-changed" id="old-paragraph-446de558af881ad5-sentence-4"> This motivates learning-based approaches that infer evolving convex geometries as efficient surrogates for traditional set-propagation methods. </span> <span class="review-sentence sentence-changed" id="old-paragraph-446de558af881ad5-sentence-5"> Unlike scalar or state-vector prediction, learning evolving convex sets requires recovering an entire geometric object at each time step, where directional extrema must jointly satisfy the consistency conditions of convex geometry to represent a valid convex body. </span></p></div><div class="review-node node-paragraph" id="old-paragraph-8e732945004375bd" data-node-id="paragraph-8e732945004375bd" data-side="old"><p><span class="review-sentence sentence-changed" id="old-paragraph-8e732945004375bd-sentence-1"> Existing learning approaches for geometric prediction often represent outputs using grids, meshes, point clouds, or independently queried boundary samples <span class="citation" id="old-citation-e6cf6628e31b1e13" data-node-id="citation-e6cf6628e31b1e13">[pfaff2021meshgraphnets, li2023gino]</span> . </span> <span class="review-sentence sentence-changed" id="old-paragraph-8e732945004375bd-sentence-2"> Such representations depend on prescribed discretizations and, when applied to convex-body learning, generally lack an explicit mechanism to enforce global geometric consistency among different boundary directions. </span> <span class="review-sentence sentence-changed" id="old-paragraph-8e732945004375bd-sentence-3"> Consequently, independently learned geometric quantities are not guaranteed to correspond to a valid convex body. </span> <span class="review-sentence sentence-changed" id="old-paragraph-8e732945004375bd-sentence-4"> Neural operators such as DeepONet and the Fourier Neural Operator amortize function-to-function prediction <span class="citation" id="old-citation-aeddd1d8ba07d3c5" data-node-id="citation-aeddd1d8ba07d3c5">[lu2019deeponet, li2020fourier]</span> , but typically operate on discretized fields or query-based representations rather than a unified geometry-aware representation that couples directional information over time. </span> <span class="review-sentence sentence-changed" id="old-paragraph-8e732945004375bd-sentence-5"> A central challenge is therefore to learn the evolution of convex bodies in a compact and continuous representation that is independent of discretization and directly connected to convex geometry. </span></p></div><div class="review-node node-paragraph" id="old-paragraph-52fd35df58d4fcbf" data-node-id="paragraph-52fd35df58d4fcbf" data-side="old"><p><span class="review-sentence sentence-changed" id="old-paragraph-52fd35df58d4fcbf-sentence-1"> To address this challenge, we represent evolving convex bodies through the spectral coefficients of their support functions. </span> <span class="review-sentence sentence-changed" id="old-paragraph-52fd35df58d4fcbf-sentence-2"> Since a support function provides a continuous global description of a compact convex set <span class="citation" id="old-citation-7df42b83adf293f5" data-node-id="citation-7df42b83adf293f5">[Schneider_2013]</span> , its spectrum offers a unified representation in which directional geometry can be learned jointly over time. </span> <span class="review-sentence sentence-changed" id="old-paragraph-52fd35df58d4fcbf-sentence-3"> Building on this representation, we develop the <em>Geometry-Aware Causal Spectral Neural Operator</em> (G-CSNO) for history-conditioned inference of evolving convex geometries. </span></p></div><div class="review-node node-paragraph" id="old-paragraph-40edbe7cb71de4c8" data-node-id="paragraph-40edbe7cb71de4c8" data-side="old"><p><span class="review-sentence sentence-changed" id="old-paragraph-40edbe7cb71de4c8-sentence-1"> We analyze the geometric stability of the proposed spectral representation and empirically evaluate G-CSNO on both synthetic convex-body dynamics and reachable-set computation. </span> <span class="review-sentence sentence-changed" id="old-paragraph-40edbe7cb71de4c8-sentence-2"> The results demonstrate improved spectral prediction and geometric reconstruction compared with representative sequence and neural-operator baselines. </span></p></div><div class="review-node node-paragraph" id="old-paragraph-2af0b0b7eb8df6ed" data-node-id="paragraph-2af0b0b7eb8df6ed" data-side="old"><p><span class="review-sentence sentence-changed" id="old-paragraph-2af0b0b7eb8df6ed-sentence-1"> Our contributions are summarized as follows: </span></p></div><div class="review-node node-list" id="old-list-0a1574aeacb502b8" data-node-id="list-0a1574aeacb502b8" data-side="old"><ul><li class="review-node node-list_item" id="old-list_item-2627efec19c5d611" data-node-id="list_item-2627efec19c5d611" data-side="old"><div class="review-node node-paragraph" id="old-paragraph-e23a13e8a530b679" data-node-id="paragraph-e23a13e8a530b679" data-side="old"><p><span class="review-sentence sentence-changed" id="old-paragraph-e23a13e8a530b679-sentence-1"> We formulate history-conditioned dynamic convex-set inference through support-function spectra, providing a continuous global representation that jointly encodes directional extrema. </span></p></div></li><li class="review-node node-list_item" id="old-list_item-8a6f5622393dd28b" data-node-id="list_item-8a6f5622393dd28b" data-side="old"><div class="review-node node-paragraph" id="old-paragraph-521b46f7143ff305" data-node-id="paragraph-521b46f7143ff305" data-side="old"><p><span class="review-sentence sentence-changed" id="old-paragraph-521b46f7143ff305-sentence-1"> We propose G-CSNO, a geometry-aware neural operator that combines causal temporal modeling with spectral learning of evolving convex geometries. </span></p></div></li><li class="review-node node-list_item" id="old-list_item-fa018ec785a50950" data-node-id="list_item-fa018ec785a50950" data-side="old"><div class="review-node node-paragraph" id="old-paragraph-ae0fa7f88bb6edfc" data-node-id="paragraph-ae0fa7f88bb6edfc" data-side="old"><p><span class="review-sentence sentence-changed" id="old-paragraph-ae0fa7f88bb6edfc-sentence-1"> We establish sufficient conditions for strict-convexity preservation and Hausdorff stability under spectral perturbations, and validate the framework on synthetic convex geometries and reachability problems. </span></p></div></li></ul></div></div><div class="review-node node-section" id="old-section-4e7ebef1256c5604" data-node-id="section-4e7ebef1256c5604" data-side="old"><h2> Related Work </h2><div class="review-node node-paragraph" id="old-paragraph-ed7137acf316a458" data-node-id="paragraph-ed7137acf316a458" data-side="old"><p><span class="review-sentence" id="old-paragraph-ed7137acf316a458-sentence-1">  <strong>Neural operators and dynamical prediction.</strong> Neural operators learn mappings between function spaces for surrogate modeling of physical systems. </span> <span class="review-sentence" id="old-paragraph-ed7137acf316a458-sentence-2"> DeepONet <span class="citation" id="old-citation-f2f718e4bd0ba082" data-node-id="citation-f2f718e4bd0ba082">[lu2019deeponet]</span> and the Fourier Neural Operator <span class="citation" id="old-citation-3e8d9e34c202b8b7" data-node-id="citation-3e8d9e34c202b8b7">[li2020fourier]</span> established foundational architectures. </span> <span class="review-sentence" id="old-paragraph-ed7137acf316a458-sentence-3"> Related surrogate models use graph and message-passing architectures <span class="citation" id="old-citation-913668a86cc0dcaf" data-node-id="citation-913668a86cc0dcaf">[li2020graphkerneloperator, brandstetter2022messagepassing]</span> , accommodate general or unstructured geometries <span class="citation" id="old-citation-5910b34a929872d4" data-node-id="citation-5910b34a929872d4">[li2023deformedfno, li2023gino, pfaff2021meshgraphnets]</span> , and operate on spherical domains <span class="citation" id="old-citation-68d618791007cc94" data-node-id="citation-68d618791007cc94">[bonev2023spherical]</span> . </span> <span class="review-sentence" id="old-paragraph-ed7137acf316a458-sentence-4"> Recurrent encoders <span class="citation" id="old-citation-717a217e1c687748" data-node-id="citation-717a217e1c687748">[cho2014gru]</span> and attention models <span class="citation" id="old-citation-be5999e6e452ab9b" data-node-id="citation-be5999e6e452ab9b">[vaswani2017attention]</span> handle temporal histories, while physics-informed learning incorporates dynamical structure <span class="citation" id="old-citation-3ddf74a5a4a0d2e3" data-node-id="citation-3ddf74a5a4a0d2e3">[karniadakis2021physicsinformed]</span> . </span> <span class="review-sentence sentence-changed" id="old-paragraph-ed7137acf316a458-sentence-5"> These methods provide flexible field or mesh predictions, but do not by construction couple directional extrema into a globally consistent support-function representation of a convex body. </span></p></div><div class="review-node node-paragraph" id="old-paragraph-871126ee548ac174" data-node-id="paragraph-871126ee548ac174" data-side="old"><p><span class="review-sentence" id="old-paragraph-871126ee548ac174-sentence-1"> <strong>Spectral representations and support-function geometry.</strong> Spectral methods provide compact shape representations through Fourier descriptors <span class="citation" id="old-citation-c50c863a8e1d40e5" data-node-id="citation-c50c863a8e1d40e5">[kuhl1982elliptic]</span> , spherical harmonics <span class="citation" id="old-citation-ea50e9ac9c372540" data-node-id="citation-ea50e9ac9c372540">[kazhdan2003spherical]</span> , and equivariant harmonic learning <span class="citation" id="old-citation-50cc5615621d5ff5" data-node-id="citation-50cc5615621d5ff5">[cohen2018sphericalcnns, bronstein2021geometricdeeplearning]</span> . </span> <span class="review-sentence" id="old-paragraph-871126ee548ac174-sentence-2"> In convex geometry, support functions uniquely determine compact convex bodies and support geometric reconstruction <span class="citation" id="old-citation-4f1198b98a5d1ead" data-node-id="citation-4f1198b98a5d1ead">[Schneider_2013, gardner2006geometrictomography, ghosh1998support]</span> . </span> <span class="review-sentence sentence-changed" id="old-paragraph-871126ee548ac174-sentence-3"> These lines of work primarily address static representation or geometric theory rather than history-conditioned learning of evolving convex bodies. </span></p></div><div class="review-node node-paragraph" id="old-paragraph-a446caac2bc846a5" data-node-id="paragraph-a446caac2bc846a5" data-side="old"><p><span class="review-sentence" id="old-paragraph-a446caac2bc846a5-sentence-1"> <strong>Reachability computation and learning surrogates.</strong> Classical reachability methods propagate support functions or set representations, or solve Hamilton--Jacobi equations <span class="citation" id="old-citation-c6a8c192b226d3a1" data-node-id="citation-c6a8c192b226d3a1">[girard2005support, leguernic2010reachability, frehse2011spaceex, althoff2021setpropagation, mitchell2005time]</span> , providing formal guarantees at the cost of repeated numerical computation. </span> <span class="review-sentence" id="old-paragraph-a446caac2bc846a5-sentence-2"> Learning-based alternatives include neural reachability solvers <span class="citation" id="old-citation-b5070f3ee34f8b26" data-node-id="citation-b5070f3ee34f8b26">[bansal2021deepreach, sun2022neureach]</span> and data-driven reachability estimation under stochastic, noisy, or nonlinear dynamics <span class="citation" id="old-citation-a8e6dda96f156f50" data-node-id="citation-a8e6dda96f156f50">[hashemi2023datadriven, Alanwar_2023, Park_2024]</span> . </span> <span class="review-sentence" id="old-paragraph-a446caac2bc846a5-sentence-3"> Optimization-based convex-body approximation also connects directional preferences with boundary points <span class="citation" id="old-citation-90220b006448b572" data-node-id="citation-90220b006448b572">[Shao2018]</span> . </span> <span class="review-sentence sentence-changed" id="old-paragraph-a446caac2bc846a5-sentence-4"> The fixed-time predictors used in our experiments instantiate related formulations: KAN-PDNN <span class="citation" id="old-citation-feb0b096ee852cb7" data-node-id="citation-feb0b096ee852cb7">[chen2026kanpdnn]</span> minimizes KKT residuals with a primal--dual KAN, PHN-LS <span class="citation" id="old-citation-97a46d463f5c0129" data-node-id="citation-97a46d463f5c0129">[navon2020learning]</span> conditions a hypernetwork on preference vectors, and PSL-HV1 <span class="citation" id="old-citation-27cbc01e39312c9e" data-node-id="citation-27cbc01e39312c9e">[zhang2023hypervolume]</span> maps polar coordinates to boundary points under a hypervolume objective. </span> <span class="review-sentence sentence-changed" id="old-paragraph-a446caac2bc846a5-sentence-5"> These approaches operate at individual query times rather than learning a shared time-conditioned operator across a trajectory. </span></p></div><div class="review-node node-paragraph" id="old-paragraph-5b27506bf071b928" data-node-id="paragraph-5b27506bf071b928" data-side="old"><p><span class="review-sentence sentence-changed" id="old-paragraph-5b27506bf071b928-sentence-1"> The present work addresses these three gaps jointly: it represents evolving convex bodies through time-varying support-function spectra, learns a causal history-to-spectrum operator, and reconstructs continuous boundaries through a shared analytic decoder. </span></p></div></div><div class="review-node node-section" id="old-section-8efd8ba36450a489" data-node-id="section-8efd8ba36450a489" data-side="old"><h2> Problem Formulation and Spectral Representation </h2><div class="review-node node-paragraph" id="old-paragraph-beb4ac17a4cf5d78" data-node-id="paragraph-beb4ac17a4cf5d78" data-side="old"><p>  </p></div><div class="review-node node-paragraph" id="old-paragraph-94ef0160a69361b3" data-node-id="paragraph-94ef0160a69361b3" data-side="old"><p><span class="review-sentence sentence-changed" id="old-paragraph-94ef0160a69361b3-sentence-1"> This section formulates the history-conditioned dynamic convex-set inference problem and introduces the spectral representation used for learning. </span> <span class="review-sentence sentence-changed" id="old-paragraph-94ef0160a69361b3-sentence-2"> We first define the causal inference setting, then transform the set-valued prediction problem into a function-valued representation through support functions, and finally reduce the infinite-dimensional representation to a finite-dimensional spectral learning problem. </span></p></div><div class="review-node node-subsection" id="old-subsection-841c269272a7b417" data-node-id="subsection-841c269272a7b417" data-side="old"><h3> History-Conditioned Dynamic Convex-Set Inference </h3><div class="review-node node-paragraph" id="old-paragraph-8e23235e30847e8d" data-node-id="paragraph-8e23235e30847e8d" data-side="old"><p>  </p></div><div class="review-node node-paragraph" id="old-paragraph-f67954fda7da4aa4" data-node-id="paragraph-f67954fda7da4aa4" data-side="old"><p> Let <span id="old-inline_math-0ddb0200312bec27" data-node-id="inline_math-0ddb0200312bec27"><span class="math-tex" data-display="false">K(t)\subset\mathbb{R}^{d}</span></span>, <span id="old-inline_math-746bff9bb4d0d119" data-node-id="inline_math-746bff9bb4d0d119"><span class="math-tex" data-display="false">t\in[0,T]</span></span>, denote a nonempty compact convex body evolving over time. We assume that a sequence of observations </p></div><div class="review-node node-equation" id="old-equation-52acccb417ae007e" data-node-id="equation-52acccb417ae007e" data-side="old"><div class="math-tex" data-display="true">
 \{y_i\}_{i=0}^{N_{\mathrm{obs}}},\qquad y_i\in\mathbb{R}^{p},
@@ -2571,9 +2651,18 @@ v=[v_0,v_1^a,\ldots,v_N^a,v_1^b,\ldots,v_N^b]^\top,
       const full = document.createElement('details'); full.className = 'inline-full-context';
       const fullSummary = document.createElement('summary'); fullSummary.textContent = '完整段落对照';
       full.append(fullSummary); detail.append(full);
+      const fullColumns = document.createElement('div'); fullColumns.className = 'comparison-columns';
+      full.append(fullColumns);
       function appendExcerpt(node, side) {
+        const column = document.createElement('div'); column.className = 'comparison-side'; column.dataset.side = side;
         const title = document.createElement('p'); title.className = 'inline-heading';
         title.textContent = side === 'old' ? '修改前' : '修改后';
+        column.append(title); fullColumns.append(column);
+        if (!node) {
+          const note = document.createElement('p'); note.className = 'comparison-empty';
+          note.textContent = side === 'old' ? '此处为新增内容，旧稿没有对应内容。' : '此处内容已从新稿删除。';
+          column.append(note); return;
+        }
         const excerpt = document.createElement('div'); excerpt.className = side + '-excerpt';
         const copy = node.cloneNode(true);
         copy.querySelectorAll('.change-anchor').forEach(anchor => anchor.remove());
@@ -2585,17 +2674,10 @@ v=[v_0,v_1^a,\ldots,v_N^a,v_1^b,\ldots,v_N^b]^\top,
           element.classList.remove('review-node', 'context-hidden', 'is-highlighted');
           element.removeAttribute('data-node-id');
         });
-        excerpt.append(copy); full.append(title, excerpt);
+        excerpt.append(copy); column.append(excerpt);
       }
-      if (oldNode) {
-        appendExcerpt(oldNode, 'old');
-      } else {
-        const note = document.createElement('p'); note.textContent = '此处为新增内容，旧稿没有对应内容。'; full.append(note);
-      }
-      if (target) appendExcerpt(target, 'new');
-      else {
-        const note = document.createElement('p'); note.textContent = '此处内容已从新稿删除。'; full.append(note);
-      }
+      appendExcerpt(oldNode, 'old');
+      appendExcerpt(target, 'new');
       if (supplement.children.length) full.append(supplement);
       full.addEventListener('toggle', () => arrangeInlineChanges());
       const pages = card.querySelector('.card-pages');
@@ -2699,7 +2781,7 @@ v=[v_0,v_1^a,\ldots,v_N^a,v_1^b,\ldots,v_N^b]^\top,
     // Keep notes beside their source; expanded or adjacent notes move down without overlapping.
     arrangeInlineChanges = () => {
       const availableWidth = innerWidth - (document.body.classList.contains('directory-open') ? 340 : 0);
-      const marginNotes = readingView() && availableWidth >= 1100;
+      const marginNotes = readingView() && availableWidth >= 1240;
       document.body.classList.toggle('margin-notes', marginNotes);
       const main = document.querySelector('main');
       main.style.setProperty('--margin-overflow', '0px');
@@ -2765,6 +2847,11 @@ v=[v_0,v_1^a,\ldots,v_N^a,v_1^b,\ldots,v_N^b]^\top,
   const installed = new Set();
   const localService = location.protocol === 'http:' && location.hostname === '127.0.0.1';
   const labels = {pending: '等待翻译', running: '正在翻译', ready: '译文已完成', failed: '翻译失败，可重试', cancelled: '已停止，可重试', blocked: '此段无法翻译'};
+
+  function showStatus(message) {
+    status.textContent = message;
+    status.hidden = false;
+  }
 
   function applyResults() {
     Object.values(results).forEach(result => {
@@ -2835,10 +2922,11 @@ v=[v_0,v_1^a,\ldots,v_N^a,v_1^b,\ldots,v_N^b]^\top,
     document.querySelectorAll('[data-translate-change]').forEach(button => {
       const selected = units.filter(unit => unit.change_id === button.dataset.translateChange);
       const pending = selected.some(unit => ['running', 'pending'].includes((states[unit.id] || {}).state));
-      const complete = selected.every(unit => results[unit.id]);
+      const complete = selected.length > 0 && selected.every(unit => results[unit.id]);
       const blocked = selected.every(unit => unit.error);
       button.disabled = pending || blocked || (!available && !complete);
-      button.textContent = blocked ? '此段无法翻译' : complete ? '显示译文' : pending ? '正在翻译…' : '翻译此处';
+      button.hidden = complete;
+      button.textContent = blocked ? '此段无法翻译' : pending ? '正在翻译…' : '翻译此处';
       const text = button.parentElement.querySelector('.translation-item-status');
       if (text) text.textContent = selected.map(unit => {
         const state = states[unit.id] || (results[unit.id] ? {state: 'ready'} : {});
@@ -2846,7 +2934,7 @@ v=[v_0,v_1^a,\ldots,v_N^a,v_1^b,\ldots,v_N^b]^\top,
           (state.message ? ' · ' + state.message : '');
       }).join('；');
     });
-    document.querySelectorAll('.group-translation-side[data-translation-node]').forEach(side => {
+    document.querySelectorAll('.group-translation-side[data-translation-node],.inline-translation-side[data-translation-node]').forEach(side => {
       const id = side.dataset.translationNode;
       const placeholder = side.querySelector('.translation-placeholder');
       placeholder.hidden = Boolean(results[id]);
@@ -2855,7 +2943,26 @@ v=[v_0,v_1^a,\ldots,v_N^a,v_1^b,\ldots,v_N^b]^\top,
       if (state.message) placeholder.textContent += ' · ' + state.message;
     });
     cancel.disabled = !active;
-    all.disabled = active || !available || !units.some(unit => !unit.error);
+    cancel.hidden = !active;
+    const remaining = units.some(unit => !unit.error && !results[unit.id]);
+    all.hidden = !remaining;
+    all.disabled = active || !available || !remaining;
+    const count = units.filter(unit => results[unit.id]).length;
+    status.hidden = units.length > 0 && count === units.length && !active;
+    const overview = document.getElementById('overview-translation');
+    if (overview) {
+      overview.textContent = !units.length ? '无待翻译内容' : count === units.length ? '译文已完成 · ' + count + ' 段' :
+        '译文 ' + count + ' / ' + units.length + ' 段' + (active ? ' · 翻译中' : '');
+      overview.dataset.complete = String(units.length > 0 && count === units.length);
+    }
+    document.querySelectorAll('.group-translation,.inline-translation').forEach(section => {
+      const hasResults = Array.from(section.querySelectorAll('[data-translation-node]'))
+        .some(side => results[side.dataset.translationNode]);
+      if (hasResults && !section.dataset.cachedTranslationOpened) {
+        section.open = true;
+        section.dataset.cachedTranslationOpened = 'true';
+      }
+    });
   }
 
   async function api(path, body) {
@@ -2889,7 +2996,18 @@ v=[v_0,v_1^a,\ldots,v_N^a,v_1^b,\ldots,v_N^b]^\top,
       (active ? ' · 正在处理' : '') + (failed ? ' · ' + failed + ' 段失败，可逐项重试' : '') +
       (blocked ? ' · ' + blocked + ' 段无法翻译，请查看逐项说明' : '') +
       (!available && data.message ? ' · ' + data.message : '') :
-      (data.message || '请在项目配置中设置翻译接口后重新启动本机服务。');
+      (count ? '已保存 ' + count + ' / ' + units.length + ' 段译文；' +
+        (count === units.length ? '全部译文可直接阅读。' : (data.message || '继续翻译需配置本机翻译服务。')) :
+        (data.message || '请在项目配置中设置翻译接口后重新启动本机服务。'));
+    const usage = data.usage;
+    if (data.enabled && usage && usage.requests) {
+      status.textContent += usage.cache_hit_rate === null ? ' · 本次接口缓存用量未提供' :
+        ' · 本次接口输入缓存 ' + (usage.cache_hit_rate * 100).toFixed(1) + '%';
+      if (usage.cache_reports && usage.cache_reports < usage.requests)
+        status.textContent += '（' + usage.cache_reports + '/' + usage.requests + ' 次有缓存统计）';
+      if (usage.retries) status.textContent += ' · 自动重试 ' + usage.retries + ' 次';
+      if (usage.message) status.textContent += ' · ' + usage.message;
+    }
     applyResults(); refreshButtons();
   }
 
@@ -2901,7 +3019,7 @@ v=[v_0,v_1^a,\ldots,v_N^a,v_1^b,\ldots,v_N^b]^\top,
         accept(await api('status'));
         if (active) await new Promise(resolve => setTimeout(resolve, 600));
       } while (active);
-    } catch (error) { status.textContent = error.message; active = false; refreshButtons(); }
+    } catch (error) { active = false; refreshButtons(); showStatus(error.message); }
     finally { polling = false; }
   }
 
@@ -2915,7 +3033,7 @@ v=[v_0,v_1^a,\ldots,v_N^a,v_1^b,\ldots,v_N^b]^\top,
       if (!available) throw new Error(configuration.message);
       accept(await api('start', {units: remaining}));
       await poll();
-    } catch (error) { status.textContent = error.message; }
+    } catch (error) { showStatus(error.message); }
   }
 
   document.querySelectorAll('.change-card').forEach(card => {
@@ -2934,6 +3052,7 @@ v=[v_0,v_1^a,\ldots,v_N^a,v_1^b,\ldots,v_N^b]^\top,
         const groupControls = document.createElement('div'); groupControls.className = 'translation-item-controls';
         groupControls.append(button.cloneNode(true));
         translation.append(summary, groupControls);
+        const columns = document.createElement('div'); columns.className = 'comparison-columns'; translation.append(columns);
         for (const [sideName, label] of [['old', '修改前译文'], ['new', '修改后译文']]) {
           const ids = (jump.dataset[sideName + 'Sentences'] || '').split(' ').filter(Boolean);
           const side = document.createElement('div'); side.className = 'group-translation-side';
@@ -2946,7 +3065,7 @@ v=[v_0,v_1^a,\ldots,v_N^a,v_1^b,\ldots,v_N^b]^\top,
             side.dataset.originalSentences = ids.map(id => sideName + '-' + id).join(' ');
             placeholder.textContent = '尚未翻译';
           } else placeholder.textContent = '该侧无对应内容';
-          side.append(caption, placeholder); translation.append(side);
+          side.append(caption, placeholder); columns.append(side);
         }
         translation.addEventListener('toggle', () => window.dispatchEvent(new Event('resize')));
         group.append(translation);
@@ -2954,12 +3073,17 @@ v=[v_0,v_1^a,\ldots,v_N^a,v_1^b,\ldots,v_N^b]^\top,
       const translation = document.createElement('details'); translation.className = 'inline-translation';
       const summary = document.createElement('summary'); summary.textContent = '整段中文译文';
       translation.append(summary, controls.cloneNode(true));
-      units.filter(unit => unit.change_id === card.id).forEach(unit => {
+      const columns = document.createElement('div'); columns.className = 'comparison-columns'; translation.append(columns);
+      ['old', 'new'].forEach(sideName => {
+        const unit = units.find(unit => unit.change_id === card.id && unit.side === sideName);
         const side = document.createElement('div'); side.className = 'inline-translation-side';
-        side.dataset.translationNode = unit.id; side.dataset.side = unit.side;
+        if (unit) side.dataset.translationNode = unit.id;
+        side.dataset.side = sideName;
         const label = document.createElement('p'); label.className = 'inline-heading';
-        label.textContent = unit.side === 'old' ? '修改前译文' : '修改后译文';
-        side.append(label); translation.append(side);
+        label.textContent = sideName === 'old' ? '修改前译文' : '修改后译文';
+        const placeholder = document.createElement('p'); placeholder.className = 'translation-placeholder';
+        placeholder.textContent = unit ? '尚未翻译' : '该侧无对应内容';
+        side.append(label, placeholder); columns.append(side);
       });
       translation.addEventListener('toggle', () => window.dispatchEvent(new Event('resize')));
       inline.insertBefore(translation, inline.querySelector('.inline-close'));
@@ -2992,23 +3116,26 @@ v=[v_0,v_1^a,\ldots,v_N^a,v_1^b,\ldots,v_N^b]^\top,
   });
   all.addEventListener('click', () => translate(units.map(unit => unit.id)));
   cancel.addEventListener('click', async () => {
-    try { accept(await api('cancel', {})); await poll(); } catch (error) { status.textContent = error.message; }
+    try { accept(await api('cancel', {})); await poll(); } catch (error) { showStatus(error.message); }
   });
   mode.addEventListener('change', applyResults);
   exportButton.addEventListener('click', async () => {
-    if (!localService) { status.textContent = '请通过本机服务导出含图片等阅读资源的译文报告。'; return; }
+    if (!localService) { showStatus('请通过本机服务导出含图片等阅读资源的译文报告。'); return; }
     try {
       const response = await fetch('/api/translation/export');
       if (!response.ok) throw new Error('导出失败，请检查报告资源是否完整。');
       const url = URL.createObjectURL(await response.blob());
       const anchor = document.createElement('a'); anchor.href = url; anchor.download = 'report-translated.html';
       anchor.click(); setTimeout(() => URL.revokeObjectURL(url), 1000);
-    } catch (error) { status.textContent = error.message; }
+    } catch (error) { showStatus(error.message); }
   });
   if (Object.keys(results).length) mode.value = 'bilingual';
   applyResults(); refreshButtons();
-  if (!localService && Object.keys(results).length)
-    status.textContent = '已保存 ' + Object.keys(results).length + ' / ' + units.length + ' 段译文；继续翻译需启动本机服务。';
+  if (!localService && Object.keys(results).length) {
+    const count = units.filter(unit => results[unit.id]).length;
+    status.textContent = count === units.length ? '已保存全部 ' + count + ' 段译文，可直接阅读。' :
+      '已保存 ' + count + ' / ' + units.length + ' 段译文；继续翻译需启动本机服务。';
+  }
   if (localService) poll();
 })();
 </script>

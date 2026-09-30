@@ -16,6 +16,11 @@
   const localService = location.protocol === 'http:' && location.hostname === '127.0.0.1';
   const labels = {pending: '等待翻译', running: '正在翻译', ready: '译文已完成', failed: '翻译失败，可重试', cancelled: '已停止，可重试', blocked: '此段无法翻译'};
 
+  function showStatus(message) {
+    status.textContent = message;
+    status.hidden = false;
+  }
+
   function applyResults() {
     Object.values(results).forEach(result => {
       if (installed.has(result.id)) return;
@@ -85,10 +90,11 @@
     document.querySelectorAll('[data-translate-change]').forEach(button => {
       const selected = units.filter(unit => unit.change_id === button.dataset.translateChange);
       const pending = selected.some(unit => ['running', 'pending'].includes((states[unit.id] || {}).state));
-      const complete = selected.every(unit => results[unit.id]);
+      const complete = selected.length > 0 && selected.every(unit => results[unit.id]);
       const blocked = selected.every(unit => unit.error);
       button.disabled = pending || blocked || (!available && !complete);
-      button.textContent = blocked ? '此段无法翻译' : complete ? '显示译文' : pending ? '正在翻译…' : '翻译此处';
+      button.hidden = complete;
+      button.textContent = blocked ? '此段无法翻译' : pending ? '正在翻译…' : '翻译此处';
       const text = button.parentElement.querySelector('.translation-item-status');
       if (text) text.textContent = selected.map(unit => {
         const state = states[unit.id] || (results[unit.id] ? {state: 'ready'} : {});
@@ -96,7 +102,7 @@
           (state.message ? ' · ' + state.message : '');
       }).join('；');
     });
-    document.querySelectorAll('.group-translation-side[data-translation-node]').forEach(side => {
+    document.querySelectorAll('.group-translation-side[data-translation-node],.inline-translation-side[data-translation-node]').forEach(side => {
       const id = side.dataset.translationNode;
       const placeholder = side.querySelector('.translation-placeholder');
       placeholder.hidden = Boolean(results[id]);
@@ -105,7 +111,26 @@
       if (state.message) placeholder.textContent += ' · ' + state.message;
     });
     cancel.disabled = !active;
-    all.disabled = active || !available || !units.some(unit => !unit.error);
+    cancel.hidden = !active;
+    const remaining = units.some(unit => !unit.error && !results[unit.id]);
+    all.hidden = !remaining;
+    all.disabled = active || !available || !remaining;
+    const count = units.filter(unit => results[unit.id]).length;
+    status.hidden = units.length > 0 && count === units.length && !active;
+    const overview = document.getElementById('overview-translation');
+    if (overview) {
+      overview.textContent = !units.length ? '无待翻译内容' : count === units.length ? '译文已完成 · ' + count + ' 段' :
+        '译文 ' + count + ' / ' + units.length + ' 段' + (active ? ' · 翻译中' : '');
+      overview.dataset.complete = String(units.length > 0 && count === units.length);
+    }
+    document.querySelectorAll('.group-translation,.inline-translation').forEach(section => {
+      const hasResults = Array.from(section.querySelectorAll('[data-translation-node]'))
+        .some(side => results[side.dataset.translationNode]);
+      if (hasResults && !section.dataset.cachedTranslationOpened) {
+        section.open = true;
+        section.dataset.cachedTranslationOpened = 'true';
+      }
+    });
   }
 
   async function api(path, body) {
@@ -139,7 +164,9 @@
       (active ? ' · 正在处理' : '') + (failed ? ' · ' + failed + ' 段失败，可逐项重试' : '') +
       (blocked ? ' · ' + blocked + ' 段无法翻译，请查看逐项说明' : '') +
       (!available && data.message ? ' · ' + data.message : '') :
-      (data.message || '请在项目配置中设置翻译接口后重新启动本机服务。');
+      (count ? '已保存 ' + count + ' / ' + units.length + ' 段译文；' +
+        (count === units.length ? '全部译文可直接阅读。' : (data.message || '继续翻译需配置本机翻译服务。')) :
+        (data.message || '请在项目配置中设置翻译接口后重新启动本机服务。'));
     const usage = data.usage;
     if (data.enabled && usage && usage.requests) {
       status.textContent += usage.cache_hit_rate === null ? ' · 本次接口缓存用量未提供' :
@@ -160,7 +187,7 @@
         accept(await api('status'));
         if (active) await new Promise(resolve => setTimeout(resolve, 600));
       } while (active);
-    } catch (error) { status.textContent = error.message; active = false; refreshButtons(); }
+    } catch (error) { active = false; refreshButtons(); showStatus(error.message); }
     finally { polling = false; }
   }
 
@@ -174,7 +201,7 @@
       if (!available) throw new Error(configuration.message);
       accept(await api('start', {units: remaining}));
       await poll();
-    } catch (error) { status.textContent = error.message; }
+    } catch (error) { showStatus(error.message); }
   }
 
   document.querySelectorAll('.change-card').forEach(card => {
@@ -193,6 +220,7 @@
         const groupControls = document.createElement('div'); groupControls.className = 'translation-item-controls';
         groupControls.append(button.cloneNode(true));
         translation.append(summary, groupControls);
+        const columns = document.createElement('div'); columns.className = 'comparison-columns'; translation.append(columns);
         for (const [sideName, label] of [['old', '修改前译文'], ['new', '修改后译文']]) {
           const ids = (jump.dataset[sideName + 'Sentences'] || '').split(' ').filter(Boolean);
           const side = document.createElement('div'); side.className = 'group-translation-side';
@@ -205,7 +233,7 @@
             side.dataset.originalSentences = ids.map(id => sideName + '-' + id).join(' ');
             placeholder.textContent = '尚未翻译';
           } else placeholder.textContent = '该侧无对应内容';
-          side.append(caption, placeholder); translation.append(side);
+          side.append(caption, placeholder); columns.append(side);
         }
         translation.addEventListener('toggle', () => window.dispatchEvent(new Event('resize')));
         group.append(translation);
@@ -213,12 +241,17 @@
       const translation = document.createElement('details'); translation.className = 'inline-translation';
       const summary = document.createElement('summary'); summary.textContent = '整段中文译文';
       translation.append(summary, controls.cloneNode(true));
-      units.filter(unit => unit.change_id === card.id).forEach(unit => {
+      const columns = document.createElement('div'); columns.className = 'comparison-columns'; translation.append(columns);
+      ['old', 'new'].forEach(sideName => {
+        const unit = units.find(unit => unit.change_id === card.id && unit.side === sideName);
         const side = document.createElement('div'); side.className = 'inline-translation-side';
-        side.dataset.translationNode = unit.id; side.dataset.side = unit.side;
+        if (unit) side.dataset.translationNode = unit.id;
+        side.dataset.side = sideName;
         const label = document.createElement('p'); label.className = 'inline-heading';
-        label.textContent = unit.side === 'old' ? '修改前译文' : '修改后译文';
-        side.append(label); translation.append(side);
+        label.textContent = sideName === 'old' ? '修改前译文' : '修改后译文';
+        const placeholder = document.createElement('p'); placeholder.className = 'translation-placeholder';
+        placeholder.textContent = unit ? '尚未翻译' : '该侧无对应内容';
+        side.append(label, placeholder); columns.append(side);
       });
       translation.addEventListener('toggle', () => window.dispatchEvent(new Event('resize')));
       inline.insertBefore(translation, inline.querySelector('.inline-close'));
@@ -251,22 +284,25 @@
   });
   all.addEventListener('click', () => translate(units.map(unit => unit.id)));
   cancel.addEventListener('click', async () => {
-    try { accept(await api('cancel', {})); await poll(); } catch (error) { status.textContent = error.message; }
+    try { accept(await api('cancel', {})); await poll(); } catch (error) { showStatus(error.message); }
   });
   mode.addEventListener('change', applyResults);
   exportButton.addEventListener('click', async () => {
-    if (!localService) { status.textContent = '请通过本机服务导出含图片等阅读资源的译文报告。'; return; }
+    if (!localService) { showStatus('请通过本机服务导出含图片等阅读资源的译文报告。'); return; }
     try {
       const response = await fetch('/api/translation/export');
       if (!response.ok) throw new Error('导出失败，请检查报告资源是否完整。');
       const url = URL.createObjectURL(await response.blob());
       const anchor = document.createElement('a'); anchor.href = url; anchor.download = 'report-translated.html';
       anchor.click(); setTimeout(() => URL.revokeObjectURL(url), 1000);
-    } catch (error) { status.textContent = error.message; }
+    } catch (error) { showStatus(error.message); }
   });
   if (Object.keys(results).length) mode.value = 'bilingual';
   applyResults(); refreshButtons();
-  if (!localService && Object.keys(results).length)
-    status.textContent = '已保存 ' + Object.keys(results).length + ' / ' + units.length + ' 段译文；继续翻译需启动本机服务。';
+  if (!localService && Object.keys(results).length) {
+    const count = units.filter(unit => results[unit.id]).length;
+    status.textContent = count === units.length ? '已保存全部 ' + count + ' 段译文，可直接阅读。' :
+      '已保存 ' + count + ' / ' + units.length + ' 段译文；继续翻译需启动本机服务。';
+  }
   if (localService) poll();
 })();

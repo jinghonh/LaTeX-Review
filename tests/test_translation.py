@@ -483,12 +483,11 @@ def test_browser_missing_key_shows_global_guidance_and_preserves_cached_translat
             assert page.locator("#translate-all").is_disabled()
             assert page.locator("#translation-export").is_enabled()
             button = page.locator(".change-card [data-translate-change]")
-            assert button.is_enabled() and button.inner_text() == "显示译文"
+            assert button.is_hidden()
+            assert page.locator('#translate-all').is_hidden()
+            assert '译文已完成' in page.locator('#overview-translation').inner_text()
             page.locator("#next-change").click()
-            assert page.locator('.inline-change[open] .inline-translation .translation-block').first.is_hidden()
-            page.locator('.inline-change[open] .inline-translation > summary').click()
-            page.locator(".inline-change[open] .inline-translation [data-translate-change]").click()
-            assert page.locator('.preview-side[data-side="new"] .translation-block').first.is_visible()
+            assert page.locator('.inline-change[open] .inline-translation .translation-block').first.is_visible()
             assert len(calls) == 2
         finally:
             if browser:
@@ -525,6 +524,10 @@ def test_browser_translation_inline_controls_highlights_and_static_export(provid
             page.wait_for_function("document.querySelector('#translation-status').textContent.includes('译文 2 / 2 段')")
             assert len(calls) == 2
             assert '本次接口输入缓存 64.0%' in page.locator('#translation-status').inner_text()
+            assert page.locator('#translation-status').is_hidden()
+            assert page.locator('.reading-options .control-field').count() == 3
+            controls = page.locator('.report-controls').bounding_box()
+            assert controls['height'] < 100
             new_block = page.locator('.preview-side[data-side="new"] > .paper-body .translation-block')
             if not new_block.count():
                 new_block = page.locator('.preview-side[data-side="new"] .review-node .translation-block').first
@@ -538,6 +541,10 @@ def test_browser_translation_inline_controls_highlights_and_static_export(provid
             for number in (1, 3):
                 assert 'is-highlighted' not in page.locator('#' + new_unit['id'] + '-sentence-' + str(number)).get_attribute('class')
             assert page.locator('.inline-change[open] .inline-translation-side[data-side="old"] .translation-block').is_visible()
+            before = page.locator('.inline-change[open] .inline-translation-side[data-side="old"]').bounding_box()
+            after = page.locator('.inline-change[open] .inline-translation-side[data-side="new"]').bounding_box()
+            assert before['x'] + before['width'] < after['x']
+            assert abs(before['y'] - after['y']) < 1
             assert page.locator('.inline-change[open] .old-excerpt').is_hidden()
             page.locator("#translation-mode").select_option("original")
             assert new_block.is_hidden()
@@ -552,11 +559,54 @@ def test_browser_translation_inline_controls_highlights_and_static_export(provid
             page.goto(exported.as_uri())
             assert page.locator('.preview-side[data-side="new"] .translation-block').first.is_visible()
             assert len(calls) == 2
-            page.locator("#translate-all").click()
+            assert page.locator('#translate-all').is_hidden()
+            assert page.locator('[data-translate-change]:visible').count() == 0
+            page.locator('#next-change').click()
+            assert page.locator('.inline-change[open] .inline-translation .translation-block').first.is_visible()
+            page.locator('#translation-export').click()
+            assert page.locator('#translation-status').is_visible()
+            assert '请通过本机服务导出' in page.locator('#translation-status').inner_text()
             assert len(calls) == 2
             assert not errors
         finally:
             browser.close()
+            server.shutdown()
+            worker.join()
+
+
+def test_browser_partial_translation_keeps_retry_until_complete(provider, translation_report):
+    api = _browser_api()
+    config, calls, codes, _ = provider
+    report, _ = translation_report
+    codes.extend([401, 200])
+    with create_server(report.directory, translation_config=config) as server, api.sync_playwright() as playwright:
+        worker = Thread(target=server.serve_forever, daemon=True)
+        worker.start()
+        browser = None
+        try:
+            browser = _launch_browser(playwright, api)
+            page = browser.new_page(viewport={'width': 1440, 'height': 1000})
+            page.route('https://**/*', lambda route: route.abort())
+            page.goto(f'http://127.0.0.1:{server.server_port}/report.html')
+            page.wait_for_function("!document.querySelector('#translate-all').disabled")
+            page.locator('#translate-all').click()
+            page.wait_for_function("document.querySelector('#translation-status').textContent.includes('1 段失败')")
+            assert page.locator('#translation-status').is_visible()
+            assert page.locator('#translate-all').is_visible()
+            assert '译文 1 / 2 段' in page.locator('#overview-translation').inner_text()
+            page.locator('#next-change').click()
+            retry = page.locator('.inline-change[open] .inline-translation [data-translate-change]')
+            assert retry.is_visible() and retry.is_enabled()
+            assert page.locator('.inline-change[open] .inline-translation .translation-block').count() == 1
+            retry.click()
+            page.wait_for_function("document.querySelector('#translate-all').hidden")
+            assert retry.is_hidden()
+            assert page.locator('#translation-status').is_hidden()
+            assert len(calls) == 3
+            assert '译文已完成' in page.locator('#overview-translation').inner_text()
+        finally:
+            if browser:
+                browser.close()
             server.shutdown()
             worker.join()
 
@@ -591,15 +641,14 @@ def test_each_change_group_has_its_own_matching_translation(tmp_path, provider):
             page.wait_for_function("document.querySelector('#translation-status').textContent.includes('译文 2 / 2 段')")
             assert len(calls) == 2
             assert first.locator('.translation-block').first.is_visible()
-            assert second.locator('.translation-block').first.is_hidden()
-            assert note.locator('.inline-translation').get_attribute('open') is None
+            assert second.locator('.translation-block').first.is_visible()
+            assert note.locator('.inline-translation').get_attribute('open') is not None
             for group, number in ((first, 2), (second, 4)):
                 translations = group.locator('.translated-sentence')
                 assert translations.count() == 2
                 assert all(value.endswith(f'-sentence-{number}') for value in
                            translations.evaluate_all('nodes => nodes.map(node => node.dataset.originalSentence)'))
-            second.locator('.group-translation > summary').click()
-            second.locator('[data-translate-change]').click()
+            assert second.locator('[data-translate-change]').is_hidden()
             assert second.locator('.translation-block').first.is_visible()
             assert len(calls) == 2
             page.locator('#translation-mode').select_option('original')

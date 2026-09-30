@@ -634,9 +634,18 @@
       const full = document.createElement('details'); full.className = 'inline-full-context';
       const fullSummary = document.createElement('summary'); fullSummary.textContent = '完整段落对照';
       full.append(fullSummary); detail.append(full);
+      const fullColumns = document.createElement('div'); fullColumns.className = 'comparison-columns';
+      full.append(fullColumns);
       function appendExcerpt(node, side) {
+        const column = document.createElement('div'); column.className = 'comparison-side'; column.dataset.side = side;
         const title = document.createElement('p'); title.className = 'inline-heading';
         title.textContent = side === 'old' ? '修改前' : '修改后';
+        column.append(title); fullColumns.append(column);
+        if (!node) {
+          const note = document.createElement('p'); note.className = 'comparison-empty';
+          note.textContent = side === 'old' ? '此处为新增内容，旧稿没有对应内容。' : '此处内容已从新稿删除。';
+          column.append(note); return;
+        }
         const excerpt = document.createElement('div'); excerpt.className = side + '-excerpt';
         const copy = node.cloneNode(true);
         copy.querySelectorAll('.change-anchor').forEach(anchor => anchor.remove());
@@ -648,17 +657,10 @@
           element.classList.remove('review-node', 'context-hidden', 'is-highlighted');
           element.removeAttribute('data-node-id');
         });
-        excerpt.append(copy); full.append(title, excerpt);
+        excerpt.append(copy); column.append(excerpt);
       }
-      if (oldNode) {
-        appendExcerpt(oldNode, 'old');
-      } else {
-        const note = document.createElement('p'); note.textContent = '此处为新增内容，旧稿没有对应内容。'; full.append(note);
-      }
-      if (target) appendExcerpt(target, 'new');
-      else {
-        const note = document.createElement('p'); note.textContent = '此处内容已从新稿删除。'; full.append(note);
-      }
+      appendExcerpt(oldNode, 'old');
+      appendExcerpt(target, 'new');
       if (supplement.children.length) full.append(supplement);
       full.addEventListener('toggle', () => arrangeInlineChanges());
       const pages = card.querySelector('.card-pages');
@@ -762,7 +764,7 @@
     // Keep notes beside their source; expanded or adjacent notes move down without overlapping.
     arrangeInlineChanges = () => {
       const availableWidth = innerWidth - (document.body.classList.contains('directory-open') ? 340 : 0);
-      const marginNotes = readingView() && availableWidth >= 1100;
+      const marginNotes = readingView() && availableWidth >= 1240;
       document.body.classList.toggle('margin-notes', marginNotes);
       const main = document.querySelector('main');
       main.style.setProperty('--margin-overflow', '0px');

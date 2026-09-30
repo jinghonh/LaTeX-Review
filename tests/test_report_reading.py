@@ -174,6 +174,11 @@ def test_underlined_sentence_opens_matching_margin_comparison(sentence_report, b
     assert detail.locator('.detail-jump.is-selected-detail').count() == 1
     assert detail.locator('.diff-removed').inner_text() == '颜色'
     assert detail.locator('.diff-added').inner_text() == '细线'
+    before = detail.locator('.diff-row-old').bounding_box()
+    after = detail.locator('.diff-row-new').bounding_box()
+    assert before['x'] + before['width'] < after['x']
+    assert abs(before['y'] - after['y']) < 1
+    assert abs(before['width'] - after['width']) < 1
     assert '审阅过程以完整段落为基本单位' not in detail.locator('.compact-diff').inner_text()
     assert detail.locator('.old-excerpt .is-highlighted').count() > 0
     assert detail.locator('.new-excerpt .is-highlighted').count() > 0
@@ -183,6 +188,9 @@ def test_underlined_sentence_opens_matching_margin_comparison(sentence_report, b
     detail.locator('.inline-full-context > summary').click()
     assert detail.locator('.old-excerpt').is_visible()
     assert detail.locator('.new-excerpt').is_visible()
+    before = detail.locator('.old-excerpt').bounding_box()
+    after = detail.locator('.new-excerpt').bounding_box()
+    assert before['x'] + before['width'] < after['x']
     detail.locator('.inline-full-context > summary').click()
     assert detail.locator('.old-excerpt').is_hidden()
     assert_margin_notes_do_not_overlap(page)
@@ -213,6 +221,9 @@ def test_underlined_sentence_opens_matching_margin_comparison(sentence_report, b
     page.wait_for_function('!document.body.classList.contains("margin-notes")')
     assert not page.evaluate('document.documentElement.scrollWidth > innerWidth')
     assert page.locator('.inline-change[open]').evaluate('note => getComputedStyle(note).position') == 'static'
+    before = opened.locator('.diff-row-old').bounding_box()
+    after = opened.locator('.diff-row-new').bounding_box()
+    assert before['y'] + before['height'] <= after['y']
     assert not errors
 
 

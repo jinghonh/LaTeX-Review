@@ -517,6 +517,47 @@ def _rendering_html(rendering: dict | None, statuses: tuple | None) -> str:
 })();</script>''')
 
 
+def _report_overview(document: ReviewDocument) -> str:
+    """以比较版本、主变更和翻译状态组织报告概览。"""
+    counts = document.summary
+    entry = Path(document.entry)
+    name = entry.parent.name if entry.stem in {"main", "paper", "index"} and entry.parent.name else entry.stem
+    sources = []
+    source_labels = {"git": "提交", "worktree": "工作区", "directory": "目录", "file": "文件"}
+    for side, label, source in (("old", "修改前", document.old), ("new", "修改后", document.new)):
+        identifier = source.identifier
+        short = identifier[:12] if source.kind == "git" else Path(identifier).name or identifier
+        sources.append(f'<span class="version-chip version-{side}" title="{_e(identifier)}">'
+                       f'<span>{label}</span><strong>{_e(source_labels.get(source.kind, "版本"))} · {_e(short)}</strong></span>')
+    kinds = "".join(f'<span class="overview-kind overview-{kind}">{label} <strong>'
+                    f'{sum(change.kind == kind for change in document.changes)}</strong></span>'
+                    for kind, label in _KIND_LABELS.items())
+    return f'''<div class="report-identity">
+<div class="report-eyebrow"><span class="report-mark" aria-hidden="true">↔</span> 论文修改审阅 <span class="report-edition">版本对照报告</span></div>
+<h1>{_e(name)}</h1><p class="report-entry" title="{_e(document.entry)}">入口 <span>{_e(document.entry)}</span></p>
+<div class="report-versions" aria-label="比较版本">{''.join(sources)}</div>
+<div class="overview-meta" aria-label="审阅概览">{kinds}<span class="overview-translation" id="overview-translation" role="status">正在读取翻译状态</span></div>
+</div>
+<div class="summary" id="report-summary" data-changes="{counts.changes}"><div class="summary-total"><strong>{counts.changes}</strong><span>项主变更</span></div>
+<div class="word-summary"><span class="word-summary-label">正文变更词数</span><span class="word-added">+{counts.added_words}</span><span class="word-divider">/</span><span class="word-removed">−{counts.removed_words}</span><span class="word-unit">词</span></div></div>'''
+
+
+def _report_controls(change_count: int) -> str:
+    return f'''<nav class="report-controls" aria-label="审阅工具">
+<button type="button" id="toggle-changes" aria-expanded="false" aria-controls="changes-side"><span class="control-icon" aria-hidden="true">☷</span>变更目录 <span class="control-count">{change_count}</span></button>
+<div class="reading-options" role="group" aria-label="阅读设置">
+<label class="control-field"><span>阅读范围</span><select id="reading-mode"><option value="full">完整文档</option><option value="context">变更上下文</option></select></label>
+<label class="control-field"><span>对照方式</span><select id="layout-mode"><option value="reading">新稿阅读</option><option value="compare">双稿对照</option></select></label>
+<label class="control-field"><span>译文显示</span><select id="translation-mode"><option value="original">英文原文</option><option value="bilingual">英中对照</option></select></label>
+<label class="sync-option"><input type="checkbox" id="sync-scroll"> 同步滚动</label></div>
+<div class="translation-controls" role="group" aria-label="译文操作"><div class="translation-actions">
+<button type="button" id="translate-all">翻译全部变更</button><button type="button" id="translation-cancel" disabled>停止翻译</button>
+<button type="button" id="translation-export"><svg class="control-icon" width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M10 2v10m-4-4 4 4 4-4M3 12v5h14v-5"/></svg>导出译文报告</button></div></div>
+<div class="step-controls" role="group" aria-label="变更导航"><span id="current-change" role="status">尚未选择变更</span><div class="step-buttons"><button type="button" id="previous-change" aria-label="上一变更" title="上一处变更（Alt + ↑）"><span aria-hidden="true">↑</span>上一处</button><button type="button" id="next-change" aria-label="下一变更" title="下一处变更（Alt + ↓）">下一处<span aria-hidden="true">↓</span></button></div></div>
+<span id="translation-status" role="status">点击后翻译变更段落、标题和图注；表格暂不翻译。</span>
+</nav>'''
+
+
 def _report_html(document: ReviewDocument, preview_html: str, old: ParsedProject,
                  new: ParsedProject, editor_template: str | None,
                  pairs: tuple[tuple[str, str], ...], *, rendering: dict | None = None,
@@ -549,8 +590,7 @@ def _report_html(document: ReviewDocument, preview_html: str, old: ParsedProject
 {report_style}
 </style></head><body class="reading-view">
 <header class="report-header">
-<div class="report-identity"><span class="report-eyebrow">论文修改审阅</span><h1>{_e(document.entry)}</h1></div>
-<p class="summary" id="report-summary" data-changes="{counts.changes}"><strong>{counts.changes}</strong> 项主变更 <span>正文 +{counts.added_words} / −{counts.removed_words} 词</span></p>
+{_report_overview(document)}
 <details class="report-help"><summary>报告说明</summary><div>
 <p>内容预览供审阅，不代表最终编译版式；来源位置可能为近似值。</p>
 <p>同键文献字段变化单独计入引用主变更，不累计为正文变化。分类命中可重叠。</p>
@@ -558,16 +598,7 @@ def _report_html(document: ReviewDocument, preview_html: str, old: ParsedProject
 <p>右侧页边卡片显示变更摘要。点击正文划线或卡片，展开修改前后对比；窄屏卡片显示在对应段落下方。按 Alt+↑ / Alt+↓ 可跳到上一项 / 下一项；输入时快捷键不生效。公式排版可能需要联网。</p>
 <p id="math-status" role="status">正在加载在线公式排版。</p>
 </div></details></header>
-<nav class="report-controls" aria-label="审阅工具">
-<button type="button" id="toggle-changes" aria-expanded="false" aria-controls="changes-side">变更目录 <span>{counts.changes}</span></button>
-<div class="reading-options"><label>阅读范围 <select id="reading-mode"><option value="full">完整文档</option><option value="context">变更上下文</option></select></label>
-<label>对照方式 <select id="layout-mode"><option value="reading">新稿阅读</option><option value="compare">双稿对照</option></select></label>
-<label class="sync-option"><input type="checkbox" id="sync-scroll"> 同步滚动</label></div>
-<div class="translation-controls"><label>译文 <select id="translation-mode"><option value="original">英文原文</option><option value="bilingual">英中对照</option></select></label>
-<button type="button" id="translate-all">翻译全部变更</button><button type="button" id="translation-cancel" disabled>停止翻译</button>
-<button type="button" id="translation-export">导出含译文报告</button><span id="translation-status" role="status">点击后翻译变更段落、标题和图注；表格暂不翻译。</span></div>
-<div class="step-controls"><span id="current-change" role="status">尚未选择变更</span><button type="button" id="previous-change" aria-label="上一变更">↑ 上一处</button><button type="button" id="next-change" aria-label="下一变更">下一处 ↓</button></div>
-</nav>
+{_report_controls(counts.changes)}
 <main>{main.group(1)}<section class="changes-side" aria-label="变更" id="changes-side"><div class="directory-heading"><h2>变更目录</h2><button type="button" id="close-changes" aria-label="收起变更目录">收起</button></div>
 <div class="filters"><label>操作 <select id="kind-filter"><option value="all">全部</option><option value="added">新增</option><option value="removed">删除</option><option value="modified">修改</option><option value="moved">移动</option></select></label>
 <label>类别 <select id="category-filter"><option value="all">全部</option><option value="text">正文</option><option value="equation">公式</option><option value="figure">图</option><option value="table">表格</option><option value="citation">引用</option><option value="comment">注释</option><option value="move">移动</option></select></label></div>
