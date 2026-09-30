@@ -47,8 +47,17 @@
         }
       }
       insert(target, block);
-      document.querySelectorAll('.inline-translation-side[data-translation-node="' + CSS.escape(result.id) + '"]').forEach(copy =>
-        copy.append(block.cloneNode(true)));
+      document.querySelectorAll('[data-translation-node="' + CSS.escape(result.id) + '"]').forEach(copy => {
+        const translation = block.cloneNode(true);
+        if (copy.dataset.originalSentences !== undefined) {
+          const ids = new Set(copy.dataset.originalSentences.split(' ').filter(Boolean));
+          const sentences = Array.from(translation.querySelectorAll('.translated-sentence'))
+            .filter(sentence => ids.has(sentence.dataset.originalSentence));
+          translation.replaceChildren(translation.querySelector('.translation-label'));
+          sentences.forEach(sentence => translation.append(sentence, document.createTextNode(' ')));
+        }
+        copy.append(translation);
+      });
       installed.add(result.id);
     });
     document.body.classList.toggle('bilingual-view', mode.value === 'bilingual');
@@ -87,6 +96,14 @@
           (state.message ? ' · ' + state.message : '');
       }).join('；');
     });
+    document.querySelectorAll('.group-translation-side[data-translation-node]').forEach(side => {
+      const id = side.dataset.translationNode;
+      const placeholder = side.querySelector('.translation-placeholder');
+      placeholder.hidden = Boolean(results[id]);
+      const state = states[id] || {};
+      placeholder.textContent = labels[state.state] || '尚未翻译';
+      if (state.message) placeholder.textContent += ' · ' + state.message;
+    });
     cancel.disabled = !active;
     all.disabled = active || !available || !units.some(unit => !unit.error);
   }
@@ -123,6 +140,15 @@
       (blocked ? ' · ' + blocked + ' 段无法翻译，请查看逐项说明' : '') +
       (!available && data.message ? ' · ' + data.message : '') :
       (data.message || '请在项目配置中设置翻译接口后重新启动本机服务。');
+    const usage = data.usage;
+    if (data.enabled && usage && usage.requests) {
+      status.textContent += usage.cache_hit_rate === null ? ' · 本次接口缓存用量未提供' :
+        ' · 本次接口输入缓存 ' + (usage.cache_hit_rate * 100).toFixed(1) + '%';
+      if (usage.cache_reports && usage.cache_reports < usage.requests)
+        status.textContent += '（' + usage.cache_reports + '/' + usage.requests + ' 次有缓存统计）';
+      if (usage.retries) status.textContent += ' · 自动重试 ' + usage.retries + ' 次';
+      if (usage.message) status.textContent += ' · ' + usage.message;
+    }
     applyResults(); refreshButtons();
   }
 
@@ -159,8 +185,33 @@
     controls.append(button, text); card.append(controls);
     const inline = document.getElementById('inline-' + card.id);
     if (inline) {
+      inline.querySelectorAll('.compact-diff .diff-group').forEach(group => {
+        const jump = group.querySelector('.detail-jump');
+        if (!jump) return;
+        const translation = document.createElement('details'); translation.className = 'group-translation';
+        const summary = document.createElement('summary'); summary.textContent = '本处中文译文';
+        const groupControls = document.createElement('div'); groupControls.className = 'translation-item-controls';
+        groupControls.append(button.cloneNode(true));
+        translation.append(summary, groupControls);
+        for (const [sideName, label] of [['old', '修改前译文'], ['new', '修改后译文']]) {
+          const ids = (jump.dataset[sideName + 'Sentences'] || '').split(' ').filter(Boolean);
+          const side = document.createElement('div'); side.className = 'group-translation-side';
+          side.dataset.side = sideName;
+          const caption = document.createElement('p'); caption.className = 'inline-heading'; caption.textContent = label;
+          const placeholder = document.createElement('p'); placeholder.className = 'translation-placeholder';
+          const unit = units.find(unit => unit.change_id === card.id && unit.side === sideName);
+          if (ids.length && unit) {
+            side.dataset.translationNode = unit.id;
+            side.dataset.originalSentences = ids.map(id => sideName + '-' + id).join(' ');
+            placeholder.textContent = '尚未翻译';
+          } else placeholder.textContent = '该侧无对应内容';
+          side.append(caption, placeholder); translation.append(side);
+        }
+        translation.addEventListener('toggle', () => window.dispatchEvent(new Event('resize')));
+        group.append(translation);
+      });
       const translation = document.createElement('details'); translation.className = 'inline-translation';
-      const summary = document.createElement('summary'); summary.textContent = '中文译文';
+      const summary = document.createElement('summary'); summary.textContent = '整段中文译文';
       translation.append(summary, controls.cloneNode(true));
       units.filter(unit => unit.change_id === card.id).forEach(unit => {
         const side = document.createElement('div'); side.className = 'inline-translation-side';
@@ -194,7 +245,7 @@
     if (!button) return;
     event.preventDefault();
     const inline = document.getElementById('inline-' + button.dataset.translateChange);
-    const translation = inline && inline.querySelector('.inline-translation');
+    const translation = button.closest('.group-translation') || (inline && inline.querySelector('.inline-translation'));
     if (translation) translation.open = true;
     translate(units.filter(unit => unit.change_id === button.dataset.translateChange).map(unit => unit.id));
   });

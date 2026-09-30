@@ -519,7 +519,7 @@
           previous.b = range.b; previous.d = range.d;
         } else groups.push(range);
       });
-      const comparison = document.createElement('span'); comparison.className = 'compact-diff';
+      const comparison = document.createElement('div'); comparison.className = 'compact-diff';
       function snippet(tokens, start, end, side) {
         const text = document.createElement('span'); text.className = 'diff-snippet';
         if (!tokens.length) { text.classList.add('diff-empty'); text.textContent = '该侧无对应内容'; return text; }
@@ -545,7 +545,7 @@
         return text;
       }
       groups.forEach((range, index) => {
-        const group = document.createElement('span'); group.className = 'diff-group';
+        const group = document.createElement('div'); group.className = 'diff-group';
         const title = document.createElement('span'); title.className = 'diff-group-title';
         title.textContent = '改动 ' + (firstNumber + index);
         group.append(title);
@@ -618,8 +618,11 @@
         const comparison = compactDiff(jumpButton.dataset.oldSentences ? pair.querySelector('.sentence-before') : null,
           jumpButton.dataset.newSentences ? pair.querySelector('.sentence-after') : null, groupCount + 1);
         groupCount += comparison.children.length;
-        Array.from(jumpButton.childNodes).filter(node => node.nodeType === Node.TEXT_NODE).forEach(node => node.remove());
-        pair.hidden = true; jumpButton.append(comparison);
+        comparison.querySelectorAll('.diff-group').forEach(group => {
+          const trigger = jumpButton.cloneNode(false);
+          trigger.append(...Array.from(group.childNodes)); group.append(trigger);
+        });
+        jumpButton.replaceWith(comparison);
       });
       if (!groupCount && card.dataset.kind !== 'moved' &&
           (oldNode?.classList.contains('node-paragraph') || target?.classList.contains('node-paragraph'))) {

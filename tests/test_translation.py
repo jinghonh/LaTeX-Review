@@ -96,7 +96,9 @@ def provider(monkeypatch):
             source = json.loads(data["messages"][1]["content"])
             translated = {"sentences": [{"id": s["id"], "text": "译：" + s["text"]} for s in source["sentences"]]}
             body = json.dumps({"choices": [{"finish_reason": "stop", "message": {
-                "content": json.dumps(translated, ensure_ascii=False)}}]}, ensure_ascii=False).encode()
+                "content": json.dumps(translated, ensure_ascii=False)}}], "usage": {
+                    "prompt_tokens": 100, "prompt_cache_hit_tokens": 64,
+                    "prompt_cache_miss_tokens": 36, "completion_tokens": 20}}, ensure_ascii=False).encode()
             self.send_response(200)
             self.send_header("Content-Type", "application/json")
             self.send_header("Content-Length", str(len(body)))
@@ -289,9 +291,9 @@ def test_reordered_placeholders_retry_with_exact_sequence_feedback(translation_r
     texts = request_translation(unit, config, Event())
     assert len(texts) == len(unit["sentences"]) and len(requests) == 2
     original = json.loads(requests[0]["messages"][1]["content"])
-    retry = json.loads(requests[1]["messages"][1]["content"])
+    retry = json.loads(requests[1]["messages"][-1]["content"])
     assert "validation_feedback" not in original
-    assert retry["sentences"] == original["sentences"]
+    assert requests[1]["messages"][:2] == requests[0]["messages"]
     assert retry["validation_feedback"]["placeholder_order"] == [
         {"id": s["number"], "tokens": [p["token"] for p in s["protected"]]} for s in unit["sentences"]]
 
@@ -485,7 +487,7 @@ def test_browser_missing_key_shows_global_guidance_and_preserves_cached_translat
             page.locator("#next-change").click()
             assert page.locator('.inline-change[open] .inline-translation .translation-block').first.is_hidden()
             page.locator('.inline-change[open] .inline-translation > summary').click()
-            page.locator(".inline-change[open] [data-translate-change]").click()
+            page.locator(".inline-change[open] .inline-translation [data-translate-change]").click()
             assert page.locator('.preview-side[data-side="new"] .translation-block').first.is_visible()
             assert len(calls) == 2
         finally:
@@ -519,9 +521,10 @@ def test_browser_translation_inline_controls_highlights_and_static_export(provid
             page.locator("#next-change").click()
             assert page.locator('.inline-change[open] .inline-translation').get_attribute('open') is None
             page.locator('.inline-change[open] .inline-translation > summary').click()
-            page.locator(".inline-change[open] [data-translate-change]").click()
+            page.locator(".inline-change[open] .inline-translation [data-translate-change]").click()
             page.wait_for_function("document.querySelector('#translation-status').textContent.includes('译文 2 / 2 段')")
             assert len(calls) == 2
+            assert '本次接口输入缓存 64.0%' in page.locator('#translation-status').inner_text()
             new_block = page.locator('.preview-side[data-side="new"] > .paper-body .translation-block')
             if not new_block.count():
                 new_block = page.locator('.preview-side[data-side="new"] .review-node .translation-block').first
@@ -554,6 +557,64 @@ def test_browser_translation_inline_controls_highlights_and_static_export(provid
             assert not errors
         finally:
             browser.close()
+            server.shutdown()
+            worker.join()
+
+
+def test_each_change_group_has_its_own_matching_translation(tmp_path, provider):
+    api = _browser_api()
+    report = _content_report(tmp_path,
+        'Keep this sentence. We found a small gain. Another stable sentence. We observe a small cost.',
+        'Keep this sentence. We found a large gain. Another stable sentence. We observe a large cost.')
+    config, calls, _, _ = provider
+    with create_server(report.directory, translation_config=config) as server, api.sync_playwright() as playwright:
+        worker = Thread(target=server.serve_forever, daemon=True)
+        worker.start()
+        browser = None
+        try:
+            browser = _launch_browser(playwright, api)
+            page = browser.new_page(viewport={'width': 1440, 'height': 1000})
+            page.route('https://**/*', lambda route: route.abort())
+            errors = []
+            page.on('pageerror', lambda error: errors.append(str(error)))
+            page.goto(f'http://127.0.0.1:{server.server_port}/report.html')
+            page.locator('#next-change').click()
+            note = page.locator('.inline-change[open]')
+            groups = note.locator('.diff-group')
+            assert groups.count() == 2
+            assert groups.locator('.group-translation').count() == 2
+            assert groups.locator('.group-translation[open]').count() == 0
+            assert note.locator('button details').count() == 0
+            first, second = groups.nth(0), groups.nth(1)
+            first.locator('.group-translation > summary').click()
+            first.locator('[data-translate-change]').click()
+            page.wait_for_function("document.querySelector('#translation-status').textContent.includes('译文 2 / 2 段')")
+            assert len(calls) == 2
+            assert first.locator('.translation-block').first.is_visible()
+            assert second.locator('.translation-block').first.is_hidden()
+            assert note.locator('.inline-translation').get_attribute('open') is None
+            for group, number in ((first, 2), (second, 4)):
+                translations = group.locator('.translated-sentence')
+                assert translations.count() == 2
+                assert all(value.endswith(f'-sentence-{number}') for value in
+                           translations.evaluate_all('nodes => nodes.map(node => node.dataset.originalSentence)'))
+            second.locator('.group-translation > summary').click()
+            second.locator('[data-translate-change]').click()
+            assert second.locator('.translation-block').first.is_visible()
+            assert len(calls) == 2
+            page.locator('#translation-mode').select_option('original')
+            assert first.locator('.translation-block').first.is_visible()
+            assert second.locator('.translation-block').first.is_visible()
+            first.locator('.group-translation > summary').click()
+            assert first.locator('.translation-block').first.is_hidden()
+            assert second.locator('.translation-block').first.is_visible()
+            page.set_viewport_size({'width': 390, 'height': 844})
+            # 页边布局在下一动画帧响应窗口变化，等待重排后再检查窄屏宽度。
+            page.wait_for_function('document.documentElement.scrollWidth <= innerWidth')
+            assert not errors
+        finally:
+            if browser:
+                browser.close()
             server.shutdown()
             worker.join()
 

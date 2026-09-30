@@ -1118,3 +1118,12 @@ main {
 .inline-translation-side[data-side="old"] .sentence-changed { background:#faecea; text-decoration-color:#b5776c; }
 .inline-translation .translation-item-controls { margin:0 0 10px; }
 .inline-translation .translation-item-status { font-size:11px; }
+.diff-group>.detail-jump { margin-bottom:0; }
+.group-translation { margin:6px 0 0 8px; }
+.group-translation>summary { color:var(--accent); font:11px/1.7 var(--ui); padding:4px 0; }
+.group-translation .translation-item-controls { margin:4px 0 8px; }
+.group-translation .translation-block { display:block; font:14px/1.8 var(--text); padding:8px 10px; margin:0 0 10px; }
+.group-translation .translation-label { display:none; }
+.group-translation .inline-heading { margin:8px 0 4px; }
+.group-translation-side[data-side="old"] .sentence-changed { background:#faecea; text-decoration-color:#b5776c; }
+.translation-placeholder { color:var(--muted); font:12px/1.7 var(--ui); margin:0 0 8px; }

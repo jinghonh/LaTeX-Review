@@ -1141,6 +1141,15 @@ main {
 .inline-translation-side[data-side="old"] .sentence-changed { background:#faecea; text-decoration-color:#b5776c; }
 .inline-translation .translation-item-controls { margin:0 0 10px; }
 .inline-translation .translation-item-status { font-size:11px; }
+.diff-group>.detail-jump { margin-bottom:0; }
+.group-translation { margin:6px 0 0 8px; }
+.group-translation>summary { color:var(--accent); font:11px/1.7 var(--ui); padding:4px 0; }
+.group-translation .translation-item-controls { margin:4px 0 8px; }
+.group-translation .translation-block { display:block; font:14px/1.8 var(--text); padding:8px 10px; margin:0 0 10px; }
+.group-translation .translation-label { display:none; }
+.group-translation .inline-heading { margin:8px 0 4px; }
+.group-translation-side[data-side="old"] .sentence-changed { background:#faecea; text-decoration-color:#b5776c; }
+.translation-placeholder { color:var(--muted); font:12px/1.7 var(--ui); margin:0 0 8px; }
 
 </style></head><body class="reading-view">
 <header class="report-header">
@@ -2447,7 +2456,7 @@ v=[v_0,v_1^a,\ldots,v_N^a,v_1^b,\ldots,v_N^b]^\top,
           previous.b = range.b; previous.d = range.d;
         } else groups.push(range);
       });
-      const comparison = document.createElement('span'); comparison.className = 'compact-diff';
+      const comparison = document.createElement('div'); comparison.className = 'compact-diff';
       function snippet(tokens, start, end, side) {
         const text = document.createElement('span'); text.className = 'diff-snippet';
         if (!tokens.length) { text.classList.add('diff-empty'); text.textContent = '该侧无对应内容'; return text; }
@@ -2473,7 +2482,7 @@ v=[v_0,v_1^a,\ldots,v_N^a,v_1^b,\ldots,v_N^b]^\top,
         return text;
       }
       groups.forEach((range, index) => {
-        const group = document.createElement('span'); group.className = 'diff-group';
+        const group = document.createElement('div'); group.className = 'diff-group';
         const title = document.createElement('span'); title.className = 'diff-group-title';
         title.textContent = '改动 ' + (firstNumber + index);
         group.append(title);
@@ -2546,8 +2555,11 @@ v=[v_0,v_1^a,\ldots,v_N^a,v_1^b,\ldots,v_N^b]^\top,
         const comparison = compactDiff(jumpButton.dataset.oldSentences ? pair.querySelector('.sentence-before') : null,
           jumpButton.dataset.newSentences ? pair.querySelector('.sentence-after') : null, groupCount + 1);
         groupCount += comparison.children.length;
-        Array.from(jumpButton.childNodes).filter(node => node.nodeType === Node.TEXT_NODE).forEach(node => node.remove());
-        pair.hidden = true; jumpButton.append(comparison);
+        comparison.querySelectorAll('.diff-group').forEach(group => {
+          const trigger = jumpButton.cloneNode(false);
+          trigger.append(...Array.from(group.childNodes)); group.append(trigger);
+        });
+        jumpButton.replaceWith(comparison);
       });
       if (!groupCount && card.dataset.kind !== 'moved' &&
           (oldNode?.classList.contains('node-paragraph') || target?.classList.contains('node-paragraph'))) {
@@ -2785,8 +2797,17 @@ v=[v_0,v_1^a,\ldots,v_N^a,v_1^b,\ldots,v_N^b]^\top,
         }
       }
       insert(target, block);
-      document.querySelectorAll('.inline-translation-side[data-translation-node="' + CSS.escape(result.id) + '"]').forEach(copy =>
-        copy.append(block.cloneNode(true)));
+      document.querySelectorAll('[data-translation-node="' + CSS.escape(result.id) + '"]').forEach(copy => {
+        const translation = block.cloneNode(true);
+        if (copy.dataset.originalSentences !== undefined) {
+          const ids = new Set(copy.dataset.originalSentences.split(' ').filter(Boolean));
+          const sentences = Array.from(translation.querySelectorAll('.translated-sentence'))
+            .filter(sentence => ids.has(sentence.dataset.originalSentence));
+          translation.replaceChildren(translation.querySelector('.translation-label'));
+          sentences.forEach(sentence => translation.append(sentence, document.createTextNode(' ')));
+        }
+        copy.append(translation);
+      });
       installed.add(result.id);
     });
     document.body.classList.toggle('bilingual-view', mode.value === 'bilingual');
@@ -2824,6 +2845,14 @@ v=[v_0,v_1^a,\ldots,v_N^a,v_1^b,\ldots,v_N^b]^\top,
         return (unit.side === 'old' ? '修改前：' : '修改后：') + (labels[state.state] || '尚未翻译') +
           (state.message ? ' · ' + state.message : '');
       }).join('；');
+    });
+    document.querySelectorAll('.group-translation-side[data-translation-node]').forEach(side => {
+      const id = side.dataset.translationNode;
+      const placeholder = side.querySelector('.translation-placeholder');
+      placeholder.hidden = Boolean(results[id]);
+      const state = states[id] || {};
+      placeholder.textContent = labels[state.state] || '尚未翻译';
+      if (state.message) placeholder.textContent += ' · ' + state.message;
     });
     cancel.disabled = !active;
     all.disabled = active || !available || !units.some(unit => !unit.error);
@@ -2897,8 +2926,33 @@ v=[v_0,v_1^a,\ldots,v_N^a,v_1^b,\ldots,v_N^b]^\top,
     controls.append(button, text); card.append(controls);
     const inline = document.getElementById('inline-' + card.id);
     if (inline) {
+      inline.querySelectorAll('.compact-diff .diff-group').forEach(group => {
+        const jump = group.querySelector('.detail-jump');
+        if (!jump) return;
+        const translation = document.createElement('details'); translation.className = 'group-translation';
+        const summary = document.createElement('summary'); summary.textContent = '本处中文译文';
+        const groupControls = document.createElement('div'); groupControls.className = 'translation-item-controls';
+        groupControls.append(button.cloneNode(true));
+        translation.append(summary, groupControls);
+        for (const [sideName, label] of [['old', '修改前译文'], ['new', '修改后译文']]) {
+          const ids = (jump.dataset[sideName + 'Sentences'] || '').split(' ').filter(Boolean);
+          const side = document.createElement('div'); side.className = 'group-translation-side';
+          side.dataset.side = sideName;
+          const caption = document.createElement('p'); caption.className = 'inline-heading'; caption.textContent = label;
+          const placeholder = document.createElement('p'); placeholder.className = 'translation-placeholder';
+          const unit = units.find(unit => unit.change_id === card.id && unit.side === sideName);
+          if (ids.length && unit) {
+            side.dataset.translationNode = unit.id;
+            side.dataset.originalSentences = ids.map(id => sideName + '-' + id).join(' ');
+            placeholder.textContent = '尚未翻译';
+          } else placeholder.textContent = '该侧无对应内容';
+          side.append(caption, placeholder); translation.append(side);
+        }
+        translation.addEventListener('toggle', () => window.dispatchEvent(new Event('resize')));
+        group.append(translation);
+      });
       const translation = document.createElement('details'); translation.className = 'inline-translation';
-      const summary = document.createElement('summary'); summary.textContent = '中文译文';
+      const summary = document.createElement('summary'); summary.textContent = '整段中文译文';
       translation.append(summary, controls.cloneNode(true));
       units.filter(unit => unit.change_id === card.id).forEach(unit => {
         const side = document.createElement('div'); side.className = 'inline-translation-side';
@@ -2932,7 +2986,7 @@ v=[v_0,v_1^a,\ldots,v_N^a,v_1^b,\ldots,v_N^b]^\top,
     if (!button) return;
     event.preventDefault();
     const inline = document.getElementById('inline-' + button.dataset.translateChange);
-    const translation = inline && inline.querySelector('.inline-translation');
+    const translation = button.closest('.group-translation') || (inline && inline.querySelector('.inline-translation'));
     if (translation) translation.open = true;
     translate(units.filter(unit => unit.change_id === button.dataset.translateChange).map(unit => unit.id));
   });
