@@ -61,8 +61,11 @@ def test_page_link_reveals_filtered_change_and_updates_preview(tmp_path, report_
             page.goto(report_server(report.html.parent), wait_until="domcontentloaded")
             card = page.locator(f"#{change.id}")
             other_kind = "added" if change.kind != "added" else "removed"
+            page.locator("#toggle-changes").click()
             page.locator("#kind-filter").select_option(other_kind)
             assert card.is_hidden()
+            page.locator('#close-changes').click()
+            page.locator('#compiled-pages > summary').click()
             page.locator(f'.rendered-pages a[href="#{change.id}"]').first.click()
             assert card.is_visible()
             assert page.locator("#kind-filter").input_value() == "all"

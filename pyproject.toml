@@ -21,7 +21,7 @@ latex-review-preview = "latex_review.serve:main"
 where = ["src"]
 
 [tool.setuptools.package-data]
-latex_review = ["schemas/*.json", "report_interaction.js"]
+latex_review = ["schemas/*.json", "report_interaction.js", "report.css"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

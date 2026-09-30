@@ -1,4 +1,4 @@
-"""把同一份审阅文档写为可移动的三栏报告目录。"""
+"""把同一份审阅文档写为可移动的论文审阅报告目录。"""
 
 from __future__ import annotations
 
@@ -519,7 +519,7 @@ def _report_html(document: ReviewDocument, preview_html: str, old: ParsedProject
                  new: ParsedProject, editor_template: str | None,
                  pairs: tuple[tuple[str, str], ...], *, rendering: dict | None = None,
                  statuses: tuple | None = None) -> str:
-    # 预览层拥有节点 HTML 和公式降级逻辑；报告仅将它们嵌入三栏容器。
+    # 预览层拥有节点 HTML 和公式降级逻辑；报告提供以新稿为主体的阅读容器。
     style = re.search(r"<style>(.*?)</style>", preview_html, re.S)
     main = re.search(r"<main>(.*?)</main>", preview_html, re.S)
     scripts = re.search(r"(<script>.*?</script>\s*<script async .*?</script>)", preview_html, re.S)
@@ -531,63 +531,41 @@ def _report_html(document: ReviewDocument, preview_html: str, old: ParsedProject
     cards = _change_cards(document, anchors, old, new, editor_template, rendering)
     interaction = files("latex_review").joinpath("report_interaction.js").read_text(encoding="utf-8")
     pairs_json = json.dumps(pairs, ensure_ascii=False).replace("<", "\\u003c")
+    report_style = files("latex_review").joinpath("report.css").read_text(encoding="utf-8")
+    severity_labels = {"error": "错误", "warning": "提醒", "info": "说明"}
+    diagnostics_html = "".join(
+        f'<li><strong>{_e(severity_labels.get(item.severity, item.severity))}</strong> · {_e(item.message)}</li>'
+        for item in document.diagnostics) or '<li>没有额外诊断。</li>'
     return f'''<!doctype html>
 <html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-<title>LaTeX 三栏审阅报告</title><style>{style.group(1)}
-body{{background:#f3f4f6;color:#17212d}}header{{padding:.8rem 1.2rem}}header h1{{font-size:1.25rem}}
-.summary{{margin:.3rem 0;font-weight:650}}.summary-extra{{margin:.2rem 0;color:#374151}}
-main{{grid-template-columns:repeat(3,minmax(0,1fr));gap:.7rem;padding:.7rem;align-items:start}}
-.preview-side,.changes-side{{height:calc(100vh - 16rem);min-height:20rem;max-height:none;overflow:auto;background:white;border:1px solid #b8c0ca;border-radius:.35rem;padding:1rem}}
-.changes-side h2{{margin:0 0 .8rem}}.preview-side[data-side="old"] .is-highlighted{{outline:3px solid #a74236;outline-offset:3px;background:#fce2df}}
-.preview-side[data-side="new"] .is-highlighted{{outline:3px solid #287446;outline-offset:3px;background:#d8f0df}}
-.review-sentence{{scroll-margin-top:1rem}}.preview-side[data-side="old"] .sentence-changed{{background:#fce2df}}
-.preview-side[data-side="new"] .sentence-changed{{background:#d8f0df}}
-.preview-side .review-sentence.is-highlighted{{outline:2px solid currentColor;outline-offset:2px}}
-.preview-side[data-side="old"] td.is-cell-highlighted{{outline:3px solid #a74236;outline-offset:-3px;background:#f8c5c0}}
-.preview-side[data-side="new"] td.is-cell-highlighted{{outline:3px solid #287446;outline-offset:-3px;background:#b9e4c5}}
-.change-card{{border:1px solid #adb7c4;border-radius:.35rem;margin:.6rem 0;padding:.7rem;background:#fff}}
-.change-card[hidden]{{display:none}}.change-card:focus-within{{outline:2px solid #244e9b}}
-button,select{{font:inherit}}button:focus-visible,select:focus-visible,a:focus-visible{{outline:3px solid #1d4ed8;outline-offset:2px}}
-.change-jump,.detail-jump{{cursor:pointer;border:0;background:transparent;text-align:left;color:#12233b;padding:.15rem}}
-.change-jump:hover,.detail-jump:hover{{text-decoration:underline}}.detail-list{{padding-left:1.3rem;margin:.35rem 0}}
-.detail-list li{{margin:.3rem 0}}.detail-list small{{display:block;color:#374151;overflow-wrap:anywhere}}
-.sentence-pair{{display:block;margin:.25rem 0 .3rem .5rem;line-height:1.5}}
-.sentence-before,.sentence-after{{display:block;overflow-wrap:anywhere}}
-.sentence-before{{background:#fce2df}}.sentence-after{{background:#d8f0df}}
-.kind{{display:inline-block;border-radius:.2rem;padding:.1rem .3rem;font-weight:700;border:1px solid #53657a}}
-.kind-added{{background:#d8f0df}}.kind-removed{{background:#fce2df}}.kind-modified{{background:#fff0c9}}.kind-moved{{background:#dce9ff}}
-.badge{{display:inline-block;background:#e7edf7;padding:.05rem .25rem;border-radius:.2rem;margin-right:.2rem}}
-.card-meta,.card-source{{font-size:.85rem;color:#374151;margin:.4rem 0}}
-.filters{{display:flex;gap:.5rem;flex-wrap:wrap;margin:.5rem 0}}.filters label{{font-size:.9rem;font-weight:600}}
-.filters select{{min-width:7rem;padding:.2rem;border:1px solid #6b7280;background:white;color:#17212d}}
-.side-empty{{display:none;padding:.6rem;background:#fff0d6;color:#4b3000;border:1px solid #9a5700;margin:.5rem 0}}
-.side-empty.is-visible{{display:block}}.jump-status{{min-height:1.5rem;color:#374151;font-size:.88rem}}
-.asset-card{{border:1px solid #9caaba;padding:.5rem;margin:.5rem 0;background:#f8fafc;overflow-wrap:anywhere}}
-.asset-card img{{max-width:100%;height:auto;display:block}}.asset-missing{{border-color:#a33427;background:#fff0ed}}
-.asset-card p{{margin:.2rem 0}}.asset-fallback{{color:#783f14}}
-.report-controls{{display:flex;gap:1rem;flex-wrap:wrap;margin:.4rem 0}}.context-hidden{{display:none!important}}
-.rendered-pages{{padding:1rem;background:white;margin:1rem;border:1px solid #b8c0ca}}
-.page-pair{{border-top:1px solid #b8c0ca;padding:.7rem 0;display:flex;gap:1rem;flex-wrap:wrap;align-items:start}}
-.page-pair h3{{width:100%;margin:.2rem 0}}.page-pair figure{{margin:0;max-width:31%;min-width:230px}}
-.page-pair img{{max-width:100%;height:auto;border:1px solid #b8c0ca}}
-@media(max-width:1000px){{main{{grid-template-columns:repeat(2,minmax(0,1fr))}}.preview-side{{height:60vh;min-height:22rem}}.changes-side{{grid-column:1/-1;height:35vh;min-height:14rem}}}}
-@media(max-width:600px){{.preview-side{{padding:.55rem}}main{{gap:.35rem;padding:.35rem}}}}
-</style></head><body><header><h1>LaTeX 三栏审阅报告</h1>
-<p class="notice">内容预览供审阅，不代表最终编译版式；来源位置可能为近似值。</p>
-<p class="notice">修改前使用浅红色，修改后使用浅绿色；颜色用于定位所选变更。</p>
-<p class="notice">同键文献字段变化单独计入引用主变更，不累计为正文变化。</p>
-<p class="summary" id="report-summary" data-changes="{counts.changes}">主变更 {counts.changes} · 正文增加 {counts.added_words} 词 · 删除 {counts.removed_words} 词</p>
+<title>论文修改审阅 · {_e(document.entry)}</title><style>{style.group(1)}
+{report_style}
+</style></head><body class="reading-view">
+<header class="report-header">
+<div class="report-identity"><span class="report-eyebrow">论文修改审阅</span><h1>{_e(document.entry)}</h1></div>
+<p class="summary" id="report-summary" data-changes="{counts.changes}"><strong>{counts.changes}</strong> 项主变更 <span>正文 +{counts.added_words} / −{counts.removed_words} 词</span></p>
+<details class="report-help"><summary>报告说明</summary><div>
+<p>内容预览供审阅，不代表最终编译版式；来源位置可能为近似值。</p>
+<p>同键文献字段变化单独计入引用主变更，不累计为正文变化。分类命中可重叠。</p>
 <p class="summary-extra">{_e(category_counts)}</p>
-<div class="report-controls"><label><input type="checkbox" id="sync-scroll"> 同步滚动</label>
-<label>阅读范围 <select id="reading-mode"><option value="full">完整文档</option><option value="context">变更上下文</option></select></label>
-<button type="button" id="previous-change">上一变更</button><button type="button" id="next-change">下一变更</button></div>
-<p class="notice">按 Alt+↑ / Alt+↓ 可跳到上一项 / 下一项；输入时快捷键不生效。公式排版可能需要联网。</p>
-<p id="math-status" role="status">正在加载在线公式排版。</p></header>
-<main>{main.group(1)}<section class="changes-side" aria-label="变更" id="changes-side"><h2>变更</h2>
+<p>点击正文旁的变更标记，展开旧文与明细。按 Alt+↑ / Alt+↓ 可跳到上一项 / 下一项；输入时快捷键不生效。公式排版可能需要联网。</p>
+<p id="math-status" role="status">正在加载在线公式排版。</p>
+</div></details></header>
+<nav class="report-controls" aria-label="审阅工具">
+<button type="button" id="toggle-changes" aria-expanded="false" aria-controls="changes-side">变更目录 <span>{counts.changes}</span></button>
+<div class="reading-options"><label>阅读范围 <select id="reading-mode"><option value="full">完整文档</option><option value="context">变更上下文</option></select></label>
+<label>对照方式 <select id="layout-mode"><option value="reading">新稿阅读</option><option value="compare">双稿对照</option></select></label>
+<label class="sync-option"><input type="checkbox" id="sync-scroll"> 同步滚动</label></div>
+<div class="step-controls"><span id="current-change" role="status">尚未选择变更</span><button type="button" id="previous-change" aria-label="上一变更">↑ 上一处</button><button type="button" id="next-change" aria-label="下一变更">下一处 ↓</button></div>
+</nav>
+<main>{main.group(1)}<section class="changes-side" aria-label="变更" id="changes-side"><div class="directory-heading"><h2>变更目录</h2><button type="button" id="close-changes" aria-label="收起变更目录">收起</button></div>
 <div class="filters"><label>操作 <select id="kind-filter"><option value="all">全部</option><option value="added">新增</option><option value="removed">删除</option><option value="modified">修改</option><option value="moved">移动</option></select></label>
 <label>类别 <select id="category-filter"><option value="all">全部</option><option value="text">正文</option><option value="equation">公式</option><option value="figure">图</option><option value="table">表格</option><option value="citation">引用</option><option value="comment">注释</option><option value="move">移动</option></select></label></div>
 <p id="filter-count" role="status"></p><p id="jump-status" class="jump-status" role="status"></p>{cards}</section></main>
-{_rendering_html(rendering, statuses)}
+<details class="report-supplement"><summary>报告诊断 <span>{len(document.diagnostics)} 条诊断</span></summary>
+<ul>{diagnostics_html}</ul>
+</details>
+{('<details class="report-supplement" id="compiled-pages"><summary>编译页面与视觉差异</summary>' + _rendering_html(rendering, statuses) + '</details>') if rendering is not None and statuses is not None else ''}
 <script>window.reviewNodePairs={pairs_json};</script><script>{interaction}</script>
 {scripts.group(1)}
 </body></html>'''

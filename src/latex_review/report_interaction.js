@@ -22,7 +22,23 @@
   const sync = document.getElementById('sync-scroll');
   const count = document.getElementById('filter-count');
   const status = document.getElementById('jump-status');
+  const layout = document.getElementById('layout-mode');
+  const inlineChanges = new Map();
   let selected = -1;
+  function readingView() { return layout && layout.value === 'reading'; }
+  function updateSelection(card) {
+    selected = cards.indexOf(card);
+    if (!layout) return;
+    cards.forEach(item => item.setAttribute('aria-current', String(item === card)));
+    document.getElementById('current-change').textContent = card ?
+      '第 ' + (selected + 1) + ' / ' + cards.length + ' 处变更' : '尚未选择变更';
+  }
+  function updateInlineVisibility() {
+    inlineChanges.forEach((detail, card) => {
+      detail.hidden = card.hidden;
+      if (card.hidden) detail.open = false;
+    });
+  }
   let mutedUntil = 0;
 
   for (const side of ['old', 'new']) {
@@ -142,7 +158,8 @@
       card.hidden = !visible; if (visible) shown++;
     });
     count.textContent = '显示 ' + shown + ' / ' + cards.length + ' 项主变更';
-    if (selected >= 0 && cards[selected].hidden) selected = -1;
+    if (selected >= 0 && cards[selected].hidden) updateSelection(null);
+    updateInlineVisibility();
     context();
   }
   kind.addEventListener('change', filter);
@@ -151,6 +168,15 @@
   filter();
 
   function jump(button) {
+    const card = button.closest('.change-card') || cards.find(item =>
+      inlineChanges.get(item)?.contains(button));
+    if (card) updateSelection(card);
+    const detail = card && inlineChanges.get(card);
+    if (readingView() && detail) {
+      detail.open = true;
+      for (let parent = detail.parentElement; parent && parent !== panels.new; parent = parent.parentElement)
+        parent.classList.remove('context-hidden');
+    }
     document.querySelectorAll('.preview-side .is-highlighted').forEach(node => node.classList.remove('is-highlighted'));
     document.querySelectorAll('.preview-side .is-cell-highlighted').forEach(node => node.classList.remove('is-cell-highlighted'));
     const messages = [];
@@ -172,7 +198,7 @@
         empty.classList.remove('is-visible');
         node.classList.add('is-highlighted');
         if (precise) sentenceNodes.slice(1).forEach(sentence => sentence.classList.add('is-highlighted'));
-        panel.scrollTop += node.getBoundingClientRect().top - panel.getBoundingClientRect().top - panel.clientHeight / 3;
+        if (!readingView()) panel.scrollTop += node.getBoundingClientRect().top - panel.getBoundingClientRect().top - panel.clientHeight / 3;
         const row = button.dataset[side + 'Row'];
         const column = button.dataset[side + 'Column'];
         if (row || column) {
@@ -190,6 +216,20 @@
     }
     mutedUntil = performance.now() + 350;
     status.textContent = messages.join('；');
+    if (readingView() && detail) {
+      detail.querySelectorAll('[data-original-id]').forEach(copy => {
+        const original = document.getElementById(copy.dataset.originalId);
+        copy.classList.toggle('is-highlighted', !!original?.classList.contains('is-highlighted'));
+        copy.classList.toggle('is-cell-highlighted', !!original?.classList.contains('is-cell-highlighted'));
+      });
+      const row = button.dataset.oldRow;
+      const column = button.dataset.oldColumn;
+      detail.querySelectorAll('.old-excerpt td[data-row][data-column]').forEach(cell => {
+        cell.classList.toggle('is-cell-highlighted', !!(row || column) &&
+          (!row || cell.dataset.row === row) && (!column || cell.dataset.column === column));
+      });
+      detail.scrollIntoView({block: 'nearest', behavior: 'auto'});
+    }
   }
   document.getElementById('changes-side').addEventListener('click', event => {
     const button = event.target.closest('button[data-old][data-new]');
@@ -207,7 +247,8 @@
     const card = visible[index];
     selected = cards.indexOf(card);
     card.scrollIntoView({block: 'nearest', behavior: 'auto'});
-    card.querySelector('.change-jump').focus({preventScroll: true});
+    const focusTarget = readingView() ? inlineChanges.get(card)?.querySelector('summary') : card.querySelector('.change-jump');
+    if (focusTarget) focusTarget.focus({preventScroll: true});
     jump(card.querySelector('.change-jump'));
   }
   document.getElementById('previous-change').addEventListener('click', () => step(-1));
@@ -253,7 +294,7 @@
     return null;
   }
   function align(side) {
-    if (!sync.checked || performance.now() < mutedUntil || window.matchMedia('(max-width:1000px)').matches) return;
+    if (readingView() || !sync.checked || performance.now() < mutedUntil || window.matchMedia('(max-width:1000px)').matches) return;
     const panel = panels[side];
     const other = panels[side === 'old' ? 'new' : 'old'];
     const reference = panel.getBoundingClientRect().top + panel.clientHeight / 2;
@@ -290,5 +331,150 @@
       scheduled = true;
       requestAnimationFrame(() => { scheduled = false; align(side); });
     }, {passive: true});
+  }
+
+  if (layout) {
+    const directoryButton = document.getElementById('toggle-changes');
+    function directory(open) {
+      document.body.classList.toggle('directory-open', open);
+      directoryButton.setAttribute('aria-expanded', String(open));
+    }
+    directoryButton.addEventListener('click', () => directory(directoryButton.getAttribute('aria-expanded') !== 'true'));
+    document.getElementById('changes-side').addEventListener('click', event => {
+      if (event.target.closest('button[data-old][data-new]') && window.matchMedia('(max-width:1099px)').matches) {
+        directory(false);
+        const detail = inlineChanges.get(cards[selected]);
+        if (readingView() && detail) detail.querySelector('summary').focus({preventScroll: true});
+      }
+    });
+    document.getElementById('close-changes').addEventListener('click', () => {
+      directory(false); directoryButton.focus();
+    });
+    document.addEventListener('keydown', event => {
+      if (event.key === 'Escape' && document.body.classList.contains('directory-open')) {
+        directory(false); directoryButton.focus();
+      }
+    });
+    layout.addEventListener('change', () => {
+      document.body.classList.toggle('compare-view', !readingView());
+      document.body.classList.toggle('reading-view', readingView());
+      if (selected >= 0) jump(cards[selected].querySelector('.change-jump'));
+    });
+    // Snapshot nodes before inserting details so excerpts never become navigation anchors.
+    const tails = new Map();
+    function insertDetail(detail, target, before = false) {
+      const tail = tails.get(target);
+      if (tail) tail.after(detail);
+      else if (before) target.before(detail);
+      else target.after(detail);
+      tails.set(target, detail);
+    }
+    function deletionAnchor(oldNode) {
+      if (!oldNode) return null;
+      const siblings = nodes.old.filter(node => node.parentElement === oldNode.parentElement);
+      const index = siblings.indexOf(oldNode);
+      for (let distance = 1; distance < siblings.length; distance++) {
+        for (const position of [index - distance, index + distance]) {
+          const candidate = siblings[position];
+          const id = candidate && paired.old.get(candidate.dataset.nodeId);
+          const target = id && document.getElementById('new-' + id);
+          if (target) return {target, before: position > index};
+        }
+      }
+      return null;
+    }
+    cards.forEach((card, index) => {
+      const button = card.querySelector('.change-jump');
+      const target = button.dataset.new && document.getElementById('new-' + button.dataset.new);
+      const oldNode = button.dataset.old && document.getElementById('old-' + button.dataset.old);
+      const detail = document.createElement('details');
+      detail.className = 'inline-change'; detail.id = 'inline-' + card.id;
+      const summary = document.createElement('summary');
+      const kindText = button.querySelector('.kind').textContent;
+      const label = document.createElement('span');
+      label.textContent = kindText + ' · ' + String(index + 1).padStart(2, '0');
+      const hint = document.createElement('span'); hint.className = 'change-label';
+      hint.textContent = card.dataset.kind === 'removed' ? '查看已删除内容' : '查看旧文与明细';
+      summary.append(label, hint); detail.append(summary);
+      const heading = document.createElement('p'); heading.className = 'inline-heading';
+      const categories = Array.from(card.querySelectorAll('.badge')).map(badge => badge.textContent).join(' · ');
+      heading.textContent = categories + ' · ' + kindText;
+      const content = target || oldNode;
+      const lead = content && content.querySelector('h2,h3,h4,p,figcaption');
+      let excerptTitle = '';
+      if (lead) {
+        const text = lead.cloneNode(true);
+        text.querySelectorAll('.math-tex').forEach(math => { math.textContent = '〔公式〕'; });
+        excerptTitle = text.textContent.replace(/\s+/g, ' ').trim();
+      }
+      button.querySelector('strong').textContent = excerptTitle ?
+        excerptTitle.slice(0, 64) + (excerptTitle.length > 64 ? '…' : '') : categories + '内容';
+      detail.append(heading);
+      if (oldNode) {
+        const title = document.createElement('p'); title.className = 'inline-heading'; title.textContent = '修改前';
+        const excerpt = document.createElement('div'); excerpt.className = 'old-excerpt';
+        const copy = oldNode.cloneNode(true);
+        [copy, ...copy.querySelectorAll('*')].forEach(element => {
+          if (element.id) {
+            element.dataset.originalId = element.id;
+            element.id = detail.id + '-' + element.id;
+          }
+          element.classList.remove('review-node', 'context-hidden', 'is-highlighted');
+          element.removeAttribute('data-node-id');
+        });
+        excerpt.append(copy); detail.append(title, excerpt);
+      } else {
+        const note = document.createElement('p'); note.textContent = '此处为新增内容，旧稿没有对应内容。'; detail.append(note);
+      }
+      const list = card.querySelector('.detail-list').cloneNode(true);
+      detail.append(list);
+      const pages = card.querySelector('.card-pages');
+      if (pages) detail.append(pages.cloneNode(true));
+      const close = document.createElement('button'); close.type = 'button';
+      close.className = 'inline-close'; close.textContent = '收起对照 ↑';
+      close.addEventListener('click', () => { detail.open = false; summary.focus(); });
+      detail.append(close);
+      detail.addEventListener('toggle', () => { if (detail.open) updateSelection(card); });
+      detail.addEventListener('click', event => {
+        const jumpButton = event.target.closest('.detail-jump');
+        if (jumpButton) jump(jumpButton);
+      });
+      if (target) {
+        // Structural headings wrap their descendants; place their marker after the heading.
+        const sectionHeading = Array.from(target.children).find(child => /^H[1-6]$/.test(child.tagName));
+        if (sectionHeading) insertDetail(detail, sectionHeading);
+        else if (target.tagName === 'LI') target.append(detail);
+        else insertDetail(detail, target);
+      } else {
+        const anchor = deletionAnchor(oldNode);
+        if (anchor && anchor.target.tagName !== 'LI') insertDetail(detail, anchor.target, anchor.before);
+        else {
+          const note = document.createElement('p');
+          note.className = 'inline-heading'; note.textContent = '新稿中没有可确定的对应位置。';
+          detail.insertBefore(note, heading); panels.new.append(detail);
+        }
+      }
+      inlineChanges.set(card, detail);
+    });
+    cards.sort((a, b) => {
+      if (a === b) return 0;
+      return inlineChanges.get(a).compareDocumentPosition(inlineChanges.get(b)) & Node.DOCUMENT_POSITION_FOLLOWING ? -1 : 1;
+    });
+    cards.forEach((card, index) => {
+      document.getElementById('changes-side').append(card);
+      inlineChanges.get(card).querySelector('summary span').textContent =
+        card.querySelector('.kind').textContent + ' · ' + String(index + 1).padStart(2, '0');
+    });
+    updateInlineVisibility();
+    // Page links may target content inside collapsed supplements or a closed directory.
+    document.addEventListener('click', event => {
+      const link = event.target.closest('a[href^="#"]');
+      if (!link) return;
+      const target = document.getElementById(link.getAttribute('href').slice(1));
+      if (!target) return;
+      if (target.classList.contains('change-card')) directory(true);
+      for (let parent = target.parentElement; parent; parent = parent.parentElement)
+        if (parent.tagName === 'DETAILS') parent.open = true;
+    }, true);
   }
 })();
