@@ -54,12 +54,14 @@ def test_coordinates_and_selection(annotated_page):
 
 def test_lifecycle_overlap_filters_and_cards(annotated_page):
     p=annotated_page; assert create(p); assert create(p,start=3,end=10); assert create(p,True)
-    assert p.locator('.inline-change .annotation-card').count()==1
+    assert p.locator('.inline-change .annotation-card').count()==0
+    assert not p.locator('#annotation-overview').evaluate('(e)=>e.open')
     assert p.locator('.annotation-card').count()==3
     assert p.locator('.annotation-body img').count()==0
     p.locator('#annotation-overview').evaluate('(e)=>e.open=true')
-    p.locator('.annotation-mark').filter(has_text='批注').nth(1).click()
-    assert p.locator('#annotation-list li').count()==2
+    p.locator('.annotation-mark[data-unit]').filter(has_text='2').click()
+    p.locator('.annotation-filter-options').evaluate('(e)=>e.open=true')
+    assert p.locator('#annotation-list li').count()==3
     tid=p.evaluate('reviewAnnotations.getSnapshot().threads[0].id')
     assert p.evaluate('''async id=>reviewAnnotations.update({operation:'reply',thread_id:id,body:'Reply',author:{name:'Agent',type:'agent'},category:'note'})''',tid)
     mid=p.evaluate('id=>reviewAnnotations.getSnapshot().threads.find(t=>t.id===id).messages.at(-1).id',tid)
@@ -79,11 +81,11 @@ def test_lifecycle_overlap_filters_and_cards(annotated_page):
     assert p.locator('#annotation-list li').count()==0
     p.locator('.annotation-filters select').nth(2).select_option('question')
     p.locator('.annotation-filters select').nth(4).select_option('exact')
-    p.locator('.annotation-filters input').fill('Tester')
+    p.locator('.annotation-panel-header > input').fill('Tester')
     assert p.locator('#annotation-list li').count()==3
-    p.locator('.annotation-filters input').fill('absent')
+    p.locator('.annotation-panel-header > input').fill('absent')
     assert p.locator('#annotation-list li').count()==0
-    p.locator('.annotation-filters input').fill('')
+    p.locator('.annotation-panel-header > input').fill('')
     p.set_viewport_size({'width':390,'height':800});p.locator('#annotation-overview').get_by_text('下一条',exact=True).click()
     assert p.evaluate('async id=>reviewAnnotations.update({operation:"delete_thread",thread_id:id})',tid)
     assert p.locator('.annotation-card').count()==2
@@ -155,8 +157,9 @@ def test_pending_save_preserves_complete_form(annotated_page,field,value):
     p.locator('.annotation-editor').get_by_text('保存',exact=True).click()
     p.wait_for_function('window.delayedSave !== null')
     if field=='name':
-        p.locator('.annotation-editor input').fill(value)
+        p.locator('.annotation-composer-settings').evaluate('(e)=>e.open=true');p.locator('.annotation-editor input').fill(value)
     else:
+        p.locator('.annotation-composer-settings').evaluate('(e)=>e.open=true')
         p.locator('.annotation-editor select').nth(0 if field=='author' else 1).select_option(value)
     p.evaluate('() => window.delayedSave()')
     p.wait_for_function('reviewAnnotations.getSnapshot().threads.length===1')
@@ -196,7 +199,7 @@ def test_existing_annotation_renders_when_mathjax_arrives_later(annotated_page):
     p.evaluate('async () => {window.MathJax={};await reviewAnnotations.refresh();}')
     p.wait_for_selector('.annotation-formula',state='attached')
     assert p.locator('.annotation-formula').text_content()=='$x$'
-    p.locator('.annotation-card').evaluate('(e)=>e.open=true')
+    p.locator('#annotation-overview').evaluate('(e)=>e.open=true');p.locator('.annotation-card').evaluate('(e)=>e.open=true')
     p.locator('.annotation-card').get_by_text('回复',exact=True).click()
     p.locator('.annotation-editor textarea').fill('Keep this draft')
     p.evaluate('''() => {
@@ -210,3 +213,203 @@ def test_existing_annotation_renders_when_mathjax_arrives_later(annotated_page):
     assert p.locator('.annotation-editor textarea').input_value()=='Keep this draft'
     assert p.locator('.annotation-body img').count()==0
     assert p.evaluate('Object.values(reviewAnnotations.getDrafts())[0].body')=='Keep this draft'
+
+
+def test_annotation_panel_progressive_disclosure(annotated_page):
+    p=annotated_page
+    assert create(p)
+    assert create(p,start=3,end=10)
+    assert p.locator('.annotation-mark').count()==1
+    assert p.locator('.annotation-mark').text_content()=='2'
+    assert not p.locator('#annotation-overview').evaluate('(e)=>e.open')
+    p.locator('.annotation-mark').click()
+    assert p.locator('.annotation-card[open]').count()==1
+    assert p.locator('.annotation-message > strong').count()==0
+    assert p.locator('.annotation-card').nth(1).locator('.annotation-card-preview').is_visible()
+    assert not p.locator('.annotation-filter-options').evaluate('(e)=>e.open')
+    assert p.locator('.annotation-context').count()==0
+    assert p.locator('.annotation-card[open]').first.get_by_text('回复',exact=True).is_visible()
+    p.locator('.annotation-card[open]').first.get_by_text('回复',exact=True).click()
+    assert p.locator('.annotation-editor textarea').evaluate('(e)=>e===document.activeElement')
+    assert not p.locator('.annotation-composer-settings').evaluate('(e)=>e.open')
+    p.locator('.annotation-editor textarea').fill('Draft survives closing')
+    p.locator('.annotation-panel-heading').get_by_text('关闭',exact=True).click()
+    assert p.locator('.annotation-editor textarea').is_hidden()
+    p.locator('.annotation-overview > summary').click()
+    assert p.locator('.annotation-editor textarea').input_value()=='Draft survives closing'
+    p.wait_for_function('document.body.classList.contains("annotation-panel-open")')
+    p.screenshot(path='/tmp/latex-review-annotations-desktop.png')
+    p.set_viewport_size({'width':390,'height':800})
+    assert p.locator('#annotation-overview').evaluate('(e)=>{const r=e.getBoundingClientRect();return r.left>=0&&r.right<=innerWidth&&e.scrollWidth<=e.clientWidth;}')
+    p.screenshot(path='/tmp/latex-review-annotations-mobile.png')
+
+
+def test_active_annotation_highlight_and_unified_delete(annotated_page):
+    p=annotated_page
+    assert create(p,start=0,end=6)
+    assert create(p,start=7,end=9)
+    assert p.evaluate("[...CSS.highlights.get('annotations')].map(r=>r.toString())")==['Stable','😀']
+    p.locator('.annotation-overview > summary').click()
+    p.locator('.annotation-card > summary').nth(0).click()
+    assert p.locator('.annotation-card[open]').count()==1
+    assert p.evaluate("[...CSS.highlights.get('annotation-active')].map(r=>r.toString())")==['Stable']
+    p.locator('.annotation-card > summary').nth(1).click()
+    assert p.locator('.annotation-card[open]').count()==1
+    assert p.locator('.annotation-card.is-active').count()==1
+    assert p.evaluate("[...CSS.highlights.get('annotation-active')].map(r=>r.toString())")==['😀']
+    tid=p.evaluate('reviewAnnotations.getSnapshot().threads[1].id')
+    assert p.evaluate("async id=>reviewAnnotations.update({operation:'reply',thread_id:id,body:'Reply',author:{name:'Tester',type:'user'},category:'note'})",tid)
+    card=p.locator('.annotation-card[open]')
+    assert card.get_by_text('删除内容',exact=True).count()==0
+    assert card.get_by_text('删除线程',exact=True).count()==0
+    dialogs=[]
+    def cancel(dialog):
+        dialogs.append(dialog.message)
+        dialog.dismiss()
+    p.on('dialog',cancel)
+    card.get_by_text('删除批注',exact=True).click()
+    assert '1 条回复' in dialogs[0]
+    assert p.locator('.annotation-card').count()==2
+    p.remove_listener('dialog',cancel)
+    p.once('dialog',lambda dialog:dialog.accept())
+    card.get_by_text('删除批注',exact=True).click()
+    p.wait_for_function('reviewAnnotations.getSnapshot().threads.length===1')
+    assert p.locator('.annotation-card').count()==1
+    assert p.evaluate("CSS.highlights.get('annotation-active').size")==0
+    p.locator('.annotation-card > summary').click()
+    p.locator('.annotation-panel-heading').get_by_text('关闭',exact=True).click()
+    p.wait_for_function("CSS.highlights.get('annotation-active').size===0")
+    assert p.evaluate("CSS.highlights.get('annotations').size")==1
+
+
+def test_active_formula_and_unlocated_annotation(annotated_page):
+    p=annotated_page
+    assert p.evaluate("async()=>{const u=reviewAnnotations.getContent().units.find(u=>u.kind==='formula');return reviewAnnotations.update({operation:'create',selection:{unit_id:u.id,side:'new'},body:'Formula comment',author:{name:'Tester',type:'user'},category:'note'});}")
+    p.locator('.annotation-overview > summary').click()
+    p.locator('.annotation-card > summary').click()
+    assert p.locator('.annotation-active-formula').count()==1
+    assert p.locator('.annotation-located-formula').count()==1
+    p.evaluate("()=>{const t=reviewAnnotations.getSnapshot().threads[0];t.association.status='needs_relocation';reviewAnnotations.focus(t);}")
+    assert p.locator('.annotation-active-formula').count()==0
+    assert p.locator('.annotation-located-formula').count()==0
+    assert p.locator('.annotation-card[open]').get_by_text('手动重新关联',exact=True).is_visible()
+    assert '待重新定位' in p.locator('#annotation-status').inner_text()
+
+
+def test_annotation_metadata_and_reply_hierarchy(annotated_page):
+    p=annotated_page
+    assert create(p)
+    tid=p.evaluate('reviewAnnotations.getSnapshot().threads[0].id')
+    mid=p.evaluate('reviewAnnotations.getSnapshot().threads[0].messages[0].id')
+    assert p.evaluate("async x=>reviewAnnotations.update({operation:'edit',thread_id:x.t,message_id:x.m,body:'请补充这个模型的适用条件。',category:'question'})",{'t':tid,'m':mid})
+    for name,identity,category,body in [('作者甲','user','note','已补充适用条件，请检查。'),('作者乙','agent','suggestion','建议进一步说明边界条件。')]:
+        assert p.evaluate("async x=>reviewAnnotations.update({operation:'reply',thread_id:x.id,author:{name:x.name,type:x.identity},category:x.category,body:x.body})",{'id':tid,'name':name,'identity':identity,'category':category,'body':body})
+    p.locator('.annotation-overview > summary').click()
+    card=p.locator('.annotation-card')
+    title=card.locator(':scope > summary')
+    assert title.locator('.annotation-author-name').inner_text()=='Tester'
+    assert title.locator('.annotation-identity-tag').inner_text()=='用户'
+    assert title.locator('.annotation-status-tag').inner_text()=='未解决'
+    assert title.locator('.annotation-category-tag').inner_text()=='问题'
+    assert title.locator('.annotation-card-reply-count').inner_text()=='2 条回复'
+    assert title.locator('time').is_hidden()
+    title.click()
+    assert title.locator('time').is_visible()
+    assert title.locator('time').get_attribute('datetime')==p.evaluate('reviewAnnotations.getSnapshot().threads[0].messages[0].created_at')
+    assert card.locator('.annotation-replies-heading').inner_text()=='回复 · 2'
+    assert card.locator('.annotation-reply').count()==2
+    assert card.locator('.annotation-reply .annotation-reply').count()==0
+    assert card.locator('.annotation-reply .annotation-author-name').all_text_contents()==['作者甲','作者乙']
+    assert card.locator('.annotation-reply .annotation-identity-tag').all_text_contents()==['用户','智能体']
+    assert card.locator('.annotation-reply .annotation-category-tag').all_text_contents()==['说明','建议']
+    assert card.locator('.annotation-status-tag').count()==1
+    p.screenshot(path='/tmp/latex-review-annotation-tags-desktop.png')
+    p.set_viewport_size({'width':390,'height':800})
+    assert card.evaluate('(e)=>e.scrollWidth<=e.clientWidth')
+    p.screenshot(path='/tmp/latex-review-annotation-tags-mobile.png')
+    reply=card.locator('.annotation-reply').last
+    assert card.get_by_text('消息操作',exact=True).count()==0
+    assert reply.get_by_text('编辑',exact=True).is_visible()
+    reply.get_by_text('编辑',exact=True).click()
+    assert p.locator('.annotation-editor textarea').input_value()=='建议进一步说明边界条件。'
+
+
+def test_navigation_from_single_annotation_marker(annotated_page):
+    p = annotated_page
+    create(p)
+    create(p, True)
+    p.locator('.annotation-mark[data-unit]').filter(has_text='1').last.click()
+    assert p.locator('.annotation-panel-header h2').inner_text() == '批注'
+    assert p.locator('.annotation-card').count() == 2
+    assert p.locator('.annotation-card[open]').count() == 1
+    before = p.locator('.annotation-card.is-active').get_attribute('data-annotation-thread')
+    p.locator('.annotation-navigation').get_by_text('下一条', exact=True).click()
+    after = p.locator('.annotation-card.is-active').get_attribute('data-annotation-thread')
+    assert after != before
+    p.locator('.annotation-navigation').get_by_text('上一条', exact=True).click()
+    assert p.locator('.annotation-card.is-active').get_attribute('data-annotation-thread') == before
+
+
+def test_reply_to_reply(annotated_page):
+    p=annotated_page
+    create(p)
+    tid=p.evaluate('reviewAnnotations.getSnapshot().threads[0].id')
+    assert p.evaluate("async id=>reviewAnnotations.update({operation:'reply',thread_id:id,body:'First reply',author:{name:'作者甲',type:'user'},category:'note'})",tid)
+    p.locator('.annotation-overview > summary').click()
+    p.locator('.annotation-card > summary').click()
+    p.locator('.annotation-reply').get_by_text('回复',exact=True).click()
+    assert p.locator('.annotation-editor h3').inner_text()=='回复 作者甲'
+    assert p.locator('.annotation-editor textarea').input_value()==''
+    p.locator('.annotation-editor textarea').fill('@作者甲：\n\n补充回复')
+    p.locator('.annotation-editor').get_by_text('保存',exact=True).click()
+    p.wait_for_function('reviewAnnotations.getSnapshot().threads[0].messages.length===3')
+    assert p.locator('.annotation-reply').count()==2
+    assert p.evaluate('reviewAnnotations.getSnapshot().threads[0].messages[2].reply_to===reviewAnnotations.getSnapshot().threads[0].messages[1].id')
+    assert p.locator('.annotation-reply > .annotation-reply-children > .annotation-reply').count()==1
+    assert '补充回复' in p.locator('.annotation-reply').last.inner_text()
+    assert p.locator('.annotation-reply').last.get_by_text('回复',exact=True).is_visible()
+    first=p.evaluate('reviewAnnotations.getSnapshot().threads[0].messages[1].id')
+    child=p.evaluate('reviewAnnotations.getSnapshot().threads[0].messages[2].id')
+    assert p.evaluate("async x=>reviewAnnotations.update({operation:'reply',thread_id:x.t,body:'Same name sibling',author:{name:'作者甲',type:'user'},category:'note'})",{'t':tid})
+    assert p.evaluate("async x=>reviewAnnotations.update({operation:'edit',thread_id:x.t,message_id:x.m,body:'Edited without mention',category:'note'})",{'t':tid,'m':child})
+    p.reload()
+    p.wait_for_function('reviewAnnotations.getSnapshot()?.threads[0]?.messages.length===4')
+    p.locator('.annotation-overview > summary').click()
+    p.locator('.annotation-card > summary').click()
+    parent=p.locator(f'[data-annotation-message="{first}"]')
+    assert parent.locator(f':scope > .annotation-reply-children > [data-annotation-message="{child}"]').count()==1
+    assert p.locator('.annotation-replies > .annotation-reply').count()==2
+
+
+def test_external_annotation_updates_without_reload_preserve_draft(annotated_page):
+    p=annotated_page
+    create(p)
+    p.locator('.annotation-overview > summary').click()
+    p.locator('.annotation-card > summary').click()
+    active=p.locator('.annotation-card.is-active').get_attribute('data-annotation-thread')
+    p.locator('.annotation-card-actions').get_by_text('回复',exact=True).click()
+    p.locator('.annotation-editor textarea').fill('Unsaved draft')
+    p.locator('.annotation-card.is-active').evaluate('(e)=>e.dataset.pollSentinel="kept"')
+    p.wait_for_timeout(2200)
+    assert p.locator('.annotation-card.is-active').get_attribute('data-poll-sentinel')=='kept'
+    revision=p.evaluate('reviewAnnotations.getSnapshot().revision')
+    status=p.request.get(p.url.replace('report.html','api/annotations/status')).json()
+    content=p.evaluate('reviewAnnotations.getContent()')
+    u=next(u for u in content['units'] if u['kind']=='text' and u['text'].startswith('Changed'))
+    response=p.request.post(p.url.replace('report.html','api/annotations/update'),data={
+        'project_id':content['project_id'],'version_id':content['version_id'],
+        'request':{'operation':'create','expected_revision':status['revision'],
+                   'selection':{'unit_id':u['id'],'start':0,'end':7,'quote':'Changed','side':'new'},
+                   'body':'External agent comment','author':{'name':'Agent','type':'agent'},'category':'note'}},
+        headers={'X-LaTeX-Review-Token':status['token']})
+    assert response.ok
+    p.wait_for_function('(r)=>reviewAnnotations.getSnapshot().revision>r',arg=revision,timeout=6000)
+    assert p.locator('.annotation-card').count()==2
+    assert p.locator('.annotation-card.is-active').get_attribute('data-annotation-thread')==active
+    assert p.locator('.annotation-editor textarea').input_value()=='Unsaved draft'
+    assert p.locator('.annotation-editor').is_visible()
+    assert p.locator('.annotation-editor textarea').evaluate('(e)=>document.activeElement===e')
+    assert p.evaluate('CSS.highlights.get("annotation-active").size')==1
+    p.locator('.annotation-editor').get_by_text('保存',exact=True).click()
+    p.wait_for_function('(id)=>reviewAnnotations.getSnapshot().threads.find(t=>t.id===id).messages.length===2',arg=active)
+    assert p.evaluate('id=>reviewAnnotations.getSnapshot().threads.find(t=>t.id===id).messages.at(-1).body',active)=='Unsaved draft'

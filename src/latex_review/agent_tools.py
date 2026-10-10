@@ -155,8 +155,9 @@ def acceptance_main(argv: list[str] | None = None) -> int:
 
 
 def annotations_main(argv: list[str] | None = None) -> int:
-    """Read content/threads or execute one version-checked JSON request."""
+    """Read annotations or execute a high-level/version-checked JSON request."""
     from .annotations import AnnotationStore, execute_request, load_content
+    from .annotation_cli import SelectionError, add_commands, build_request
     import sys
     p = parser('latex-review-annotations')
     p.add_argument('--project-root', type=Path, help='论文项目根目录，须与报告身份一致')
@@ -164,11 +165,16 @@ def annotations_main(argv: list[str] | None = None) -> int:
     mode.add_argument('--content', action='store_true', help='读取全部当前正文及公式定位坐标')
     mode.add_argument('--export', action='store_true', help='导出含删除记录的批注备份')
     mode.add_argument('--request', help='JSON 请求文件；- 表示标准输入')
+    add_commands(p)
     args = p.parse_args(argv)
     try:
+        if args.command and (args.content or args.export or args.request):
+            raise ValueError('子命令不能与 --content、--export 或 --request 同时使用')
         content = load_content(args.report)
         store = AnnotationStore.for_content(content, args.project_root)
-        if args.content:
+        if args.command:
+            value = execute_request(store, content, build_request(content, store.read(content), args))
+        elif args.content:
             value = content
         elif args.export:
             value = store.export()
@@ -181,5 +187,8 @@ def annotations_main(argv: list[str] | None = None) -> int:
             value = store.read(content)
         emit(value)
         return 0
+    except SelectionError as exc:
+        emit({'error': str(exc), 'candidates': exc.candidates})
+        return 4
     except Exception as exc:
         return error(exc)

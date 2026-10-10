@@ -430,3 +430,28 @@ def test_source_fallback_removes_stale_coordinates_but_retains_threads(tmp_path)
     write_source_fallback(old, new, report, parse_failures=[('new', 'test failure')])
     assert not (report / MANIFEST).exists()
     assert store.path.read_bytes() == before
+
+
+def test_reply_parent_identity_persistence_and_validation(tmp_path):
+    content, _ = content_at(tmp_path, 'A sufficiently long unchanged sentence.')
+    store = AnnotationStore.for_content(content)
+    result = create(store, content, 'sufficiently long')['result']
+    tid, root = result['thread_id'], result['message_id']
+    def reply(parent):
+        return mutate(store, content, 'reply', thread_id=tid, reply_to=parent,
+                      body='Same author', author=AUTHOR, category='note')['result']['message_id']
+    first, second = reply(root), reply(root)
+    child = reply(first)
+    mutate(store, content, 'edit', thread_id=tid, message_id=child, body='No mention', category='note')
+    messages = AnnotationStore.for_content(content).read(content)['threads'][0]['messages']
+    assert messages[-1]['reply_to'] == first and messages[-1]['reply_to'] != second
+    bundle = store.export()
+    assert mutate(store, content, 'import', bundle=bundle)
+    before = store.export()
+    with pytest.raises(AnnotationError):
+        reply('missing')
+    assert store.export() == before
+    invalid = deepcopy(bundle)
+    invalid['threads'][tid]['messages'][1]['reply_to'] = child
+    with pytest.raises(AnnotationError):
+        mutate(store, content, 'import', bundle=invalid)

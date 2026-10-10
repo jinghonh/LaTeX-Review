@@ -47,7 +47,7 @@
       keys(t,['id','project_id','created_version_id','created_at','updated_at','resolved','deleted_at','messages','original_anchor','current_anchor','associations','history']);
       if(id!==t.id||t.project_id!==b.project_id||typeof t.resolved!=='boolean'||!Array.isArray(t.messages)||!t.messages.length||!Array.isArray(t.history)||!t.associations) fail('线程无效');
       check(t.original_anchor);check(t.current_anchor);if(t.created_version_id!==t.original_anchor.version_id) fail('创建版本无效');
-      const ids=new Set();for(const m of t.messages) {keys(m,['id','body','author','category','created_at','updated_at','deleted_at','edits']);text(m.id,'内容 ID');if(ids.has(m.id)) fail('内容 ID 重复');ids.add(m.id);messageFields(m);if(!Array.isArray(m.edits)) fail('编辑历史无效');for(const e of m.edits){keys(e,['body','category','at']);text(e.body,'历史正文');category(e.category);text(e.at,'时间');}for(const key of ['created_at','updated_at'])text(m[key],'时间');if(m.deleted_at!=null)text(m.deleted_at,'时间');}
+      const ids=new Set();for(const m of t.messages) {keys(m,['id','body','author','category','created_at','updated_at','deleted_at','edits','reply_to'],['id','body','author','category','created_at','updated_at','deleted_at','edits']);if('reply_to' in m&&!ids.has(m.reply_to))fail('回复对象必须是先前消息');text(m.id,'内容 ID');if(ids.has(m.id)) fail('内容 ID 重复');ids.add(m.id);messageFields(m);if(!Array.isArray(m.edits)) fail('编辑历史无效');for(const e of m.edits){keys(e,['body','category','at']);text(e.body,'历史正文');category(e.category);text(e.at,'时间');}for(const key of ['created_at','updated_at'])text(m[key],'时间');if(m.deleted_at!=null)text(m.deleted_at,'时间');}
       for(const [version,a] of Object.entries(t.associations)) {keys(a,['status','anchor','candidates','reason']);if(!b.versions[version]||!['exact','auto_migrated','manual','needs_relocation'].includes(a.status)||!Array.isArray(a.candidates)) fail('关联无效');if(a.anchor){check(a.anchor);if(a.anchor.version_id!==version)fail('关联版本无效');}for(const candidate of a.candidates){keys(candidate,['anchor','score','method','context_score'],['anchor','score','method']);check(candidate.anchor);if(candidate.anchor.version_id!==version||typeof candidate.score!=='number'||candidate.score<0||candidate.score>1||!['exact','fuzzy'].includes(candidate.method))fail('候选无效');}}
       for(const h of t.history){keys(h,['at','method','anchor']);check(h.anchor);text(h.at,'时间');if(!['created','exact','auto_migrated','manual'].includes(h.method))fail('历史类型无效');}
       for(const key of ['created_at','updated_at'])text(t[key],'时间');if(t.deleted_at!=null)text(t.deleted_at,'时间');
@@ -86,7 +86,7 @@
   function dispatch(data,e) {
     keys(e,['project_id','version_id','request']);
     const r=e.request,fields={create:['selection','body','author','category'],reply:['thread_id','body','author','category'],edit:['thread_id','message_id','body','category'],delete_message:['thread_id','message_id'],delete_thread:['thread_id'],resolve:['thread_id'],reopen:['thread_id'],associate:['thread_id','selection'],reconcile:[],import:['bundle']};
-    if(!Object.hasOwn(fields,r.operation))fail('未知批注操作');keys(r,['operation','expected_revision',...fields[r.operation]]);
+    if(!Object.hasOwn(fields,r.operation))fail('未知批注操作');keys(r,['operation','expected_revision',...fields[r.operation],...(r.operation==='reply'?['reply_to']:[])],['operation','expected_revision',...fields[r.operation]]);
     if(e.project_id!==content.project_id||e.version_id!==content.version_id)fail('请求项目或版本不一致');
     if(r.expected_revision!==data.revision)fail('批注已被其他窗口更新。输入已保留。');
     const now=new Date().toISOString();let result=null;
@@ -98,7 +98,7 @@
     else if(r.operation==='reconcile') {for(const t of Object.values(data.threads))if(!t.deleted_at&&!t.associations[content.version_id]){const a=locate(content,t.current_anchor);t.associations[content.version_id]=a;if(a.anchor)associate(t,a.anchor,a.status,now);}}
     else {
       const t=data.threads[r.thread_id];if(!t||t.deleted_at)fail('线程已删除；输入已保留');
-      if(r.operation==='reply'){const m=message();t.messages.push(m);result={message_id:m.id};}
+      if(r.operation==='reply'){const parent=r.reply_to??t.messages[0].id;if(!t.messages.some(m=>m.id===parent&&!m.deleted_at))fail('回复对象不存在或已删除');const m=message();m.reply_to=parent;t.messages.push(m);result={message_id:m.id};}
       else if(r.operation==='edit'||r.operation==='delete_message') {
         const m=t.messages.find(m=>m.id===r.message_id);if(!m||m.deleted_at)fail('内容已删除；输入已保留');
         if(r.operation==='edit'){text(r.body,'批注正文');category(r.category);m.edits.push({body:m.body,category:m.category,at:now});m.body=r.body;m.category=r.category;m.updated_at=now;}else m.deleted_at=now;
@@ -121,12 +121,13 @@
   let local=false,token=null;
   async function json(url,options) {const r=await fetch(url,options);const value=await r.json();if(!r.ok)fail(value.message||value.error||'批注接口失败');return value;}
   const adapter={
+    async readStatus(){if(local)return transaction(view);const s=await json('/api/annotations/status');token=s.token;return s;},
     async read(){if(local)return [content,await transaction(view)];const [c,s]=await Promise.all([json('/api/annotations/content'),json('/api/annotations/status')]);token=s.token;return [c,s];},
     async update(e){return local?transaction(d=>dispatch(d,e)):json('/api/annotations/update',{method:'POST',headers:{'Content-Type':'application/json','X-LaTeX-Review-Token':token},body:JSON.stringify(e)});}
   };
   async function backup(){return local?transaction(copy):json('/api/annotations/export');}
   function download(value,name,type){const url=URL.createObjectURL(new Blob([value],{type})),a=document.createElement('a');a.href=url;a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);}
-  const controls=document.createElement('div');controls.className='annotation-portable-tools';
+  const controls=document.createElement('div');controls.className='annotation-portable-tools';const delivery=document.createElement('details');delivery.className='annotation-delivery';const summary=document.createElement('summary');summary.textContent='导入与导出';delivery.append(summary,controls);
   const notice=document.createElement('p');notice.setAttribute('role','status');
   const add=(label,fn)=>{const b=document.createElement('button');b.type='button';b.textContent=label;b.onclick=()=>Promise.resolve().then(fn).catch(e=>notice.textContent=e.message);controls.append(b);};
   add('导出报告原备份',()=>download(JSON.stringify(embedded,null,2),'annotations-original.json','application/json'));
@@ -138,12 +139,14 @@
     clone.querySelectorAll('.annotation-overview,.annotation-editor,.annotation-toolbar,.annotation-card,.annotation-mark,.annotation-margin,.annotation-drafts').forEach(e=>e.remove());
     clone.querySelectorAll('.inline-change,.change-anchor,.translation-block,.translation-toggle').forEach(e=>e.remove());
     clone.querySelectorAll('.change-trigger').forEach(e=>{e.classList.remove('change-trigger');for(const a of ['role','tabindex','aria-controls','aria-label','title'])e.removeAttribute(a);});
+    clone.querySelectorAll('.annotation-active-formula,.annotation-located-formula').forEach(e=>e.classList.remove('annotation-active-formula','annotation-located-formula'));
     clone.querySelectorAll('.math-tex[data-annotation-latex]').forEach(e=>{e.replaceChildren(document.createTextNode(e.dataset.annotationMathSource||e.dataset.annotationLatex));e.classList.remove('preview-unavailable');delete e.dataset.renderError;e.style.visibility='';});
     clone.querySelectorAll('mjx-container,mjx-assistive-mml,style[id^=MJX]').forEach(e=>e.remove());
     clone.querySelectorAll('script[src]').forEach(e=>{if(/mathjax/i.test(e.src)&&!/tex-chtml\.js/.test(e.src))e.remove();});
     clone.querySelectorAll('#live-sections option:not(:first-child),#live-results li').forEach(e=>e.remove());
     clone.querySelectorAll('[style]').forEach(e=>{for(const p of ['--change-left','--change-top','--margin-overflow'])e.style.removeProperty(p);});
     clone.querySelector('#annotation-content').textContent=JSON.stringify(api.getContent()).replace(/</g,'\\u003c');clone.querySelector('#annotation-backup').textContent=JSON.stringify(b).replace(/</g,'\\u003c');
+    clone.querySelector('body').classList.remove('annotation-panel-open');
     const assets=readJSON('annotation-assets')||{};
     clone.querySelectorAll('[src],[href]').forEach(e=>{for(const attr of ['src','href']){const value=e.getAttribute(attr);if(!value||/^(data:|https?:|#)/.test(value))continue;const embeddedAsset=assets[decodeURIComponent(value.split(/[?#]/)[0])];if(embeddedAsset)e.setAttribute(attr,embeddedAsset);}});
     clone.querySelectorAll('[data-fallback-src]').forEach(e=>{const embeddedAsset=assets[e.dataset.fallbackSrc];if(embeddedAsset)e.dataset.fallbackSrc=embeddedAsset;});
@@ -155,7 +158,7 @@
     }
     download('<!doctype html>\n'+clone.outerHTML,'report-annotated.html','text/html');return '<!doctype html>\n'+clone.outerHTML;
   }
-  add('导出最新 HTML',exportHTML);controls.append(input,notice);document.querySelector('#annotation-overview').append(controls);
+  add('导出最新 HTML',exportHTML);controls.append(input,notice);document.querySelector('#annotation-overview').append(delivery);
   const draftKey='latex-review-drafts:'+content.project_id+':'+location.pathname;
   let draftsLoaded=false;
   function saveDrafts(){if(!draftsLoaded)return;try{localStorage.setItem(draftKey,JSON.stringify({project_id:content.project_id,version_id:content.version_id,content:api.getContent()||content,drafts:api.getDrafts()}));}catch(e){notice.textContent='草稿存储失败：'+e.message;}}

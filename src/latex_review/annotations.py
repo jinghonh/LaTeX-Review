@@ -602,7 +602,7 @@ class AnnotationStore:
     def dispatch(self, content, request):
         """Shared structured mutation API used unchanged by CLI and local HTTP."""
         _keys(request, ('operation', 'expected_revision', 'thread_id', 'message_id', 'selection', 'body',
-                        'author', 'category', 'bundle'), ('operation', 'expected_revision'))
+                        'author', 'category', 'bundle', 'reply_to'), ('operation', 'expected_revision'))
         revision = _integer(request['expected_revision'], 'expected_revision')
         operation = request['operation']
         fields = {
@@ -615,7 +615,7 @@ class AnnotationStore:
         }
         if not isinstance(operation, str) or operation not in fields:
             raise AnnotationError('未知批注操作')
-        _keys(request, fields[operation] | {'operation', 'expected_revision'},
+        _keys(request, fields[operation] | {'operation', 'expected_revision'} | ({'reply_to'} if operation == 'reply' else set()),
               fields[operation] | {'operation', 'expected_revision'})
         with self._locked() as data:
             if data['revision'] != revision:
@@ -651,7 +651,11 @@ class AnnotationStore:
                 if thread is None or thread['deleted_at']:
                     raise AnnotationError('批注线程不存在或已删除')
                 if operation == 'reply':
+                    parent_id = request.get('reply_to', thread['messages'][0]['id'])
+                    if not any(m['id'] == parent_id and not m['deleted_at'] for m in thread['messages']):
+                        raise AnnotationError('回复对象不存在或已删除')
                     message = self._message(request, now)
+                    message['reply_to'] = parent_id
                     thread['messages'].append(message)
                     result = {'message_id': message['id']}
                 elif operation in ('edit', 'delete_message'):
@@ -742,11 +746,13 @@ class AnnotationStore:
             raise AnnotationError('导入线程内容或历史无效')
         message_ids = set()
         for message in thread['messages']:
-            _keys(message, ('id', 'body', 'author', 'category', 'created_at', 'updated_at', 'deleted_at', 'edits'),
+            _keys(message, ('id', 'body', 'author', 'category', 'created_at', 'updated_at', 'deleted_at', 'edits', 'reply_to'),
                   ('id', 'body', 'author', 'category', 'created_at', 'updated_at', 'deleted_at', 'edits'))
             _text(message['id'], 'message id', 256)
             if message['id'] in message_ids:
                 raise AnnotationError('导入回复 ID 重复')
+            if 'reply_to' in message and message['reply_to'] not in message_ids:
+                raise AnnotationError('回复对象必须是同一线程中的先前消息')
             message_ids.add(message['id'])
             _text(message['body'], '批注正文')
             _author(message['author'])

@@ -74,6 +74,60 @@ flowchart LR
 
 ## 批注读取与修改
 
+优先使用高层命令。命令自动读取项目、正文版本和当前修订号，无需创建请求 JSON。
+`REPORT_DIR` 表示包含 `annotation-content.json` 的本地报告目录，也可传报告文件路径；不接受 HTTP 地址。
+
+```sh
+latex-review-annotations REPORT_DIR add --quote '目标原文' --body '修改建议' --author Codex
+latex-review-annotations REPORT_DIR reply THREAD_ID --body '回复内容' --author Codex
+latex-review-annotations REPORT_DIR reply THREAD_ID --parent-message-id MESSAGE_ID --body '嵌套回复' --author Codex
+latex-review-annotations REPORT_DIR edit THREAD_ID MESSAGE_ID --body '更新内容'
+latex-review-annotations REPORT_DIR delete THREAD_ID --message-id MESSAGE_ID --yes
+latex-review-annotations REPORT_DIR delete THREAD_ID --yes
+latex-review-annotations REPORT_DIR resolve THREAD_ID
+```
+
+`add` 和 `reply` 必须指定作者，身份固定为 `agent`；分类默认 `note`。
+`--category` 可设为 `question`、`suggestion` 或 `note`。`edit` 保留原作者，未传分类时保留原分类。
+`reply` 默认回复初始批注；`--parent-message-id` 必须属于同一线程，且消息未删除。
+`delete --yes` 确认删除；无 `--message-id` 时删除整条批注及其回复。
+`resolve` 标记整条批注为已解决；重新打开仍使用 JSON 接口的 `reopen` 操作。
+
+`add --quote` 区分大小写，只折叠连续 ASCII 空白并移除两端 ASCII 空格，不做模糊匹配。
+只能在当前正文的单个单元内匹配。文字中的行内公式使用清单中的 U+FFFC 原子。
+重复原文返回 `error` 和 `candidates`，退出码为 4，不写入存储。
+候选包含 `occurrence`、`selection`、`source`、`section_path` 和 `text`。
+使用 `--unit-id` 缩小范围，或使用从 1 开始的 `--occurrence` 选择位置。
+候选按正文顺序和单元内偏移排序；`--occurrence` 在 `--unit-id` 筛选后计数。
+重新生成报告后，重新读取候选，不能沿用旧的单元 ID 或候选编号。
+
+```sh
+latex-review-annotations REPORT_DIR add --quote '重复原文' --occurrence 2 --body '修改建议' --author Codex
+latex-review-annotations REPORT_DIR add --quote '原文' --unit-id UNIT_ID --body '修改建议' --author Codex
+latex-review-annotations REPORT_DIR add --formula --quote '$x+1$' --body '公式问题' --author Codex
+latex-review-annotations REPORT_DIR add --formula --unit-id UNIT_ID --body '公式问题' --author Codex
+```
+
+公式模式按完整原始 LaTeX 匹配，包含 `$…$`、`\\(…\\)` 或环境包装；也可只指定公式单元 ID。
+成功输出保持原接口的线程视图、`revision` 和 `result`；创建和回复的 `result` 返回新增 ID。
+操作失败返回 JSON 错误和退出码 4；参数解析失败由 argparse 输出用法并返回 2。
+命令不自动重试并发冲突。调用者需保留输入，重新读取并检查对象后再决定是否提交。
+`--project-root` 等顶层选项放在子命令之前；子命令不能与旧读取或 JSON 请求模式混用。
+
+```mermaid
+flowchart LR
+    A[读取报告清单] --> B{高层操作}
+    B --> C[添加：匹配文字或完整公式]
+    C --> D{定位明确}
+    D -->|否| E[返回候选，不写入]
+    D -->|是| F[提交修订号]
+    B --> G[回复、编辑、删除或解决：指定 ID]
+    G --> F
+    F --> H[返回结果或并发冲突]
+```
+
+以下 JSON 和 HTTP 接口继续保留，用于导入、重新关联等结构化操作。
+
 正文坐标来自报告清单，不能使用 MathJax 内部文字。
 
 ```sh

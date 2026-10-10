@@ -45,15 +45,17 @@ def test_offline_lifecycle_reopen_export_import(live_report,chrome,scheme,tmp_pa
     else:url=(output/'report.html').as_uri()
     try:
         context=chrome.new_context(viewport={'width':1280,'height':900});p=context.new_page();ready(p,url);create(p)
-        assert p.locator('.annotation-margin .annotation-card').count()==1
+        assert p.locator('#annotation-overview .annotation-card').count()==1
         tid=p.evaluate('reviewAnnotations.getSnapshot().threads[0].id')
         assert p.evaluate('async id=>reviewAnnotations.update({operation:"reply",thread_id:id,body:"Reply $x$",author:{name:"Agent",type:"agent"},category:"note"})',tid)
         mid=p.evaluate('reviewAnnotations.getSnapshot().threads[0].messages.at(-1).id')
         assert p.evaluate('async x=>reviewAnnotations.update({operation:"edit",thread_id:x.t,message_id:x.m,body:"Edited reply",category:"suggestion"})',{'t':tid,'m':mid})
+        assert p.evaluate('async x=>reviewAnnotations.update({operation:"reply",thread_id:x.t,reply_to:x.m,body:"Nested reply",author:{name:"Agent",type:"agent"},category:"note"})',{'t':tid,'m':mid})
+        assert p.evaluate('reviewAnnotations.getSnapshot().threads[0].messages.at(-1).reply_to')==mid
         assert p.evaluate('async id=>reviewAnnotations.update({operation:"resolve",thread_id:id})',tid)
         assert p.evaluate('async id=>reviewAnnotations.update({operation:"reopen",thread_id:id})',tid)
         bundle=p.evaluate('reviewAnnotationDelivery.backup()')
-        assert bundle['threads'][tid]['messages'][-1]['edits'][0]['body']=='Reply $x$'
+        assert bundle['threads'][tid]['messages'][1]['edits'][0]['body']=='Reply $x$'
         assert p.evaluate('async b=>reviewAnnotationDelivery.importBundle(b)',bundle)
         conflict=json.loads(json.dumps(bundle));conflict['threads'][tid]['messages'][0]['body']='conflict'
         assert not p.evaluate('async b=>reviewAnnotationDelivery.importBundle(b)',conflict)
@@ -62,6 +64,7 @@ def test_offline_lifecycle_reopen_export_import(live_report,chrome,scheme,tmp_pa
         html=p.evaluate('reviewAnnotationDelivery.exportHTML()');export=tmp_path/'export.html';export.write_text(html)
         fresh=chrome.new_context();q=fresh.new_page();errors=[];q.on('pageerror',lambda e:errors.append(str(e)));ready(q,export.as_uri())
         q.wait_for_function('reviewAnnotations.getSnapshot().threads.length===1');assert q.locator('.annotation-card').count()==1;assert not errors
+        assert q.evaluate('reviewAnnotations.getSnapshot().threads[0].messages.at(-1).reply_to')==mid
         assert q.evaluate('async id=>reviewAnnotations.update({operation:"delete_thread",thread_id:id})',tid)
         deleted=q.evaluate('reviewAnnotationDelivery.backup()');assert deleted['threads'][tid]['deleted_at']
         assert q.evaluate('async b=>reviewAnnotationDelivery.importBundle(b)',deleted)
@@ -77,7 +80,7 @@ def test_live_draft_auto_refresh_and_history(live_report,chrome):
         try:
             p=chrome.new_page(viewport={'width':1280,'height':900});ready(p,f'http://127.0.0.1:{server.server_port}/report.html');create(p)
             p.evaluate('''()=>{const u=reviewAnnotations.getContent().units.find(u=>u.text.startsWith('Stable'));reviewAnnotations.openComposer('create',null,{unit_id:u.id,start:7,end:15,quote:'original'});}''')
-            p.locator('.annotation-editor textarea').fill('Draft before saving source');p.locator('.annotation-editor input').fill('Draft Author');p.locator('.annotation-editor select').nth(0).select_option('agent');p.locator('.annotation-editor select').nth(1).select_option('suggestion')
+            p.locator('.annotation-editor textarea').fill('Draft before saving source');p.locator('.annotation-composer-settings').evaluate('(e)=>e.open=true');p.locator('.annotation-editor input').fill('Draft Author');p.locator('.annotation-editor select').nth(0).select_option('agent');p.locator('.annotation-editor select').nth(1).select_option('suggestion')
             entry.write_text(entry.read_text().replace('Stable original paragraph.','Other moved text.\n\nStable original paragraph.'))
             old=p.evaluate('reviewAnnotations.getContent().version_id');build(source,output,2);(output/'live-status.json').write_text(json.dumps({'revision':2,'message':'updated'}))
             p.wait_for_function('old=>window.reviewAnnotations?.getContent()?.version_id && reviewAnnotations.getContent().version_id!==old',arg=old)
@@ -87,7 +90,7 @@ def test_live_draft_auto_refresh_and_history(live_report,chrome):
             assert p.evaluate('reviewAnnotations.getSnapshot().threads.every(t=>t.association.persisted!==false)')
             entry.write_text(entry.read_text().replace('Stable original paragraph.','Deleted replacement.'));build(source,output,3);(output/'live-status.json').write_text(json.dumps({'revision':3,'message':'updated'}))
             p.wait_for_function('reviewAnnotations.getSnapshot().threads.some(t=>t.association.status==="needs_relocation")')
-            assert p.locator('.annotation-margin .annotation-card').count()==2
+            assert p.locator('#annotation-overview .annotation-card').count()==2
             p.screenshot(path='/tmp/latex-review-annotations-stage3-desktop.png',full_page=True)
             p.set_viewport_size({'width':390,'height':800});p.wait_for_function('!document.querySelector(".annotation-margin").classList.contains("annotation-margin-desktop")')
             p.screenshot(path='/tmp/latex-review-annotations-stage3-narrow.png',full_page=True)
@@ -146,7 +149,7 @@ def test_live_ambiguity_manual_history_and_old_report(live_report,chrome,tmp_pat
             entry.write_text(entry.read_text().replace('Stable original paragraph.','Stable original paragraph.\n\nStable original paragraph.'))
             build(source,output,2);(output/'live-status.json').write_text(json.dumps({'revision':2,'message':'updated'}));p.reload();p.wait_for_function('window.reviewAnnotationDeliveryReady===true')
             t=p.evaluate('reviewAnnotations.getSnapshot().threads[0]');assert t['association']['status']=='needs_relocation' and len(t['association']['candidates'])>=2
-            p.locator('.annotation-card').evaluate('(e)=>e.open=true');p.locator('.annotation-card').get_by_text('手动重新关联',exact=True).click()
+            p.locator('#annotation-overview').evaluate('(e)=>e.open=true');p.locator('.annotation-card').evaluate('(e)=>e.open=true');p.locator('.annotation-card').get_by_text('手动重新关联',exact=True).click()
             p.evaluate('''()=>{const u=reviewAnnotations.getContent().units.find(u=>u.text.startsWith('Other'));const r=reviewAnnotations.coordinates(document.querySelector(u.selector)).range(0,5);getSelection().removeAllRanges();getSelection().addRange(r);document.querySelector(u.selector).dispatchEvent(new MouseEvent('mouseup',{bubbles:true}));}''')
             p.wait_for_function('reviewAnnotations.getSnapshot().threads[0].association.status==="manual"')
             t=p.evaluate('reviewAnnotations.getSnapshot().threads[0]');assert t['original_anchor']['quote']=='Stable' and t['association']['anchor']['quote']=='Other' and len(t['history'])==2
