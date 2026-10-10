@@ -251,3 +251,23 @@ def test_nested_context_and_sync_anchor() -> None:
                              str(root / "src/latex_review/report_interaction.js")),
                             capture_output=True, text=True, check=False)
     assert result.returncode == 0, result.stderr
+
+
+def test_fragment_budget_prioritizes_changes_and_reuses_duplicates(tmp_path, monkeypatch):
+    calls = []
+    def render(raw, kind, source, directory, converters, timeout):
+        calls.append(raw)
+        return None, "test compilation failure"
+    monkeypatch.setattr("latex_review.fragment_render.render_fragment", render)
+    equations = [r"\begin{equation}\unsupported{" + str(i) + r"}\end{equation}" for i in range(10)]
+    for side in ("old", "new"):
+        root = tmp_path / side
+        root.mkdir()
+        text = "\n\n".join(equations + ([equations[0], r"\begin{equation}\changed{x}\end{equation}"] if side == "new" else []))
+        (root / "main.tex").write_text(r"\begin{document}" + "\n" + text + "\n" + r"\end{document}")
+    with resolve_sources(entry="main.tex", old_dir=tmp_path / "old", new_dir=tmp_path / "new") as pair:
+        old, new = parse_project(pair.old.expand()), parse_project(pair.new.expand())
+        write_report(old, new, compare_projects(old, new), tmp_path / "report", pdf_converter="")
+    assert len(calls) == len(set(calls))
+    assert calls[8] == r"\begin{equation}\changed{x}\end{equation}"
+    assert len(calls) == 11

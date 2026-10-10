@@ -115,3 +115,79 @@ def test_malformed_fragment_becomes_diagnostic_and_restores_logging(tmp_path, ca
     assert [item.code for item in diagnostics] == ["preview_fallback"]
     assert capfd.readouterr().err == ""
     assert [(log.level, tuple(log.filters)) for log in logs] == previous
+
+@pytest.mark.parametrize("formula", [
+    r"$\bigcup_i A_i \setminus B$",
+    r"\(\nexists x: x > \kappa\)",
+    r"$\unknownmath{x}$",
+])
+def test_math_does_not_reject_surrounding_text(tmp_path, formula):
+    (tmp_path / "main.tex").write_text(
+        r"\begin{document}" + "\n" + r"\textbf{Before " + formula
+        + " after}.\n" + r"\end{document}", encoding="utf-8")
+    with resolve_sources(entry="main.tex", old_dir=tmp_path, new_dir=tmp_path) as pair:
+        old, new = parse_project(pair.old.expand()), parse_project(pair.new.expand())
+        result = render_preview(old, new)
+    assert "Before" in result.html and "after" in result.html
+    assert 'class="math-tex"' in result.html
+    assert "loader:{load:['[tex]/boldsymbol']}" in result.html
+    assert not any(item.code == "preview_parse_failed" for item in result.diagnostics)
+
+
+def test_math_engine_waits_for_extension_startup(tmp_path):
+    import shutil
+    import subprocess
+    if not shutil.which("node"):
+        pytest.skip("requires node")
+    (tmp_path / "main.tex").write_text(r"\begin{document}Text.\end{document}")
+    with resolve_sources(entry="main.tex", old_dir=tmp_path, new_dir=tmp_path) as pair:
+        result = render_preview(parse_project(pair.old.expand()), parse_project(pair.new.expand()))
+    script = re.search(r"<script>\n(.*?)\n</script>", result.html, re.S).group(1)
+    harness = r'''
+const vm = require('vm');
+const status = {dataset:{}};
+let resolveStartup;
+const math = {startup:{promise:new Promise(resolve=>resolveStartup=resolve)}};
+const context = {document:{getElementById:()=>status,querySelectorAll:()=>[]},
+    window:{},setTimeout:()=>1,clearTimeout:()=>{}};
+vm.runInNewContext(SCRIPT, context);
+context.MathJax = context.window.MathJax = math;
+context.window.mathDependencyReady();
+if(status.dataset.state === 'failed') throw Error('failed before startup');
+math.tex2chtmlPromise = async()=>{};
+resolveStartup();
+setImmediate(()=>{if(status.dataset.state !== 'ready') process.exit(1);});
+'''.replace('SCRIPT', json.dumps(script))
+    subprocess.run(["node", "-e", harness], check=True)
+
+
+def test_common_paper_content_has_no_preview_placeholders(tmp_path):
+    (tmp_path / 'main.tex').write_text(r'''\begin{document}
+\citeauthor{Wardrop1952} described equilibrium.
+
+\begin{quote}Quoted \emph{text} with $x=1$.\end{quote}
+
+\begin{algorithm}[htbp]
+\caption{Flow algorithm}
+\label{alg:flow}
+\begin{algorithmic}[1]
+\REQUIRE Network $G$.
+\ENSURE Flow $f$.
+\STATE Solve \citep{Wardrop1952}.
+\RETURN $f$.
+\end{algorithmic}
+\end{algorithm}
+
+\vfill
+\bibliographystyle{apalike}
+\bibliography{refs}
+\end{document}''')
+    (tmp_path / 'refs.bib').write_text('@article{Wardrop1952, author={Wardrop, John}, title={Equilibrium}, year={1952}}\n@article{unused, author={Unused}, title={Unused entry}, year={2000}}')
+    with resolve_sources(entry='main.tex', old_dir=tmp_path, new_dir=tmp_path) as pair:
+        result = render_preview(parse_project(pair.old.expand()), parse_project(pair.new.expand()))
+    assert 'class="preview-unavailable"' not in result.html
+    assert '>Wardrop</span>' in result.html and 'data-bib-key="Wardrop1952"' in result.html
+    assert '<blockquote>' in result.html and 'Flow algorithm' in result.html
+    assert 'Network' in result.html and 'Solve' in result.html
+    assert 'Unused entry' not in result.html
+    assert not any(item.code.startswith("preview_") for item in result.diagnostics)

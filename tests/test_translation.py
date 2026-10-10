@@ -635,6 +635,8 @@ def test_each_change_group_has_its_own_matching_translation(tmp_path, provider):
             assert groups.locator('.group-translation').count() == 2
             assert groups.locator('.group-translation[open]').count() == 0
             assert note.locator('button details').count() == 0
+            assert note.locator('.inline-specific-changes').get_attribute('open') is None
+            note.locator('.inline-specific-changes > summary').click()
             first, second = groups.nth(0), groups.nth(1)
             first.locator('.group-translation > summary').click()
             first.locator('[data-translate-change]').click()
@@ -741,7 +743,8 @@ def test_repeated_citation_changes_keep_the_correct_sentence(tmp_path):
     ("We use $x_1$ here.", "We use $x_2$ here."),
     (r"We cite \cite{alpha} here.", r"We cite \cite{beta} here."),
 ])
-def test_inline_only_translation_click_jumps_to_original_sentence(tmp_path, provider, before, after):
+@pytest.mark.parametrize("layout,side", [("reading", "new"), ("compare", "new"), ("compare", "old")])
+def test_inline_only_translation_click_jumps_to_original_sentence(tmp_path, provider, before, after, layout, side):
     api = _browser_api()
     report = _content_report(tmp_path, "Keep this sentence. " + before + " Another stable sentence.",
                              "Keep this sentence. " + after + " Another stable sentence.")
@@ -756,11 +759,25 @@ def test_inline_only_translation_click_jumps_to_original_sentence(tmp_path, prov
             page.goto(f"http://127.0.0.1:{server.server_port}/report.html")
             page.locator("#translate-all").click()
             page.wait_for_function("document.querySelector('#translation-status').textContent.includes('译文 2 / 2 段')")
-            new_unit = next(unit for unit in server.translation.units.values() if unit["side"] == "new")
-            original = page.locator("#" + new_unit["id"])
+            page.locator("#layout-mode").select_option(layout)
+            unit = next(unit for unit in server.translation.units.values() if unit["side"] == side)
+            original = page.locator("#" + unit["id"])
             translated = original.locator('.translated-sentence.sentence-changed')
             assert translated.count() == 1
+            card = page.locator("#" + unit["change_id"])
+            if page.locator('#toggle-changes').get_attribute('aria-expanded') != 'true':
+                page.locator('#toggle-changes').click()
+            matching_category = card.get_attribute("data-categories").split()[0]
+            page.locator("#category-filter").select_option(matching_category)
+            page.locator("#kind-filter").select_option("added")
+            assert card.is_hidden()
+            page.locator('#close-changes').click()
             translated.click()
+            assert page.locator("#kind-filter").input_value() == "all"
+            assert page.locator("#category-filter").input_value() == "all"
+            assert card.get_attribute("hidden") is None
+            if layout == "reading":
+                assert page.locator("#inline-" + unit["change_id"]).get_attribute("open") is not None
             highlighted = original.locator('.review-sentence.is-highlighted')
             assert highlighted.count() == 1
             assert highlighted.get_attribute("id").endswith("-sentence-2")

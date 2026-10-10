@@ -254,25 +254,13 @@
         side.append(label, placeholder); columns.append(side);
       });
       translation.addEventListener('toggle', () => window.dispatchEvent(new Event('resize')));
-      inline.insertBefore(translation, inline.querySelector('.inline-close'));
+      inline.querySelector(':scope > summary').after(translation);
     }
   });
   document.addEventListener('click', event => {
     const sentence = event.target.closest('.translated-sentence.sentence-changed');
     if (sentence && !event.target.closest('a')) {
-      const originalId = sentence.dataset.originalSentence;
-      const side = originalId.startsWith('old-') ? 'old' : 'new';
-      const id = originalId.slice(4);
-      const jump = Array.from(document.querySelectorAll('.change-card .detail-jump')).find(button =>
-        (button.dataset[side + 'Sentences'] || '').split(' ').includes(id));
-      if (jump) {
-        if (jump.closest('.change-card').hidden) {
-          document.getElementById('kind-filter').value = 'all';
-          document.getElementById('category-filter').value = 'all';
-          document.getElementById('kind-filter').dispatchEvent(new Event('change', {bubbles: true}));
-        }
-        jump.click();
-      }
+      window.reviewNavigation.sentence(sentence.dataset.originalSentence);
     }
     const button = event.target.closest('[data-translate-change]');
     if (!button) return;

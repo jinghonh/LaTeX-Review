@@ -249,6 +249,8 @@
     status.textContent = messages.join('；');
     if (readingView() && detail) {
       let selectedDetail = null;
+      if (button.classList.contains('detail-jump'))
+        detail.querySelector('.inline-specific-changes').open = true;
       detail.querySelectorAll('.detail-list:not(.supplemental-details) .detail-jump').forEach(copy => {
         const matches = sentenceJump && copy.dataset.oldSentences === button.dataset.oldSentences &&
           copy.dataset.newSentences === button.dataset.newSentences;
@@ -278,12 +280,43 @@
       }
     }
   }
+  // Navigation owns reveal policy and activation order for every existing entry.
+  let afterDirectoryNavigation = () => {};
+  function navigate(button, origin = 'card') {
+    if (!button) return;
+    const card = button.closest('.change-card') || cards.find(item =>
+      inlineChanges.get(item)?.contains(button));
+    if (card?.hidden && (origin === 'sentence' || origin === 'translation' || origin === 'page')) {
+      if (origin !== 'page' || (kind.value !== 'all' && kind.value !== card.dataset.kind))
+        kind.value = 'all';
+      if (origin !== 'page' || (category.value !== 'all' && !card.dataset.categories.split(' ').includes(category.value)))
+        category.value = 'all';
+      filter();
+    }
+    if (origin === 'page') {
+      if (!card || card.hidden) return;
+      card.scrollIntoView({block: 'center', behavior: 'auto'});
+      button.focus({preventScroll: true});
+    }
+    jump(button);
+    if (origin === 'card' || origin === 'translation' || origin === 'page')
+      afterDirectoryNavigation();
+  }
+  const pages = document.querySelector('.rendered-pages');
+  if (pages) pages.addEventListener('click', event => {
+    const link = event.target.closest('a[href^="#"]');
+    if (!link || !pages.contains(link)) return;
+    const card = document.getElementById(link.getAttribute('href').slice(1));
+    if (!card?.classList.contains('change-card')) return;
+    event.preventDefault();
+    navigate(card.querySelector('.change-jump'), 'page');
+  });
   document.getElementById('changes-side').addEventListener('click', event => {
     const button = event.target.closest('button[data-old][data-new]');
     if (!button) return;
     const card = button.closest('.change-card');
     selected = cards.indexOf(card);
-    jump(button);
+    navigate(button);
   });
   function step(direction) {
     const visible = visibleCards();
@@ -296,7 +329,7 @@
     card.scrollIntoView({block: 'nearest', behavior: 'auto'});
     const focusTarget = readingView() ? inlineChanges.get(card)?.querySelector('summary') : card.querySelector('.change-jump');
     if (focusTarget) focusTarget.focus({preventScroll: true});
-    jump(card.querySelector('.change-jump'));
+    navigate(card.querySelector('.change-jump'), 'step');
   }
   document.getElementById('previous-change').addEventListener('click', () => step(-1));
   document.getElementById('next-change').addEventListener('click', () => step(1));
@@ -388,13 +421,13 @@
       arrangeInlineChanges();
     }
     directoryButton.addEventListener('click', () => directory(directoryButton.getAttribute('aria-expanded') !== 'true'));
-    document.getElementById('changes-side').addEventListener('click', event => {
-      if (event.target.closest('button[data-old][data-new]') && window.matchMedia('(max-width:1099px)').matches) {
+    afterDirectoryNavigation = () => {
+      if (window.matchMedia('(max-width:1099px)').matches) {
         directory(false);
         const detail = inlineChanges.get(cards[selected]);
         if (readingView() && detail) detail.querySelector('summary').focus({preventScroll: true});
       }
-    });
+    };
     document.getElementById('close-changes').addEventListener('click', () => {
       directory(false); directoryButton.focus();
     });
@@ -408,7 +441,7 @@
       document.body.classList.toggle('reading-view', readingView());
       updateTriggerState();
       arrangeInlineChanges();
-      if (selected >= 0) jump(cards[selected].querySelector('.change-jump'));
+      if (selected >= 0) navigate(cards[selected].querySelector('.change-jump'), 'mode');
     });
     // Snapshot nodes before inserting details so excerpts never become navigation anchors.
     const tails = new Map();
@@ -593,7 +626,9 @@
       }
       button.querySelector('strong').textContent = excerptTitle ?
         excerptTitle.slice(0, 64) + (excerptTitle.length > 64 ? '…' : '') : categories + '内容';
-      detail.append(heading);
+      const specifics = document.createElement('details'); specifics.className = 'inline-specific-changes';
+      const specificsSummary = document.createElement('summary'); specificsSummary.textContent = '具体改动';
+      specifics.append(specificsSummary, heading); detail.append(specifics);
       const list = card.querySelector('.detail-list').cloneNode(true);
       const supplement = document.createElement('ul'); supplement.className = 'detail-list supplemental-details';
       const seenSentences = new Set();
@@ -627,10 +662,12 @@
       if (!groupCount && card.dataset.kind !== 'moved' &&
           (oldNode?.classList.contains('node-paragraph') || target?.classList.contains('node-paragraph'))) {
         const comparison = compactDiff(oldNode?.querySelector('p'), target?.querySelector('p'), 1);
-        groupCount = comparison.children.length; detail.append(comparison);
+        groupCount = comparison.children.length; specifics.append(comparison);
       }
       hint.textContent = groupCount ? groupCount + ' 处改动' : '查看变更明细';
-      detail.append(list);
+      specificsSummary.textContent = '具体改动' + (groupCount ? ' · ' + groupCount + ' 处' : '');
+      specifics.append(list);
+      specifics.addEventListener('toggle', () => arrangeInlineChanges());
       const full = document.createElement('details'); full.className = 'inline-full-context';
       const fullSummary = document.createElement('summary'); fullSummary.textContent = '完整段落对照';
       full.append(fullSummary); detail.append(full);
@@ -675,7 +712,7 @@
         event.preventDefault();
         if (detail.open) {
           detail.open = false; updateTriggerState(); arrangeInlineChanges();
-        } else jump(button);
+        } else navigate(button, 'inline');
       });
       detail.addEventListener('toggle', () => {
         if (detail.open) { updateSelection(card); openInlineChange(card); }
@@ -683,7 +720,7 @@
       });
       detail.addEventListener('click', event => {
         const jumpButton = event.target.closest('.detail-jump');
-        if (jumpButton) jump(jumpButton);
+        if (jumpButton) navigate(jumpButton, 'inline');
       });
       let alignmentTarget = target;
       if (target) {
@@ -698,7 +735,7 @@
         else {
           const note = document.createElement('p');
           note.className = 'inline-heading'; note.textContent = '新稿中没有可确定的对应位置。';
-          detail.insertBefore(note, heading); panels.new.append(slot);
+          detail.insertBefore(note, specifics); panels.new.append(slot);
         }
         alignmentTarget = slot;
       }
@@ -710,7 +747,7 @@
         marker.className = 'deletion-marker';
         marker.textContent = '− 删除 · ' + String(index + 1).padStart(2, '0');
         marker.setAttribute('aria-controls', detail.id);
-        marker.addEventListener('click', () => jump(button));
+        marker.addEventListener('click', () => navigate(button, 'inline'));
         slot.classList.add('has-deletion'); slot.prepend(marker);
         changeTriggers.get(card).add(marker);
       }
@@ -746,10 +783,7 @@
     function activateSentence(sentence) {
       const button = sentenceButtons.get(sentence);
       if (!button || !readingView()) return;
-      if (button.closest('.change-card').hidden) {
-        kind.value = 'all'; category.value = 'all'; filter();
-      }
-      jump(button);
+      navigate(button, 'sentence');
     }
     panels.new.addEventListener('click', event => {
       if (event.target.closest('a,button,summary,input,select')) return;
@@ -764,9 +798,10 @@
     // Keep notes beside their source; expanded or adjacent notes move down without overlapping.
     arrangeInlineChanges = () => {
       const availableWidth = innerWidth - (document.body.classList.contains('directory-open') ? 340 : 0);
-      const marginNotes = readingView() && availableWidth >= 1240;
+      const marginNotes = readingView() && availableWidth >= 800;
       document.body.classList.toggle('margin-notes', marginNotes);
       const main = document.querySelector('main');
+      main.style.setProperty('--note-width', Math.min(520, Math.floor(availableWidth * .42)) + 'px');
       main.style.setProperty('--margin-overflow', '0px');
       if (!marginNotes) return;
       const paper = panels.new.getBoundingClientRect();
@@ -809,4 +844,16 @@
         if (parent.tagName === 'DETAILS') parent.open = true;
     }, true);
   }
+  // The translation adapter supplies only the original sentence anchor.
+  const sentenceTargets = new Map();
+  cards.forEach(card => card.querySelectorAll('.detail-jump').forEach(button => {
+    for (const side of ['old', 'new'])
+      (button.dataset[side + 'Sentences'] || '').split(' ').filter(Boolean).forEach(id => {
+        const anchor = side + '-' + id;
+        if (!sentenceTargets.has(anchor)) sentenceTargets.set(anchor, button);
+      });
+  }));
+  window.reviewNavigation = Object.freeze({
+    sentence(originalId) { navigate(sentenceTargets.get(originalId), 'translation'); }
+  });
 })();

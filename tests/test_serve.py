@@ -124,3 +124,38 @@ def test_cli_accepts_report_file_or_paper_entry(tmp_path, input_kind):
         if process.poll() is None:
             process.kill()
         process.communicate()
+
+
+@pytest.mark.parametrize('open_browser', [False, True])
+@pytest.mark.parametrize('browser_result', [True, False, 'error'])
+def test_optional_browser_open_after_bind(report, monkeypatch, capsys, open_browser, browser_result):
+    from latex_review import serve
+    monkeypatch.setattr('latex_review.cli._config', lambda *args: {})
+    calls = []
+
+    def open_page(address):
+        calls.append(address)
+        if browser_result == 'error':
+            raise serve.webbrowser.Error('unavailable')
+        return browser_result
+
+    def stop_server(self, **kwargs):
+        assert calls == ([f'http://127.0.0.1:{self.server_port}/report.html'] if open_browser else [])
+        raise KeyboardInterrupt
+
+    monkeypatch.setattr(serve.webbrowser, 'open', open_page)
+    monkeypatch.setattr(serve.ReportServer, 'serve_forever', stop_server)
+    args = [str(report)] + (['--open-browser'] if open_browser else [])
+    assert serve.main(args) == 0
+    captured = capsys.readouterr()
+    assert captured.out.strip().startswith('http://127.0.0.1:')
+    assert ('无法自动打开浏览器' in captured.err) == (open_browser and browser_result != True)
+
+
+def test_invalid_report_does_not_open_browser(tmp_path, monkeypatch):
+    from latex_review import serve
+    monkeypatch.setattr('latex_review.cli._config', lambda *args: {})
+    calls = []
+    monkeypatch.setattr(serve.webbrowser, 'open', calls.append)
+    assert serve.main([str(tmp_path), '--open-browser']) == 4
+    assert calls == []

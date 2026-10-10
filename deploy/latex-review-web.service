@@ -1,0 +1,20 @@
+[Unit]
+Description=LaTeX Review private report login
+After=network.target
+
+[Service]
+User=latex-review-web
+Group=latex-review-web
+WorkingDirectory=/opt/latex-review
+ExecStart=/usr/bin/gunicorn --bind 127.0.0.1:8768 --workers 2 --threads 4 --timeout 30 web:application
+Restart=on-failure
+RestartSec=3
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+UMask=0077
+
+[Install]
+WantedBy=multi-user.target

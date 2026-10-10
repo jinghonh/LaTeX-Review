@@ -10,7 +10,7 @@ import unicodedata
 
 _COMMAND = re.compile(r"\\(?:[A-Za-z@]+\*?|.)")
 _VERBATIM = re.compile(r"\\begin\{(verbatim\*?|Verbatim|lstlisting|minted)\}")
-CITATION_COMMANDS = ("cite", "citep", "citet", "nocite", "parencite", "textcite")
+CITATION_COMMANDS = ("cite", "citep", "citet", "citeauthor", "nocite", "parencite", "textcite")
 _CITATION = re.compile(r"\\(?:" + "|".join(CITATION_COMMANDS) + r")\b")
 _REFERENCE = re.compile(r"\\(?:ref|eqref|autoref|pageref|cref|Cref)\b")
 _TEXT_ARGUMENT_COMMANDS = {"textbf", "textit", "emph", "texttt", "textsc", "underline", "footnote"}

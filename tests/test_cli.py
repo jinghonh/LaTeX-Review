@@ -251,3 +251,34 @@ def test_invalid_config_invalidates_previous_report(tmp_path):
     linked.symlink_to(external, target_is_directory=True)
     assert run_cli(tmp_path, "main.tex", "--output", str(linked)).returncode == 64
     assert (external / "report.html").read_text() == "outside"
+
+
+def test_open_browser_previews_generated_report_and_preserves_status(tmp_path, monkeypatch):
+    from latex_review import serve
+    project(tmp_path)
+    monkeypatch.chdir(tmp_path)
+    config = tmp_path / 'chosen.toml'
+    config.write_text('', encoding='utf-8')
+    calls = []
+
+    def preview(args):
+        assert Path(args[0]).joinpath('report.html').is_file()
+        calls.append(args)
+        return 0
+
+    monkeypatch.setattr(serve, 'main', preview)
+    args = ['main.tex', '--output', 'custom-report', '--config', str(config)]
+    assert cli.main(args) == 0
+    assert calls == []
+    assert cli.main([*args, '--open-browser']) == 0
+    assert calls == [[str(tmp_path / 'custom-report'), '--open-browser', '--config', str(config)]]
+    (tmp_path / 'main.tex').write_text(r'\section{A}\odd{unknown}', encoding='utf-8')
+    assert cli.main([*args, '--open-browser']) == 2
+    monkeypatch.setattr(serve, 'main', lambda args: 4)
+    assert cli.main([*args, '--open-browser']) == 4
+    assert (tmp_path / 'custom-report/report.html').is_file()
+    (tmp_path / 'main.tex').unlink()
+    calls.clear()
+    monkeypatch.setattr(serve, 'main', preview)
+    assert cli.main([*args, '--open-browser']) == 4
+    assert calls == []

@@ -492,29 +492,7 @@ def _rendering_html(rendering: dict | None, statuses: tuple | None) -> str:
                      f'{pair["old"] or "—"} → {pair["new"] or "—"}</h3>' + "".join(pictures) + "</article>")
     return ('<section class="rendered-pages" aria-label="编译页面与视觉差异"><h2>编译页面与视觉差异</h2>'
             '<p>页面差异表示排版像素变化，不证明内容语义变化。</p><ul>' + "".join(items) + '</ul>'
-            f'<p>{_e(summary)}</p>' + "".join(cards) + '''</section>
-<script>(function(){
- const pages=document.querySelector('.rendered-pages');
- pages.addEventListener('click',function(event){
-  const link=event.target.closest('a[href^="#"]');
-  if(!link||!pages.contains(link))return;
-  const card=document.getElementById(link.getAttribute('href').slice(1));
-  if(!card||!card.classList.contains('change-card'))return;
-  event.preventDefault();
-  if(card.hidden){
-   const kind=document.getElementById('kind-filter');
-   const category=document.getElementById('category-filter');
-   if(kind.value!=='all'&&kind.value!==card.dataset.kind)kind.value='all';
-   if(category.value!=='all'&&!card.dataset.categories.split(' ').includes(category.value))category.value='all';
-   kind.dispatchEvent(new Event('change',{bubbles:true}));
-  }
-  if(card.hidden)return;
-  card.scrollIntoView({block:'center',behavior:'auto'});
-  const button=card.querySelector('.change-jump');
-  button.focus({preventScroll:true});
-  button.click();
- });
-})();</script>''')
+            f'<p>{_e(summary)}</p>' + "".join(cards) + "</section>")
 
 
 def _report_overview(document: ReviewDocument) -> str:
@@ -641,9 +619,14 @@ def write_report(old: ParsedProject, new: ParsedProject, comparison: ComparisonR
     from .fragment_render import render_fragment
     fragment_diagnostics = []
     known_math = MATH_COMMANDS | {"begin", "end", "label", "tag", "notag", "nonumber", "text", "operatorname"}
+    fragment_results = {}
+    changed_ids = {
+        "old": {change.old_node_id for change in comparison.document.changes},
+        "new": {change.new_node_id for change in comparison.document.changes},
+    }
     for side, project in (("old", old), ("new", new)):
         attempted = 0
-        for node in project.nodes:
+        for node in sorted(project.nodes, key=lambda node: node.review.id not in changed_ids[side]):
             raw = node.review.raw_latex
             if node.review.type == "table":
                 needed = bool(re.search(r"\\begin\{(?:tabular\*?|longtable)\}", raw)) and not display_tables(raw)
@@ -654,12 +637,17 @@ def write_report(old: ParsedProject, new: ParsedProject, comparison: ComparisonR
                 continue
             if not needed:
                 continue
-            if attempted >= 8:
+            # 隔离片段编译不加载论文导言区，因此相同原文可跨版本复用。
+            key = (node.review.type, raw)
+            if key in fragment_results:
+                image, reason = fragment_results[key]
+            elif attempted >= 8:
                 reason, image = "片段编译数量达到上限", None
             else:
                 attempted += 1
                 image, reason = render_fragment(raw, node.review.type, project.expanded.source,
                                                 directory, converters, timeout=fragment_timeout)
+                fragment_results[key] = (image, reason)
             if image is not None:
                 figure_html[(side, node.review.id)] = "/".join(quote(part) for part in image.relative_to(directory).parts)
             else:

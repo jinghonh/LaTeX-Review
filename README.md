@@ -27,9 +27,11 @@ python -m pip install '.[test]'
 
 `latex-review main.tex` 默认比较 Git `HEAD` 与当前磁盘工作区，写入 `.latex-review/latest/report.html`、`diff.json`、`diagnostics.json`、`cache-meta.json`。可用 `--old`、`--new` 指定两个提交，或用 `--old-dir A --new-dir B --entry main.tex` 比较目录，也可直接提供两个独立文件。工作区快照包含暂存及未暂存内容、未忽略的未跟踪依赖；输出目录不参与快照。`--inspect-sources` 仅输出来源展开 JSON。用法与程序接口见[比较来源与展开接口](Docs/source-resolution.md)。
 
-浏览器工具无法打开本地文件页面时，运行 `latex-review-preview .latex-review/latest`，打开输出的 `http://127.0.0.1:端口/report.html`。服务仅监听本机，自动选择端口，并提供完整报告目录；按 Ctrl+C 停止。详细行为及智能体验收流程见[报告预览](Docs/report-preview.md)。
+浏览器工具无法打开本地文件页面时，运行 `latex-review-preview .latex-review/latest`，打开输出的 `http://127.0.0.1:端口/report.html`。服务仅监听本机，自动选择端口，并提供完整报告目录；按 Ctrl+C 停止。两个命令均支持 `--open-browser`：`latex-review main.tex --open-browser` 会生成报告、启动预览并打开默认浏览器；`latex-review-preview .latex-review/latest --open-browser` 会预览已有报告并打开默认浏览器。详细行为及智能体验收流程见[报告预览](Docs/report-preview.md)。
 
 报告可通过本机服务按需调用配置的 LLM 接口，把两版中包含变化的完整段落、标题和图注译为中文。支持逐项或批量翻译、英中对照、术语表、本机缓存及含译文报告导出；默认不自动请求 API，第一版不翻译表格。接口地址和模型配置在 `[translation]`，所有项目自动读取 `~/.config/latex-review/config.toml`（或 `$XDG_CONFIG_HOME/latex-review/config.toml`）的翻译默认值，项目可逐项覆盖；术语表合并且项目同名词条优先。密钥来自环境变量。配置与使用步骤见[变更内容翻译](Docs/translation.md)。
+
+配置私有发布服务器后，执行 `latex-review main.tex --open-browser --upload` 可生成报告、通过 SSH 发布静态页面和已有译文，再打开本地预览。主页提供论文选择和最近 10 次发布历史；网站使用 HTTPS 和账号验证。上传失败保留本地结果，退出码为 16。配置与运维见[私有报告发布](Docs/report-upload.md)。
 
 GitHub 拉取请求的报告产物与评论发布须由仓库维护者按[工作流启用说明](Docs/github-actions.md)显式配置。模板默认不在本仓库运行。
 

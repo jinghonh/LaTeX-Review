@@ -273,6 +273,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--old", dest="old_revision", help="修改前 Git 提交")
     parser.add_argument("--new", dest="new_revision", help="修改后 Git 提交或 worktree")
     parser.add_argument("--output", help="报告目录，默认 .latex-review/latest")
+    parser.add_argument("--open-browser", action="store_true", help="生成报告后启动本机预览并打开默认浏览器；按 Ctrl+C 停止")
+    parser.add_argument("--upload", action="store_true", help="生成后通过 SSH 发布静态报告；使用用户级 upload.toml")
     parser.add_argument("--cache-dir", help="解析缓存目录，默认位于报告目录旁")
     parser.add_argument("--no-cache", action="store_true", help="本次绕过解析缓存")
     parser.add_argument("--clear-cache", action="store_true", help="本次运行前清理解析缓存")
@@ -380,8 +382,8 @@ def main(argv: list[str] | None = None) -> int:
                                       rendering=rendering, statuses=statuses)
             write_cache_metadata(output, cache.metadata())
         print(report.html)
-        return 2 if any(d.rule_status is None and d.severity in {"warning", "error"}
-                        for d in report.document.diagnostics) else 0
+        result = 2 if any(d.rule_status is None and d.severity in {"warning", "error"}
+                         for d in report.document.diagnostics) else 0
     except ConfigurationError as exc:
         _record_failure(output if output_ready else _known_output_after_config_error(args),
                         Diagnostic("configuration_error", "error", str(exc)))
@@ -403,6 +405,25 @@ def main(argv: list[str] | None = None) -> int:
             _record_failure(output, Diagnostic("internal_error", "error", f"{type(exc).__name__}: {exc}"))
         print(f"latex-review: 内部错误：{type(exc).__name__}: {exc}", file=sys.stderr)
         return 8
+    if args.upload:
+        from .upload import UploadError, upload_report
+        try:
+            entry = options.get("entry") or options.get("new_file")
+            if options.get("new_dir"):
+                entry = str(Path(options["new_dir"]) / entry)
+            print(f"已发布：{upload_report(output, Path(entry), config.get('translation'))}")
+        except (UploadError, OSError, ValueError) as exc:
+            print(f"latex-review: 上传失败，本地报告已保留：{exc}", file=sys.stderr)
+            result = 16
+    if args.open_browser:
+        from .serve import main as preview
+        preview_args = [str(output), "--open-browser"]
+        if args.config:
+            preview_args.extend(["--config", args.config])
+        preview_result = preview(preview_args)
+        if preview_result:
+            return preview_result
+    return result
 
 
 if __name__ == "__main__":

@@ -751,7 +751,7 @@ main {
 
 .reading-view.margin-notes .preview-side[data-side="new"] {
   margin-left:0;
-  margin-right:544px;
+  margin-right:calc(var(--note-width,520px) + 24px);
   padding:48px 40px;
   max-width:none;
 }
@@ -765,7 +765,7 @@ main {
   left:var(--change-left,100%);
   top:var(--change-top,0px);
   box-sizing:border-box;
-  width:520px;
+  width:var(--note-width,520px);
   margin:0;
   padding:12px 14px;
   background:var(--paper);
@@ -954,12 +954,12 @@ main {
   font:12px/1.8 var(--ui);
 }
 
-.inline-full-context,.inline-translation {
+.inline-full-context,.inline-translation,.inline-specific-changes {
   margin:0;
   border-top:1px solid var(--line);
 }
 
-.inline-full-context>summary,.inline-translation>summary {
+.inline-full-context>summary,.inline-translation>summary,.inline-specific-changes>summary {
   list-style:none;
   display:flex;
   align-items:center;
@@ -969,17 +969,17 @@ main {
   font:12px/1.6 var(--ui);
 }
 
-.inline-full-context>summary::-webkit-details-marker,.inline-translation>summary::-webkit-details-marker {
+.inline-full-context>summary::-webkit-details-marker,.inline-translation>summary::-webkit-details-marker,.inline-specific-changes>summary::-webkit-details-marker {
   display:none;
 }
 
-.inline-full-context>summary::before,.inline-translation>summary::before {
+.inline-full-context>summary::before,.inline-translation>summary::before,.inline-specific-changes>summary::before {
   content:'›';
   font-size:18px;
   line-height:1;
 }
 
-.inline-full-context[open]>summary::before,.inline-translation[open]>summary::before {
+.inline-full-context[open]>summary::before,.inline-translation[open]>summary::before,.inline-specific-changes[open]>summary::before {
   transform:rotate(90deg);
 }
 
@@ -1026,6 +1026,11 @@ main {
   .reading-options { grid-column:1 / -1; grid-row:2; }
   .translation-controls { grid-column:2; grid-row:1; justify-self:end; }
   .step-controls { grid-column:3; grid-row:1; }
+}
+
+@media(max-width:1000px) {
+  .reading-view.margin-notes main { padding-left:16px; padding-right:16px; }
+  .reading-view.margin-notes .preview-side[data-side="new"] { padding:32px 24px; font-size:17px; }
 }
 
 @media(max-width:800px) {

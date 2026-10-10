@@ -13,6 +13,7 @@ from pathlib import Path
 import signal
 from socketserver import TCPServer
 import sys
+import webbrowser
 from urllib.parse import urlsplit
 
 from .translation import RULE_VERSION, TranslationConfig, TranslationError, TranslationManager
@@ -185,6 +186,7 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="在本机预览已生成的报告，按 Ctrl+C 停止。")
     parser.add_argument("directory", type=Path, help="报告目录、report.html，或论文 .tex 入口（预览当前目录的已有报告）")
     parser.add_argument("--port", type=int, default=0, help="监听端口，默认 0 表示自动选择")
+    parser.add_argument("--open-browser", action="store_true", help="启动预览后自动打开默认浏览器")
     parser.add_argument("--config", type=Path, help="项目配置文件，默认当前目录 .latex-review.toml；翻译设置覆盖用户全局默认值")
     parser.add_argument("--translation-cache-dir", type=Path, help="翻译缓存目录，默认报告目录同级的 translation-cache")
     args = parser.parse_args(argv)
@@ -207,8 +209,16 @@ def main(argv: list[str] | None = None) -> int:
     previous = signal.signal(signal.SIGTERM, stop)
     try:
         with server:
-            print(f"http://127.0.0.1:{server.server_port}/report.html", flush=True)
+            address = f"http://127.0.0.1:{server.server_port}/report.html"
+            print(address, flush=True)
             print("预览已启动；按 Ctrl+C 或发送终止信号停止。", file=sys.stderr, flush=True)
+            if args.open_browser:
+                try:
+                    opened = webbrowser.open(address)
+                except (OSError, webbrowser.Error):
+                    opened = False
+                if not opened:
+                    print("无法自动打开浏览器；请手动打开上述地址。", file=sys.stderr, flush=True)
             server.serve_forever(poll_interval=0.2)
     except KeyboardInterrupt:
         pass

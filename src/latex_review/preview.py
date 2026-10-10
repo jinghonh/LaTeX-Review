@@ -15,7 +15,7 @@ from .contract import Diagnostic, ReviewNode, SourceLocation
 from .structure import ParsedNode, ParsedProject, _argument, _masked, _quiet_plastex
 from .table_model import display_tables
 from .macros import expand_call
-from .text_diff import CITATION_COMMANDS, _without_comments, split_sentences
+from .text_diff import CITATION_COMMANDS, _without_comments, split_sentences, _math_end
 from .latex_commands import MATH_COMMANDS, REFERENCE_COMMANDS, TEXT_COMMANDS
 
 
@@ -49,7 +49,7 @@ def _anchor(side: str, node_id: str) -> str:
     return f"{side}-{node_id}"
 
 
-def _citation_html(keys: tuple[str, ...], project: ParsedProject, side: str, anchor: str = "") -> str:
+def _citation_html(keys: tuple[str, ...], project: ParsedProject, side: str, anchor: str = "", author_only: bool = False) -> str:
     parts = []
     by_id = project.by_id()
     for key in keys:
@@ -71,8 +71,16 @@ def _citation_html(keys: tuple[str, ...], project: ParsedProject, side: str, anc
                 explicit = re.match(r"\\bibitem\[([0-9]+)\]\s*\{", item.review.raw_latex)
                 if explicit:
                     label = explicit.group(1)
+        if author_only:
+            entry = project.bibliography.get(key)
+            if entry and entry.author:
+                authors = re.split(r"\s+and\s+", entry.author)
+                names = [author.split(",", 1)[0].strip() if "," in author else author.strip().split()[-1]
+                         for author in authors if author.strip()]
+                label = " and ".join(names)
         parts.append(f'<a href="#{_e(_anchor(side, target))}">{_e(label)}</a>' if target else _e(label))
-    return f'<span class="citation"{anchor}>[{", ".join(parts)}]</span>'
+    content = ", ".join(parts)
+    return f'<span class="citation"{anchor}>{content if author_only else "[" + content + "]"}</span>'
 
 
 def _missing_bibliography(key: str, project: ParsedProject, side: str, source: SourceLocation) -> Diagnostic:
@@ -145,6 +153,25 @@ def _math_preview(raw: str, project: ParsedProject, side: str, source: SourceLoc
 
 @lru_cache(maxsize=2048)
 def _parse_dom(raw: str):
+    # 正文解析只接收公式占位；公式原文由数学预览规则处理。
+    formulas = []
+    pieces = []
+    cursor = index = 0
+    mask = _masked(raw)
+    while index < len(raw):
+        opening = next((value for value in (r"\(", r"\[", "$$", "$")
+                        if mask.startswith(value, index)), None)
+        if opening:
+            closing = {r"\(": r"\)", r"\[": r"\]"}.get(opening, opening)
+            end = _math_end(mask, index, opening, closing)
+            if end:
+                pieces.extend((raw[cursor:index], opening + "x" + closing))
+                formulas.append(raw[index:end])
+                cursor = index = end
+                continue
+        index += 2 if mask[index] == "\\" else 1
+    pieces.append(raw[cursor:])
+    raw = "".join(pieces)
     if any(match.group(1) not in _INLINE_SAFE for match in re.finditer(r"\\([A-Za-z@]+)", raw)):
         raise ValueError("片段含未允许的宏，已显示占位")
     tex = TeX()
@@ -156,11 +183,22 @@ def _parse_dom(raw: str):
     for name in REFERENCE_COMMANDS:
         tex.ownerDocument.context.addGlobal(name, type(name, (Command,), {"args": "* key:str"}))
     tex.ownerDocument.context.addGlobal("sep", type("sep", (Command,), {"args": ""}))
+    for name in ("vfill", "footnotesize", "arraybackslash"):
+        tex.ownerDocument.context.addGlobal(name, type(name, (Command,), {"args": ""}))
+    tex.ownerDocument.context.addGlobal("bibliographystyle", type("bibliographystyle", (Command,), {"args": "style:str"}))
     tex.input("\\begin{document}\n" + raw + "\n\\end{document}")
     with _quiet_plastex() as quiet:
         document = tex.parse()
     if quiet.errors:
         raise ValueError(quiet.errors[0])
+    math_nodes = iter(formulas)
+    def restore(node):
+        if getattr(node, "nodeName", "") in {"math", "displaymath"}:
+            node.preview_raw = next(math_nodes, "")
+            return
+        for child in getattr(node, "childNodes", ()):
+            restore(child)
+    restore(document)
     return next((child for child in document.childNodes if getattr(child, "nodeName", "") == "document"), document)
 
 
@@ -171,7 +209,7 @@ def _dom_html(node: object, project: ParsedProject, side: str, inline: list[Pars
         return _e(str(node))
     if name == "sep":
         return " · "
-    if name in {"label", "centering", "hfill", "noindent"}:
+    if name in {"label", "centering", "hfill", "noindent", "vfill", "footnotesize", "arraybackslash", "bibliographystyle"}:
         return ""
     if name in {*CITATION_COMMANDS, *REFERENCE_COMMANDS, "math", "displaymath"}:
         kind = "citation" if name in CITATION_COMMANDS else "reference" if name in REFERENCE_COMMANDS else "inline_math"
@@ -179,7 +217,7 @@ def _dom_html(node: object, project: ParsedProject, side: str, inline: list[Pars
         index = cursors.get(kind, 0)
         item = candidates[index] if index < len(candidates) else None
         cursors[kind] = index + 1
-        raw = item.review.raw_latex if item else str(getattr(node, "source", ""))
+        raw = item.review.raw_latex if item else str(getattr(node, "preview_raw", getattr(node, "source", "")))
         anchor = f' id="{_e(_anchor(side, item.review.id))}" data-node-id="{_e(item.review.id)}"' if item else ""
         if kind == "inline_math":
             return f"<span{anchor}>{_math_preview(raw, project, side, item.review.source if item else SourceLocation(None, None, None, confidence=0, uncertainty_reason='公式来源不确定'), diagnostics, False)}</span>"
@@ -197,7 +235,7 @@ def _dom_html(node: object, project: ParsedProject, side: str, inline: list[Pars
                     diagnostic = _missing_bibliography(key, project, side, location)
                     if diagnostic not in diagnostics:
                         diagnostics.append(diagnostic)
-            return _citation_html(tuple(keys), project, side, anchor)
+            return _citation_html(tuple(keys), project, side, anchor, name == "citeauthor")
         key = keys[0].strip() if keys else ""
         target = project.labels.get(key)
         label = key
@@ -281,7 +319,7 @@ def _inline_html(raw: str, project: ParsedProject, side: str, inline: list[Parse
                         diagnostic = _missing_bibliography(key, project, side, item.review.source)
                         if diagnostic not in diagnostics:
                             diagnostics.append(diagnostic)
-                pieces.append(_citation_html(item.citations, project, side, anchor))
+                pieces.append(_citation_html(item.citations, project, side, anchor, bool(re.match(r"\\citeauthor(?![A-Za-z@])", item.review.raw_latex))))
             else:
                 key = item.references[0] if item.references else ""
                 target = project.labels.get(key)
@@ -523,6 +561,15 @@ def _body(node: ParsedNode, project: ParsedProject, side: str, by_id: dict[str, 
         return ((f'<p class="table-caption">{_inline_html(caption[0], project, side, caption_children, diagnostics, node.review.source, node.expanded_start + caption[1])}</p>' if caption else "")
                 + (table_html or '<p class="preview-unavailable">此处暂无法预览</p>')
                 + _embedded_fallbacks(children, side))
+    if kind == "bibliography" and not children and project.bibliography:
+        # 保持引用键预览口径；文献字段不写入阅读页面。
+        entries = []
+        cited = {key for item in project.nodes for key in item.citations}
+        for entry in project.bibliography.values():
+            if entry.key not in cited and "*" not in cited:
+                continue
+            entries.append(f'<li data-bib-key="{_e(entry.key)}">{_e(entry.key)}</li>')
+        return '<h3>参考文献</h3><ol>' + "".join(entries) + '</ol>'
     if kind == "bibliography":
         return '<h3>参考文献</h3>' + ("<ol>" + "".join(_render_node(child, project, side, by_id, diagnostics, figure_assets, sentence_highlights) for child in children) + "</ol>" if children else '<p class="preview-unavailable">此处暂无法预览</p>')
     if kind == "bibliography_entry":
@@ -530,6 +577,23 @@ def _body(node: ParsedNode, project: ParsedProject, side: str, by_id: dict[str, 
         base = node.expanded_start + len(node.review.raw_latex) - len(body)
         return f'<span>{_inline_html(body, project, side, children, diagnostics, node.review.source, base)}</span>'
     if kind == "fallback":
+        raw = node.review.raw_latex
+        quote = re.fullmatch(r"\\begin\{quote\}(.*?)\\end\{quote\}", raw, re.S)
+        if quote:
+            return '<blockquote>' + _inline_html(quote.group(1), project, side, diagnostics=diagnostics,
+                                                  source=node.review.source) + '</blockquote>'
+        algorithm = re.search(r"\\begin\{algorithmic\}(?:\[[^\]]*\])?(.*?)\\end\{algorithmic\}", raw, re.S)
+        if raw.startswith(r"\begin{algorithm}") and algorithm:
+            caption = _caption(raw)
+            steps = []
+            for match in re.finditer(r"\\(REQUIRE|ENSURE|STATE|RETURN)(?![A-Za-z@])(.*?)(?=\\(?:REQUIRE|ENSURE|STATE|RETURN)(?![A-Za-z@])|$)", algorithm.group(1), re.S):
+                label = {"REQUIRE": "Input: ", "ENSURE": "Output: ", "STATE": "", "RETURN": "Return: "}[match.group(1)]
+                steps.append('<li>' + label + _inline_html(match.group(2), project, side,
+                                                          diagnostics=diagnostics, source=node.review.source) + '</li>')
+            if steps and re.match(r"\s*\\(?:REQUIRE|ENSURE|STATE|RETURN)(?![A-Za-z@])", algorithm.group(1)):
+                title = _inline_html(caption[0], project, side, diagnostics=diagnostics,
+                                     source=node.review.source) if caption else "Algorithm"
+                return '<p><strong>' + title + '</strong></p><ol>' + "".join(steps) + '</ol>'
         return '<p class="preview-unavailable">此处暂无法预览</p>'
     if kind == "environment":
         return "".join(_render_node(child, project, side, by_id, diagnostics, figure_assets, sentence_highlights) for child in children)
@@ -624,7 +688,7 @@ figcaption,.table-caption{{font-style:italic}}.asset,.fallback-label{{color:#755
 <main>{_side(old, "old", "修改前", diagnostics, figure_assets, extra.get("old", ()), sentence_highlights)}{_side(new, "new", "修改后", diagnostics, figure_assets, extra.get("new", ()), sentence_highlights)}</main>
 <script>
 (function(){{
- window.MathJax={{startup:{{typeset:false}},tex:{{packages:{{'[+]':['ams','newcommand','boldsymbol']}}}}}};
+ window.MathJax={{loader:{{load:['[tex]/boldsymbol']}},startup:{{typeset:false}},tex:{{packages:{{'[+]':['ams','newcommand','boldsymbol']}}}}}};
  const status=document.getElementById('math-status');
  let settled=false;
  const formulas=Array.from(document.querySelectorAll('.math-tex'));
@@ -638,9 +702,10 @@ figcaption,.table-caption{{font-style:italic}}.asset,.fallback-label{{color:#755
  const timer=setTimeout(failed,10000);
  window.mathDependencyFailed=failed;
  window.mathDependencyReady=function(){{
-   if(!window.MathJax || !MathJax.startup || !MathJax.startup.promise || !MathJax.tex2chtmlPromise){{failed();return;}}
+   if(!window.MathJax || !MathJax.startup || !MathJax.startup.promise){{failed();return;}}
    MathJax.startup.promise.then(async function(){{
      if(settled)return;
+     if(!MathJax.tex2chtmlPromise){{failed();return;}}
      clearTimeout(timer);
      let errors=0;
      for(const node of formulas){{

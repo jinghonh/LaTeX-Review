@@ -63,6 +63,8 @@ def test_page_link_reveals_filtered_change_and_updates_preview(tmp_path, report_
             card = page.locator(f"#{change.id}")
             other_kind = "added" if change.kind != "added" else "removed"
             page.locator("#toggle-changes").click()
+            matching_category = card.get_attribute("data-categories").split()[0]
+            page.locator("#category-filter").select_option(matching_category)
             page.locator("#kind-filter").select_option(other_kind)
             assert card.is_hidden()
             page.locator('#close-changes').click()
@@ -70,6 +72,7 @@ def test_page_link_reveals_filtered_change_and_updates_preview(tmp_path, report_
             page.locator(f'.rendered-pages a[href="#{change.id}"]').first.click()
             assert card.is_visible()
             assert page.locator("#kind-filter").input_value() == "all"
+            assert page.locator("#category-filter").input_value() == matching_category
             assert page.evaluate("document.activeElement.classList.contains('change-jump')")
             assert page.locator("#jump-status").inner_text().strip()
             assert page.locator(".preview-side .is-highlighted").count() > 0

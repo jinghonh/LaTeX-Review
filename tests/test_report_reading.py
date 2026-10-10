@@ -100,6 +100,7 @@ def test_reading_inline_navigation_and_filters(reading_report, browser_page):
     page.locator('#category-filter').select_option('table')
     page.locator('.change-card:visible .change-jump').first.click()
     table_detail = page.locator('.inline-change[open]:visible').first
+    table_detail.locator('.inline-specific-changes > summary').click()
     table_detail.locator('.detail-jump').first.click()
     assert page.locator('.preview-side[data-side="new"] td.is-cell-highlighted').count() > 0
     assert table_detail.locator('.old-excerpt td.is-cell-highlighted').count() > 0
@@ -145,6 +146,49 @@ def assert_margin_notes_do_not_overlap(page):
     for previous, following in zip(boxes, boxes[1:]):
         assert following['top'] >= previous['bottom'] + 10
     assert not page.evaluate('document.documentElement.scrollWidth > innerWidth')
+
+
+@pytest.mark.parametrize('width', [824, 1280])
+def test_margin_comparison_stays_beside_paper_at_medium_width(sentence_report, browser_page, width):
+    page = browser_page
+    page.set_viewport_size({'width': width, 'height': 1000})
+    page.goto(sentence_report.html.as_uri())
+    page.locator('#next-change').click()
+    assert_margin_notes_do_not_overlap(page)
+    note = page.locator('.inline-change[open]')
+    assert note.evaluate('node => getComputedStyle(node).position') == 'absolute'
+    note.locator('.inline-full-context > summary').click()
+    page.wait_for_function('''() => {
+        const boxes = [...document.querySelectorAll('.inline-change')]
+            .filter(note => note.getClientRects().length).map(note => note.getBoundingClientRect());
+        return boxes.every((box, index) => !index || box.top >= boxes[index - 1].bottom + 10);
+    }''')
+    assert_margin_notes_do_not_overlap(page)
+    page.locator('#toggle-changes').click()
+    page.locator('#close-changes').click()
+    page.wait_for_function('document.body.classList.contains("margin-notes")')
+    assert_margin_notes_do_not_overlap(page)
+
+
+def test_unanchored_deletion_does_not_abort_margin_layout(tmp_path, browser_page):
+    for side, text in (('old', 'This paragraph was removed entirely.'), ('new', '')):
+        folder = tmp_path / side
+        folder.mkdir()
+        (folder / 'main.tex').write_text('\\begin{document}\n' + text + '\n\\end{document}')
+    with resolve_sources(entry='main.tex', old_dir=tmp_path / 'old', new_dir=tmp_path / 'new') as pair:
+        old, new = parse_project(pair.old.expand()), parse_project(pair.new.expand())
+        report = write_report(old, new, compare_projects(old, new), tmp_path / 'report', pdf_converter='')
+    page = browser_page
+    page.set_viewport_size({'width': 824, 'height': 1000})
+    errors = []
+    page.on('pageerror', lambda error: errors.append(str(error)))
+    page.goto(report.html.as_uri())
+    assert not errors
+    page.locator('#next-change').click()
+    note = page.locator('.inline-change[open]')
+    assert '新稿中没有可确定的对应位置。' in note.inner_text()
+    assert note.locator('.inline-specific-changes').get_attribute('open') is None
+    assert_margin_notes_do_not_overlap(page)
 
 
 def test_underlined_sentence_opens_matching_margin_comparison(sentence_report, browser_page):
@@ -233,11 +277,13 @@ def test_sentence_reveals_filtered_card_and_print_restores_flow(sentence_report,
     first = page.locator('.change-trigger').first
     detail = page.locator('#' + first.get_attribute('aria-controls'))
     page.locator('#toggle-changes').click()
+    page.locator('#category-filter').select_option('text')
     page.locator('#kind-filter').select_option('removed')
     assert detail.is_hidden()
     page.locator('#close-changes').click()
     first.click()
     assert page.locator('#kind-filter').input_value() == 'all'
+    assert page.locator('#category-filter').input_value() == 'all'
     assert detail.is_visible()
     assert detail.get_attribute('open') is not None
     assert_margin_notes_do_not_overlap(page)
@@ -279,6 +325,10 @@ def test_compact_comparison_preserves_changes_and_limits_context(tmp_path, brows
     page.locator('#next-change').click()
     note = page.locator('.inline-change[open]')
     assert note.locator('.diff-group').count() == groups
+    assert note.locator('.inline-specific-changes').get_attribute('open') is None
+    assert note.locator('.compact-diff').first.is_hidden()
+    note.locator('.inline-specific-changes > summary').click()
+    assert note.locator('.compact-diff').first.is_visible()
     assert note.locator('.inline-full-context').get_attribute('open') is None
     if removed is not None:
         assert note.locator('.diff-removed').all_text_contents() == removed
@@ -296,3 +346,28 @@ def test_compact_comparison_preserves_changes_and_limits_context(tmp_path, brows
     assert note.locator('.old-excerpt').is_visible()
     assert note.locator('.new-excerpt').is_visible()
     assert not errors
+
+
+@pytest.mark.parametrize('layout', ['reading', 'compare'])
+def test_navigation_stays_at_visible_ends_and_handles_empty_filter(sentence_report, browser_page, layout):
+    page = browser_page
+    page.goto(sentence_report.html.as_uri())
+    page.locator('#layout-mode').select_option(layout)
+    total = page.locator('.change-card').count()
+    page.locator('#previous-change').click()
+    assert page.locator('#current-change').inner_text().startswith(f'第 {total} /')
+    page.locator('#next-change').click()
+    assert page.locator('#current-change').inner_text().startswith(f'第 {total} /')
+    for _ in range(total):
+        page.locator('#previous-change').click()
+    assert page.locator('#current-change').inner_text().startswith('第 1 /')
+    page.locator('#previous-change').click()
+    assert page.locator('#current-change').inner_text().startswith('第 1 /')
+    if page.locator('#toggle-changes').get_attribute('aria-expanded') != 'true':
+        page.locator('#toggle-changes').click()
+    page.locator('#kind-filter').select_option('removed')
+    assert page.locator('.change-card:not([hidden])').count() == 0
+    page.locator('#next-change').click()
+    assert page.locator('#jump-status').inner_text() == '当前筛选没有变更。'
+    assert page.locator('#kind-filter').input_value() == 'removed'
+    assert page.locator('#current-change').inner_text() == '尚未选择变更'
