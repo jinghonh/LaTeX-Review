@@ -23,6 +23,7 @@ from .sources import SourceError, resolve_sources
 from .structure import parse_project
 from .macros import validate_macros
 from .visual import build_visual
+from .run_manifest import baseline, new_manifest, finish
 
 
 class ReviewArgumentParser(argparse.ArgumentParser):
@@ -263,6 +264,27 @@ def _known_output_after_config_error(args) -> Path | None:
     return target
 
 
+def _progress(message: str) -> None:
+    print(f"latex-review: {message}", file=sys.stderr, flush=True)
+
+
+def _source_recovery(code: str) -> None:
+    advice = {
+        "entry_missing": "检查入口文件是否存在。目录模式使用 --entry 指定相对入口。",
+        "entry_unreadable": "检查入口文件的读取权限后重新运行。",
+        "invalid_revision": "运行 git log --oneline 查看提交，再修正 --old 或 --new。",
+        "root_missing": "检查 --old-dir 和 --new-dir 指向的目录是否存在。",
+        "explicit_sources_required": "使用 --old-dir A --new-dir B --entry main.tex，或提供两个独立文件。",
+        "invalid_arguments": "运行 latex-review --help 查看对应来源模式的必填参数。",
+        "conflicting_modes": "选择 Git、双目录或双文件中的一种来源模式，再运行命令。",
+        "entry_outside_root": "把入口放在项目根目录内，并使用相对入口路径。",
+        "dependency_outside_root": "检查依赖路径，使依赖保持在项目根目录内。",
+        "source_changed": "等待文件保存完成，再重新运行审阅。",
+        "git_failed": "检查 Git 错误详情，并运行 git status 确认仓库状态。",
+    }
+    _progress("恢复操作：" + advice.get(code, "检查上述来源错误和文件读取权限后重新运行。"))
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = ReviewArgumentParser(prog="latex-review", description="比较论文并生成结构化审阅报告。",
                                   epilog="默认比较 Git HEAD 与磁盘工作区；仅显式 --compile 才运行 TeX。")
@@ -296,6 +318,8 @@ def main(argv: list[str] | None = None) -> int:
         return 0
     output = None
     output_ready = False
+    run = new_manifest()
+    active_stage = "sources"
     try:
         config = _config(Path(args.config).expanduser() if args.config else Path(".latex-review.toml"), bool(args.config))
         compile_config = config.get("compile", {})
@@ -334,13 +358,19 @@ def main(argv: list[str] | None = None) -> int:
         cache = ParseCache(cache_dir, enabled=not args.no_cache,
                            config={"config": {key: value for key, value in config.items() if key != "translation"}, "math": args.math or "mathjax",
                                    "comments": args.comments if args.comments is not None else config.get("diff", {}).get("comments", False)})
+        _progress("正在读取比较来源")
         with resolve_sources(**options, excluded_paths=(output, cache_dir, output.parent / "translation-cache"),
                              ignore_patterns=tuple(config.get("ignore", ()))) as pair:
+            _progress("正在展开两版来源")
             old_expanded, new_expanded = pair.old.expand(), pair.new.expand()
+            run["baselines"] = {"old": baseline(old_expanded), "new": baseline(new_expanded)}
+            run["stages"]["sources"] = "complete"
+            active_stage = "parse"
             macros = validate_macros(config.get("macros", {}))
             failures = []
             parsed = []
             for expanded in (old_expanded, new_expanded):
+                _progress("正在解析" + ("旧稿" if expanded.source.side == "old" else "新稿"))
                 try:
                     parsed.append(cache.parse(expanded, parser=lambda source: parse_project(source, macros=macros)))
                 except SourceError:
@@ -349,29 +379,39 @@ def main(argv: list[str] | None = None) -> int:
                     parsed.append(None)
                     failures.append((expanded.source.side, str(exc)))
             source_fallback = bool(failures or any(item and any(d.code == "plastex_parse_error" for d in item.diagnostics) for item in parsed))
+            run["stages"]["parse"] = "degraded" if source_fallback else "complete"
+            active_stage = "compare"
             comparison = None
             if not source_fallback:
                 comments = args.comments if args.comments is not None else config.get("diff", {}).get("comments", False)
+                _progress("正在比较结构化内容")
                 comparison = compare_projects(parsed[0], parsed[1], review_comments=comments)
+                run["stages"]["compare"] = "complete"
             statuses = None
             rendering = None
             compile_diagnostics: tuple[Diagnostic, ...] = ()
             if compile_enabled:
+                active_stage = "compile"
                 built = []
                 for source in (pair.old, pair.new):
                     if source.side == "old" and new_only:
                         built.append(skipped_side(output, engine))
                         continue
+                    _progress("正在编译" + ("旧稿" if source.side == "old" else "新稿"))
                     peer = pair.new if source.side == "old" else pair.old
                     status, issues = compile_side(source, output, engine=engine, timeout=timeout, sandbox=sandbox,
                                                   related_sources=(peer,))
                     built.append(status)
                     compile_diagnostics += issues
                 statuses = tuple(built)
+                _progress("正在生成编译页面预览")
                 rendering, visual_issues = build_visual(statuses[0], statuses[1], output,
                                                         comparison.document if comparison else None,
                                                         sources=(pair.old, pair.new))
                 compile_diagnostics += visual_issues
+                run["stages"]["compile"] = "degraded" if any(d.severity in {"warning", "error"} for d in compile_diagnostics) else "complete"
+            active_stage = "report"
+            _progress("正在生成内容预览并写入报告")
             if source_fallback:
                 report = write_source_fallback(old_expanded, new_expanded, output, parse_failures=failures,
                                                parsed=tuple(parsed), extra_diagnostics=compile_diagnostics,
@@ -381,17 +421,36 @@ def main(argv: list[str] | None = None) -> int:
                                       extra_diagnostics=compile_diagnostics,
                                       rendering=rendering, statuses=statuses)
             write_cache_metadata(output, cache.metadata())
+            run["stages"]["report"] = "degraded" if source_fallback else "complete"
+            run["degradation_reasons"] = [{"code": d.code, "severity": d.severity, "message": d.message}
+                                          for d in report.document.diagnostics
+                                          if d.rule_status is None and d.severity in {"warning", "error"}]
         print(report.html)
+        _progress(f"生成完成：{report.document.summary.changes} 项主变更；报告：{report.html}")
+        warnings = [d for d in report.document.diagnostics if d.severity in {"warning", "error"}]
+        if warnings:
+            _progress(f"需要检查 {len(warnings)} 条诊断；详情：{output / 'diagnostics.json'}")
+        if source_fallback:
+            _progress("恢复操作：检查结构解析诊断后重新生成；源码降级报告暂不支持全文搜索、审阅记录和续读。")
+        if any(d.code == "compile_failed" for d in compile_diagnostics):
+            _progress("恢复操作：查看 compiled/ 下的编译日志；确认 latexmk 和所选 TeX 引擎已安装，再修正编译错误。")
+        if any(d.code == "sandbox_unavailable" for d in compile_diagnostics):
+            _progress("恢复操作：检查沙箱诊断并修复本机隔离环境后重新运行。")
         result = 2 if any(d.rule_status is None and d.severity in {"warning", "error"}
                          for d in report.document.diagnostics) else 0
     except ConfigurationError as exc:
-        _record_failure(output if output_ready else _known_output_after_config_error(args),
-                        Diagnostic("configuration_error", "error", str(exc)))
+        if output_ready:
+            _record_failure(output, Diagnostic("configuration_error", "error", str(exc)))
+            run["stages"][active_stage] = "failed"
+            run["degradation_reasons"] = [{"code": "configuration_error", "message": str(exc)}]
+            finish(output, run, 64)
         print(f"latex-review: 配置错误：{exc}", file=sys.stderr)
+        _progress("恢复操作：检查错误中指出的配置文件或选项；运行 latex-review --help 查看用法。")
         return 64
     except SourceError as exc:
         if exc.code in {"invalid_arguments", "conflicting_modes"}:
             print(f"latex-review: 参数错误：{exc.message}", file=sys.stderr)
+            _source_recovery(exc.code)
             return 64
         if output_ready:
             unknown = SourceLocation(None, None, None, confidence=0, uncertainty_reason="来源无法读取")
@@ -399,30 +458,51 @@ def main(argv: list[str] | None = None) -> int:
                                                source_old=unknown if exc.side == "old" else None,
                                                source_new=unknown if exc.side == "new" else None))
         print(f"latex-review: 来源错误：{json.dumps(asdict(exc), ensure_ascii=False, sort_keys=True)}", file=sys.stderr)
+        _source_recovery(exc.code)
+        if output_ready:
+            run["stages"][active_stage] = "failed"
+            run["degradation_reasons"] = [{"code": exc.code, "message": exc.message}]
+            finish(output, run, 4)
         return 4
     except Exception as exc:
         if output_ready:
             _record_failure(output, Diagnostic("internal_error", "error", f"{type(exc).__name__}: {exc}"))
         print(f"latex-review: 内部错误：{type(exc).__name__}: {exc}", file=sys.stderr)
+        _progress("恢复操作：保留错误信息和 diagnostics.json，运行 latex-review --version，并向项目提交问题。")
+        if output_ready:
+            run["stages"][active_stage] = "failed"
+            run["degradation_reasons"] = [{"code": "internal_error", "message": str(exc)}]
+            finish(output, run, 8)
         return 8
+    finish(output, run, result)
     if args.upload:
         from .upload import UploadError, upload_report
         try:
             entry = options.get("entry") or options.get("new_file")
             if options.get("new_dir"):
                 entry = str(Path(options["new_dir"]) / entry)
-            print(f"已发布：{upload_report(output, Path(entry), config.get('translation'))}")
+            _progress("正在发布报告")
+            _progress(f"已发布：{upload_report(output, Path(entry), config.get('translation'))}")
+            run["stages"]["upload"] = "complete"
         except (UploadError, OSError, ValueError) as exc:
             print(f"latex-review: 上传失败，本地报告已保留：{exc}", file=sys.stderr)
+            _progress("恢复操作：检查 SSH 连接和 upload.toml；修复后重新发布，本地报告可继续阅读。")
             result = 16
+            run["stages"]["upload"] = "failed"
+            run["degradation_reasons"].append({"code": "upload_failed", "message": str(exc)})
     if args.open_browser:
         from .serve import main as preview
         preview_args = [str(output), "--open-browser"]
         if args.config:
             preview_args.extend(["--config", args.config])
+        run["stages"]["preview"] = "running"
+        finish(output, run, result)
         preview_result = preview(preview_args)
+        run["stages"]["preview"] = "failed" if preview_result else "complete"
         if preview_result:
+            finish(output, run, preview_result)
             return preview_result
+    finish(output, run, result)
     return result
 
 

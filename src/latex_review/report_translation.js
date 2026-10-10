@@ -68,6 +68,7 @@
     document.body.classList.toggle('bilingual-view', mode.value === 'bilingual');
     renderTranslatedMath();
     window.dispatchEvent(new Event('resize'));
+    document.dispatchEvent(new Event('review-translations-updated'));
   }
 
   function renderTranslatedMath() {

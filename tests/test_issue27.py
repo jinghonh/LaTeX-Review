@@ -212,7 +212,10 @@ def test_cli_macro_configuration_and_html_escaping(tmp_path):
     failed = subprocess.run(command, cwd=tmp_path, env=env, capture_output=True, text=True)
     assert failed.returncode == 64
     diagnostics = json.loads(output.joinpath("diagnostics.json").read_text(encoding="utf-8"))["diagnostics"]
-    assert diagnostics[0]["code"] == "configuration_error" and "占位符" in diagnostics[0]["message"]
+    assert diagnostics == []
+    assert output.joinpath("report.html").read_text(encoding="utf-8") == html
+    assert "占位符" in failed.stderr
+    assert json.loads(output.joinpath("run.json").read_text())["exit_code"] == 0
 
 
 def test_macro_placeholder_in_inline_and_display_math(tmp_path):

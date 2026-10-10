@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, replace
+from dataclasses import asdict, dataclass, replace
+from hashlib import sha256
 from html import escape
 from importlib.resources import files
 import json
@@ -277,11 +278,13 @@ def _pdf_preview(source: Path, directory: Path, relative: Path,
     return None, "；".join(reasons)
 
 
-def _figure_assets(old: ParsedProject, new: ParsedProject, directory: Path,
+def _figure_assets(old: ParsedProject | None, new: ParsedProject, directory: Path,
                    converters: tuple[tuple[str, str], ...], timeout: float) -> tuple[dict[tuple[str, str], str], list[Diagnostic]]:
     html: dict[tuple[str, str], str] = {}
     diagnostics: list[Diagnostic] = []
     for side, project in (("old", old), ("new", new)):
+        if project is None:
+            continue
         for node in project.nodes:
             if node.review.type != "figure" or not node.assets:
                 continue
@@ -528,6 +531,20 @@ def _report_html(document: ReviewDocument, preview_html: str, old: ParsedProject
                                    for unit in (translation_units if translation_units is not None else build_units(document, old, new))],
                                    ensure_ascii=False).replace("<", "\\u003c")
     translation_script = files("latex_review").joinpath("report_translation.js").read_text(encoding="utf-8")
+    from .cache import dependency_fingerprints
+    fingerprint_data = {
+        "entry": document.entry,
+        "dependencies": [dependency_fingerprints(project.expanded) for project in (old, new)],
+        "changes": [asdict(change) for change in document.changes],
+        "nodes": [[asdict(node) for node in project.review_nodes] for project in (old, new)],
+    }
+    fingerprint = sha256(json.dumps(fingerprint_data, ensure_ascii=False, sort_keys=True).encode()).hexdigest()
+    search_nodes = [{"side": side, "id": node.review.id,
+                     "section": list(node.review.section_path),
+                     "citations": list(node.citations)}
+                    for side, project in (("old", old), ("new", new)) for node in project.nodes]
+    reader_data = json.dumps({"fingerprint": fingerprint, "nodes": search_nodes}, ensure_ascii=False).replace("<", "\\u003c")
+    reader_script = files("latex_review").joinpath("report_reader.js").read_text(encoding="utf-8")
     severity_labels = {"error": "错误", "warning": "提醒", "info": "说明"}
     diagnostics_html = "".join(
         f'<li><strong>{_e(severity_labels.get(item.severity, item.severity))}</strong> · {_e(item.message)}</li>'
@@ -547,6 +564,20 @@ def _report_html(document: ReviewDocument, preview_html: str, old: ParsedProject
 <p id="math-status" role="status">正在加载在线公式排版。</p>
 </div></details></header>
 {_report_controls(counts.changes)}
+<section class="reader-tools" aria-label="搜索与审阅记录">
+<details id="reader-tools"><summary>搜索与审阅记录 <span id="review-progress" role="status"></span></summary>
+<div class="reader-grid">
+<div class="reader-search"><label for="report-search">搜索两版全文、引用键和已有译文</label>
+<input type="search" id="report-search" placeholder="输入文字或引用键">
+<label for="section-filter">章节</label><select id="section-filter"><option value="all">全部章节</option></select>
+<p id="search-status" role="status">输入文字，或选择章节。</p><ol id="search-results"></ol></div>
+<div class="reader-review"><label for="review-filter">审阅筛选</label><select id="review-filter"><option value="all">全部状态</option><option value="unreviewed">未审阅</option><option value="reviewed">已审阅</option><option value="pending">待处理</option></select>
+<p id="review-current">先选择一项主变更。</p>
+<label for="review-state">当前变更状态</label><select id="review-state" disabled><option value="unreviewed">未审阅</option><option value="reviewed">已审阅</option><option value="pending">待处理</option></select>
+<label for="review-note">当前变更备注</label><textarea id="review-note" rows="3" maxlength="10000" disabled></textarea>
+<div class="review-backup"><button type="button" id="review-export">导出审阅备份</button><label class="backup-import">导入审阅备份<input type="file" id="review-import" accept="application/json,.json"></label></div>
+<p id="review-storage-status" role="status">审阅记录保存在当前浏览器；可导出 JSON 备份。</p>
+</div></div></details></section>
 <main>{main.group(1)}<section class="changes-side" aria-label="变更" id="changes-side"><div class="directory-heading"><h2>变更目录</h2><button type="button" id="close-changes" aria-label="收起变更目录">收起</button></div>
 <div class="filters"><label>操作 <select id="kind-filter"><option value="all">全部</option><option value="added">新增</option><option value="removed">删除</option><option value="modified">修改</option><option value="moved">移动</option></select></label>
 <label>类别 <select id="category-filter"><option value="all">全部</option><option value="text">正文</option><option value="equation">公式</option><option value="figure">图</option><option value="table">表格</option><option value="citation">引用</option><option value="comment">注释</option><option value="move">移动</option></select></label></div>
@@ -555,9 +586,11 @@ def _report_html(document: ReviewDocument, preview_html: str, old: ParsedProject
 <ul>{diagnostics_html}</ul>
 </details>
 {('<details class="report-supplement" id="compiled-pages"><summary>编译页面与视觉差异</summary>' + _rendering_html(rendering, statuses) + '</details>') if rendering is not None and statuses is not None else ''}
+<script type="application/json" id="reader-data">{reader_data}</script>
 <script>window.reviewNodePairs={pairs_json};</script><script>{interaction}</script>
 <script type="application/json" id="translation-units">{translation_units}</script>
 <script type="application/json" id="translation-results">{{}}</script>
+<script>{reader_script}</script>
 <script>{translation_script}</script>
 {scripts.group(1)}
 </body></html>'''
@@ -709,6 +742,7 @@ def write_source_fallback(old: ExpandedProject, new: ExpandedProject, output_dir
 <style>body{font:16px/1.5 system-ui;margin:1rem;color:#17212d}main{display:grid;grid-template-columns:1fr 1fr;gap:1rem}
 section{min-width:0;border:1px solid #adb7c4;padding:1rem}.old{background:#fce2df}.new{background:#d8f0df}
 @media(max-width:800px){main{grid-template-columns:1fr}}</style></head><body><h1>内容预览</h1>
+<p>结构解析失败；全文搜索、审阅记录和续读暂不可用。请检查 diagnostics.json 后重新生成报告。</p>
 <main><section class="old"><h2>修改前</h2><p>此处暂无法预览</p></section>
 <section class="new"><h2>修改后</h2><p>此处暂无法预览</p></section></main>"""
             + _rendering_html(rendering, statuses) + '</body></html>')

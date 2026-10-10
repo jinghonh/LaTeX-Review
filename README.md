@@ -43,4 +43,18 @@ GitHub 拉取请求的报告产物与评论发布须由仓库维护者按[工作
 
 解析缓存默认放在报告目录旁，可用 `--cache-dir` 指定位置，`--no-cache` 绕过，`--clear-cache` 清理。缓存元信息包含两侧命中状态、依赖内容指纹和依赖关系；修改章节或宏会重新解析受影响的比较版本，图片或文献内容变化会更新审阅依赖指纹。详见[缓存与资源变化](Docs/cache-assets.md)。
 
+智能体可用 `latex-review-query` 精简查询已有报告，用 `latex-review-check-scope` 核对文件修改范围。生成命令自动写入 `run.json`；`latex-review-record-acceptance` 可另行记录浏览器验收声明及证据路径。命令和数据含义见[智能体接口](Docs/agent-tools.md)。无效参数或配置在输出准备前不会覆盖旧报告；读取清单时仍须核对本次进程退出码。
+
 契约结构、兼容性和使用样例见 [公共数据契约](Docs/data-contract.md)。解析和预览接口见 [结构解析与内容预览](Docs/structure-preview.md)，比较接口见[结构化内容差异](Docs/structured-content.md)。同路径图片内容变化按文件字节指纹产生图明细；可确定的表格单元格和行列变化会标记坐标。运行时依赖包含 `jsonschema` 和 `plasTeX`；`pytest` 属于可选测试依赖。
+
+## 当前论文持续预览
+
+运行 `latex-review-live main.tex --open-browser`，启动只读取当前论文的本机 HTML 预览。服务不读取 Git，不比较历史版本，也不生成差异报告。保存正文、章节、图片或参考文献后，服务自动更新页面。按 Ctrl+C 停止服务。
+
+```sh
+latex-review-live main.tex --open-browser
+# 入口位于子目录时，显式指定论文项目根目录：
+latex-review-live tex/main.tex --root . --open-browser
+```
+
+默认产物目录为论文项目内的 `.latex-review/live`，可用 `--output` 指定独立目录。页面展示预览诊断；更新失败时保留上次成功的页面。公式使用在线 MathJax。HTML 内容预览不保证与 PDF 排版一致。此命令无需安装 TeX；PDF 图片缺少转换工具时会显示资源链接及诊断。服务仅监听 `127.0.0.1`。

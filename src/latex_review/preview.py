@@ -635,13 +635,15 @@ def _side(project: ParsedProject, side: str, title: str, diagnostics: list[Diagn
     return f'<section class="preview-side" aria-label="{_e(title)}" data-side="{side}"><h2>{_e(title)}</h2>{content}</section>'
 
 
-def render_preview(old: ParsedProject, new: ParsedProject, *,
+def render_preview(old: ParsedProject | None, new: ParsedProject, *,
                    figure_assets: Mapping[tuple[str, str], str] | None = None,
                    extra_nodes: Mapping[str, tuple[ReviewNode, ...]] | None = None,
                    sentence_highlights: Mapping[tuple[str, str], frozenset[int]] | None = None) -> PreviewResult:
     """返回双侧连续阅读视图与公共诊断，不写文件。"""
-    diagnostics = [*old.diagnostics, *new.diagnostics]
+    diagnostics = [*(old.diagnostics if old else ()), *new.diagnostics]
     for project, side in ((old, "old"), (new, "new")):
+        if project is None:
+            continue
         by_id = project.by_id()
         seen_citations: set[str] = set()
         for node in project.nodes:
@@ -666,7 +668,7 @@ def render_preview(old: ParsedProject, new: ParsedProject, *,
 *{{box-sizing:border-box}}body{{margin:0;color:#1f2937;background:#f5f4f0;font:16px/1.7 system-ui,sans-serif}}
 header{{padding:1rem 1.5rem;background:#fff;border-bottom:1px solid #d8d5ca}}header h1{{margin:0;font-size:1.25rem}}
 .notice{{margin:.4rem 0 0;color:#75531e}}#math-status{{margin:.45rem 0 0;color:#8b3d24}}
-main{{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:1rem;padding:1rem}}
+main{{display:grid;grid-template-columns:repeat({2 if old else 1},minmax(0,1fr));gap:1rem;padding:1rem}}
 .preview-side{{background:#fff;border:1px solid #ddd8cb;padding:1.5rem;min-width:0;max-height:calc(100vh - 9rem);overflow:auto}}
 .preview-side h2{{margin:0 0 1rem;border-bottom:1px solid #ddd8cb}}
 .review-node{{scroll-margin-top:1rem}}.review-node:target{{outline:2px solid #996e26;outline-offset:3px}}
@@ -685,7 +687,7 @@ figcaption,.table-caption{{font-style:italic}}.asset,.fallback-label{{color:#755
 </style></head><body>
 <header><h1>LaTeX 内容预览</h1><p class="notice">用于审阅正文内容，不代表最终编译版式。</p>
 <p id="math-status" role="status">正在加载在线公式排版。</p></header>
-<main>{_side(old, "old", "修改前", diagnostics, figure_assets, extra.get("old", ()), sentence_highlights)}{_side(new, "new", "修改后", diagnostics, figure_assets, extra.get("new", ()), sentence_highlights)}</main>
+<main>{_side(old, "old", "修改前", diagnostics, figure_assets, extra.get("old", ()), sentence_highlights) if old else ""}{_side(new, "new", "修改后" if old else "当前论文", diagnostics, figure_assets, extra.get("new", ()), sentence_highlights)}</main>
 <script>
 (function(){{
  window.MathJax={{loader:{{load:['[tex]/boldsymbol']}},startup:{{typeset:false}},tex:{{packages:{{'[+]':['ams','newcommand','boldsymbol']}}}}}};

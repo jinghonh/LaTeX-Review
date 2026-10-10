@@ -31,6 +31,7 @@
   function readingView() { return layout && layout.value === 'reading'; }
   function updateSelection(card) {
     selected = cards.indexOf(card);
+    document.dispatchEvent(new CustomEvent('review-selection', {detail: card?.id || null}));
     if (!layout) return;
     cards.forEach(item => item.setAttribute('aria-current', String(item === card)));
     inlineChanges.forEach((detail, item) => detail.setAttribute('aria-current', String(item === card)));
@@ -185,7 +186,9 @@
     let shown = 0;
     cards.forEach(card => {
       const visible = (kind.value === 'all' || card.dataset.kind === kind.value) &&
-        (category.value === 'all' || card.dataset.categories.split(' ').includes(category.value));
+        (category.value === 'all' || card.dataset.categories.split(' ').includes(category.value)) &&
+        (!document.getElementById('review-filter') || document.getElementById('review-filter').value === 'all' ||
+         (card.dataset.reviewState || 'unreviewed') === document.getElementById('review-filter').value);
       card.hidden = !visible; if (visible) shown++;
     });
     count.textContent = '显示 ' + shown + ' / ' + cards.length + ' 项主变更';
@@ -854,6 +857,35 @@
       });
   }));
   window.reviewNavigation = Object.freeze({
-    sentence(originalId) { navigate(sentenceTargets.get(originalId), 'translation'); }
+    sentence(originalId) { navigate(sentenceTargets.get(originalId), 'translation'); },
+    filter,
+    selected() { return cards[selected]?.id || null; },
+    select(id) {
+      const card = cards.find(item => item.id === id);
+      if (card && !card.hidden) navigate(card.querySelector('.change-jump'), 'step');
+    },
+    node(side, id, translated = false) {
+      const target = document.getElementById(side + '-' + id);
+      if (!target) return;
+      if (side === 'old' && readingView()) {
+        // Switch layout without the mode handler navigating to an unrelated selected change.
+        updateSelection(null);
+        layout.value = 'compare'; layout.dispatchEvent(new Event('change'));
+      }
+      if (translated) {
+        const translationMode = document.getElementById('translation-mode');
+        translationMode.value = 'bilingual'; translationMode.dispatchEvent(new Event('change'));
+      }
+      context(); revealAncestors(target, side);
+      for (let parent = target.parentElement; parent; parent = parent.parentElement)
+        if (parent.tagName === 'DETAILS') parent.open = true;
+      document.querySelectorAll('.search-target').forEach(node => node.classList.remove('search-target'));
+      target.classList.add('search-target');
+      mutedUntil = performance.now() + 500;
+      target.scrollIntoView({block: 'center', behavior: 'auto'});
+      target.tabIndex = -1; target.focus({preventScroll: true});
+      status.textContent = '已定位' + (side === 'old' ? '修改前' : '修改后') + '内容；保留当前变更筛选。';
+    }
+
   });
 })();

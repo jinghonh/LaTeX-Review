@@ -88,12 +88,13 @@ const document = {
   getElementById: id => ids.get(id),
   createElement: () => new Element('', 'side-empty'),
   addEventListener() {},
+  dispatchEvent() {},
 };
 const window = {reviewNodePairs: [['section-old','section-new'], ...Array.from({length:6}, (_,i)=>['p'+(i+1)+'-old','p'+(i+1)+'-new'])], matchMedia:()=>({matches:false})};
 let script = fs.readFileSync(process.argv[2], 'utf8');
 script = script.replace(/\}\)\(\);\s*$/, 'window.hooks={context,filter,nearestAnchor,align,jump};})();');
 let now = 1000;
-vm.runInNewContext(script, {document, window, navigator:{}, performance:{now:()=>now}, requestAnimationFrame: fn=>fn(), console});
+vm.runInNewContext(script, {CustomEvent: class { constructor(type, init) { this.type = type; this.detail = init.detail; } }, document, window, navigator:{}, performance:{now:()=>now}, requestAnimationFrame: fn=>fn(), console});
 
 ids.get('reading-mode').value = 'context';
 window.hooks.context();
