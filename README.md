@@ -57,4 +57,6 @@ latex-review-live main.tex --open-browser
 latex-review-live tex/main.tex --root . --open-browser
 ```
 
+持续预览与审阅报告共用字体、配色、页头、工具栏和正文样式。持续预览使用居中正文；工具栏提供可收起的搜索与章节导航、刷新状态和诊断入口。自动更新尽量保留当前章节、滚动位置、搜索词和面板展开状态。
+
 默认产物目录为论文项目内的 `.latex-review/live`，可用 `--output` 指定独立目录。页面展示预览诊断；更新失败时保留上次成功的页面。公式使用在线 MathJax。HTML 内容预览不保证与 PDF 排版一致。此命令无需安装 TeX；PDF 图片缺少转换工具时会显示资源链接及诊断。服务仅监听 `127.0.0.1`。

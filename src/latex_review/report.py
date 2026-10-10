@@ -25,7 +25,7 @@ from .contract import (ChangeDetail, Diagnostic, DiagnosticsDocument, PrimaryCha
 from .preview import _INLINE_SAFE, _UNSAFE_MATH, _inline_html, render_preview
 from .rules import check_rules
 from .structure import ParsedNode, ParsedProject
-from .sources import ExpandedProject
+from .sources import ExpandedProject, ProjectSource
 from .table_model import display_tables
 from .text_diff import split_sentences
 from .latex_commands import MATH_COMMANDS
@@ -234,6 +234,14 @@ def _graphic_page(raw: str, asset: str, occurrence: int = 0) -> tuple[int | None
             return None, f"无效的 PDF 页码：{page}"
         return int(page), None
     return (None, "图像调用与资源数量不符") if occurrence else (1, None)
+
+
+def _pdf_converters(sources: ProjectSource | tuple[ProjectSource, ...],
+                    directory: Path) -> tuple[tuple[str, str], ...]:
+    from .compilation import _program, _safe_path
+    safe_path, forbidden = _safe_path(sources, directory)
+    return tuple((name, found) for name in ("pdftoppm", "gs", "sips")
+                 if (found := _program(name, safe_path, forbidden)))
 
 
 def _pdf_preview(source: Path, directory: Path, relative: Path,
@@ -612,10 +620,7 @@ def write_report(old: ParsedProject, new: ParsedProject, comparison: ComparisonR
     directory = requested_directory.resolve()
     directory.mkdir(parents=True, exist_ok=True)
     if pdf_converter is None:
-        from .compilation import _program, _safe_path
-        safe_path, forbidden = _safe_path((old.expanded.source, new.expanded.source), directory)
-        converters = tuple((name, found) for name in ("pdftoppm", "gs", "sips")
-                           if (found := _program(name, safe_path, forbidden)))
+        converters = _pdf_converters((old.expanded.source, new.expanded.source), directory)
     else:
         converters = (("pdftoppm", pdf_converter),) if pdf_converter else ()
     figure_html, asset_diagnostics = _figure_assets(old, new, directory, converters, conversion_timeout)

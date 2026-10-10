@@ -5,8 +5,10 @@ import argparse
 from functools import partial
 from hashlib import sha256
 from html import escape
+from importlib.resources import files
 import json
 import os
+import re
 from pathlib import Path
 import sys
 from threading import Thread
@@ -15,30 +17,15 @@ import webbrowser
 
 from .contract import ComparisonSource
 from .preview import render_preview
-from .report import _figure_assets
+from .report import _figure_assets, _pdf_converters
 from .serve import ReportHandler, ReportServer
 from .sources import ProjectSource, SourceError
 from .structure import parse_project
 
 
-_RELOAD = '''<script>
-let revision = LIVE_REVISION;
-async function check() {
-  try {
-    const state = await (await fetch('live-status.json', {cache:'no-store'})).json();
-    document.getElementById('live-status').textContent = state.message;
-    if (revision !== null && state.revision !== revision) {
-      sessionStorage.setItem('latex-live-scroll', String(window.scrollY));
-      location.reload();
-    }
-    revision = state.revision;
-  } catch (_) { document.getElementById('live-status').textContent = '预览服务连接中断。'; }
-}
-window.addEventListener('load', () => {
-  window.scrollTo(0, Number(sessionStorage.getItem('latex-live-scroll') || 0));
-});
-check(); setInterval(check, 1000);
-</script>'''
+def _reader_script(revision: int) -> str:
+    script = files('latex_review').joinpath('live_reader.js').read_text(encoding='utf-8')
+    return '<script>' + script.replace('LIVE_REVISION', str(revision)) + '</script>'
 
 
 def fingerprint(root: Path, output: Path) -> str:
@@ -67,14 +54,35 @@ def _write(path: Path, content: str) -> None:
 
 def build(source: ProjectSource, output: Path, revision: int = 1) -> list[str]:
     project = parse_project(source.expand())
-    assets, diagnostics = _figure_assets(None, project, output, (), 15)
+    assets, diagnostics = _figure_assets(None, project, output, _pdf_converters(source, output), 15)
     preview = render_preview(None, project, figure_assets=assets)
     messages = [item.message for item in (*preview.diagnostics, *diagnostics)]
-    notice = '<style>.preview-side{max-height:none;overflow:visible}img{max-width:100%;height:auto}</style><p id="live-status" role="status">持续预览已启动。</p>'
-    if messages:
-        notice += '<details><summary>预览诊断</summary><ul>' + ''.join(
-            '<li>' + escape(message) + '</li>' for message in messages) + '</ul></details>'
-    html = preview.html.replace('</header>', notice + '</header>').replace('</body>', _RELOAD.replace('LIVE_REVISION', str(revision)) + '</body>')
+    style = files('latex_review').joinpath('report.css').read_text(encoding='utf-8')
+    diagnostic_items = ''.join('<li>' + escape(message) + '</li>' for message in messages)
+    header = f'''<header class="report-header">
+<div class="report-identity"><div class="report-eyebrow"><span class="report-mark">LaTeX</span>
+<span>论文内容预览</span><span class="report-edition">持续预览</span></div>
+<p class="report-entry">{escape(source.entry)}</p>
+<div class="report-versions"><span class="version-chip version-new"><span>来源</span><strong>当前磁盘论文</strong></span></div></div>
+<details class="report-help"><summary>预览说明</summary><div>
+<p>内容预览不代表最终编译版式。保存论文后自动更新。</p>
+<p id="math-status" role="status">正在加载在线公式排版。</p></div></details></header>
+<section class="report-controls live-controls" aria-label="持续预览工具栏">
+<details id="live-navigation"><summary>搜索与章节导航</summary><div class="live-navigation-panel">
+<label for="live-search">搜索当前论文</label><input type="search" id="live-search" placeholder="输入文字">
+<p id="live-search-status" role="status"></p><ol id="live-results"></ol>
+<label for="live-sections">章节</label><select id="live-sections"><option value="">选择章节</option></select>
+</div></details><p id="live-status" role="status">持续预览已启动。</p>
+<a href="#live-diagnostics">预览诊断 · {len(messages)}</a></section>'''
+    supplement = ('<details class="report-supplement" id="live-diagnostics"><summary>预览诊断 · '
+                  + str(len(messages)) + '</summary><ul>'
+                  + (diagnostic_items or '<li>没有额外诊断。</li>') + '</ul></details>')
+    html = preview.html.replace('</style>', style + '</style>', 1)
+    html = html.replace('<body>', '<body class="reading-view live-view">', 1)
+    html = html.replace('<title>LaTeX 内容预览</title>', '<title>当前论文持续预览 · ' + escape(source.entry) + '</title>', 1)
+    html = re.sub(r'<header>.*?</header>', lambda _: header, html, count=1, flags=re.S)
+    html = html.replace('</main>', '</main>' + supplement, 1)
+    html = html.replace('</body>', _reader_script(revision) + '</body>')
     _write(output / 'report.html', html)
     return messages
 
@@ -95,7 +103,7 @@ def main(argv: list[str] | None = None) -> int:
     output.mkdir(parents=True, exist_ok=True)
     _write(output / 'report.html', '<!doctype html><html lang="zh-CN"><meta charset="utf-8">'
            '<title>当前论文持续预览</title><p id="live-status">正在读取当前论文。</p>'
-           + _RELOAD.replace('LIVE_REVISION', '0') + '</html>')
+           + _reader_script(0) + '</html>')
     _write(output / 'live-status.json', json.dumps({'revision': 0, 'message': '正在读取当前论文。'}))
     server = ReportServer(('127.0.0.1', 0), partial(ReportHandler, directory=str(output)))
     server.translation_token = ''

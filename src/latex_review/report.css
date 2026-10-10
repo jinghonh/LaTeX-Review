@@ -1228,3 +1228,42 @@ main {
 .change-review-editor { display:grid; gap:6px; padding-top:12px; margin-top:12px; border-top:1px solid var(--line); }
 .change-review-editor select,.change-review-editor textarea { width:100%; box-sizing:border-box; font:12px/1.5 var(--ui); color:var(--ink); padding:6px 8px; background:var(--paper); border:1px solid var(--line); border-radius:4px; }
 .reader-tools :focus-visible,.change-review-editor :focus-visible { outline:2px solid var(--accent); outline-offset:2px; }
+
+/* Current-paper preview uses the same paper and controls as the review report. */
+.live-controls {
+  grid-template-columns:auto minmax(0,1fr) auto;
+}
+.live-controls #live-status { margin:0; color:var(--muted); }
+.live-controls>details { position:relative; }
+.live-controls summary { padding:6px 0; }
+.live-navigation-panel {
+  position:absolute;
+  top:100%;
+  left:0;
+  width:min(480px,calc(100vw - 32px));
+  max-height:65vh;
+  overflow:auto;
+  padding:20px;
+  background:var(--paper);
+  border:1px solid var(--line);
+  box-shadow:0 12px 36px #26352a15;
+}
+.live-navigation-panel label { display:block; margin-bottom:6px; }
+.live-navigation-panel input,.live-navigation-panel select {
+  width:100%;
+  padding:8px;
+  border:1px solid var(--line);
+  background:var(--paper);
+  color:var(--ink);
+  font:inherit;
+}
+#live-results { padding-left:20px; }
+#live-results button { text-align:left; width:100%; }
+.live-view img { max-width:100%; height:auto; }
+.live-view #live-diagnostics { scroll-margin-top:110px; }
+.live-view .review-node:focus { outline:2px solid var(--accent); outline-offset:3px; }
+@media(max-width:800px) {
+  .live-controls { grid-template-columns:minmax(0,1fr) auto; }
+  .live-controls #live-status { grid-column:1 / -1; grid-row:2; }
+  .live-controls>a { grid-column:2; grid-row:1; }
+}

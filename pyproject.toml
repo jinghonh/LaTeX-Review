@@ -25,7 +25,7 @@ latex-review-record-acceptance = "latex_review.agent_tools:acceptance_main"
 where = ["src"]
 
 [tool.setuptools.package-data]
-latex_review = ["schemas/*.json", "report_interaction.js", "report_reader.js", "report_translation.js", "report.css"]
+latex_review = ["schemas/*.json", "report_interaction.js", "report_reader.js", "report_translation.js", "report.css", "live_reader.js"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

@@ -16,7 +16,7 @@ def test_current_preview_updates_without_old_version(tmp_path):
     assert 'Hello current.' in html
     assert '当前论文' in html
     assert '修改前' not in html
-    assert 'data-side="old"' not in html
+    assert '<section class="preview-side" aria-label="修改前"' not in html
     assert 'live-status.json' in html
     entry.write_text(entry.read_text().replace('Hello current.', 'Updated current.'))
     build(source, output, 2)
@@ -42,3 +42,122 @@ def test_fingerprint_tracks_dependencies_and_ignores_output(tmp_path):
     assert fingerprint(tmp_path, output) != added
     chapter.unlink()
     assert fingerprint(tmp_path, output) == initial
+
+
+def test_live_navigation_and_refresh_preserve_reading_state(tmp_path):
+    """Exercise real reloads, section deletion, and narrow-screen controls."""
+    import json
+    import os
+    from functools import partial
+    from threading import Thread
+
+    import pytest
+
+    from latex_review.serve import ReportHandler, ReportServer
+
+    api = pytest.importorskip('playwright.sync_api')
+    entry = tmp_path / 'main.tex'
+    paragraphs = '\n\n'.join(f'Paragraph {index}. Reading text for the current paper.' for index in range(25))
+    original = ('\\documentclass{article}\\begin{document}\\section{First}\n' + paragraphs
+                + '\n\\section{Second}\nTarget passage for search.\n\n' + paragraphs
+                + '\n\\section{Third}\nFinal passage.\\end{document}')
+    entry.write_text(original)
+    output = tmp_path / 'preview'
+    output.mkdir()
+    source = ProjectSource('new', tmp_path, 'main.tex', ComparisonSource('directory', str(tmp_path)))
+    build(source, output)
+    (output / 'live-status.json').write_text(json.dumps({'revision': 1, 'message': 'Ready'}))
+    server = ReportServer(('127.0.0.1', 0), partial(ReportHandler, directory=str(output)))
+    thread = Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        with api.sync_playwright() as playwright:
+            try:
+                browser = playwright.chromium.launch(executable_path=os.environ.get('LATEX_REVIEW_BROWSER'))
+            except api.Error as exc:
+                pytest.skip(f'浏览器运行环境不可用：{exc}')
+            try:
+                page = browser.new_page(viewport={'width': 1280, 'height': 900})
+                errors = []
+                page.on('pageerror', lambda error: errors.append(str(error)))
+                page.route('https://**', lambda route: route.abort())
+                page.goto(f'http://127.0.0.1:{server.server_port}/report.html')
+                paper = page.locator('.preview-side')
+                assert paper.count() == 1
+                assert page.evaluate('getComputedStyle(document.querySelector(".preview-side")).fontFamily.includes("Iowan")')
+                box = paper.bounding_box()
+                assert abs(box['x'] + box['width'] / 2 - 640) < 1
+                page.locator('#live-navigation>summary').click()
+                page.locator('#live-search').fill('Target passage')
+                assert page.locator('#live-results button').count() == 1
+                page.locator('#live-results button').click()
+                assert page.evaluate('scrollY') > 0
+                second = page.locator('.node-section').nth(1)
+                offset = second.bounding_box()['y']
+                entry.write_text(original.replace('Target passage for search.', 'Target passage updated.'))
+                build(source, output, 2)
+                (output / 'live-status.json').write_text(json.dumps({'revision': 2, 'message': 'Updated'}))
+                page.wait_for_function('document.querySelector(".preview-side").textContent.includes("Target passage updated.")')
+                page.wait_for_load_state('load')
+                assert page.locator('#live-search').input_value() == 'Target passage'
+                assert page.locator('#live-navigation').get_attribute('open') is not None
+                assert abs(page.locator('.node-section').nth(1).bounding_box()['y'] - offset) < 3
+                # The saved section name survives earlier insertions that change node IDs.
+                entry.write_text(entry.read_text().replace('\\section{First}', '\\section{Inserted}\nNew material.\n\\section{First}'))
+                build(source, output, 3)
+                (output / 'live-status.json').write_text(json.dumps({'revision': 3, 'message': 'Inserted'}))
+                page.wait_for_function('document.querySelectorAll(".node-section").length === 4')
+                page.wait_for_load_state('load')
+                assert abs(page.locator('.node-section').nth(2).bounding_box()['y'] - offset) < 3
+                # If the current section is deleted, fall back to the nearest remaining section.
+                entry.write_text(entry.read_text().replace('\\section{Second}', '\\section{Replacement}'))
+                build(source, output, 4)
+                (output / 'live-status.json').write_text(json.dumps({'revision': 4, 'message': 'Replaced'}))
+                page.wait_for_function('document.querySelector(".preview-side").textContent.includes("Replacement")')
+                page.wait_for_load_state('load')
+                assert abs(page.locator('.node-section').nth(2).bounding_box()['y'] - offset) < 3
+                for width in (1280, 390):
+                    page.set_viewport_size({'width': width, 'height': 900})
+                    page.evaluate('window.scrollTo(0,0)')
+                    options = page.locator('#live-sections option')
+                    page.locator('#live-sections').select_option(options.nth(3).get_attribute('value'))
+                    assert page.evaluate('scrollY') > 0
+                    assert page.evaluate('document.documentElement.scrollWidth <= innerWidth')
+                page.locator('.live-controls>a').click()
+                assert page.locator('#live-diagnostics').get_attribute('open') is not None
+                assert not errors
+            finally:
+                browser.close()
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join()
+
+
+def test_live_uses_available_pdf_converter(tmp_path, monkeypatch):
+    from test_issue42 import _two_page_pdf
+    from latex_review import compilation
+
+    project = tmp_path / 'paper'
+    project.mkdir()
+    (project / 'figure.pdf').write_bytes(_two_page_pdf())
+    (project / 'main.tex').write_text(
+        r'\documentclass{article}\usepackage{graphicx}\begin{document}'
+        r'\begin{figure}\includegraphics{figure.pdf}\end{figure}\end{document}')
+    output = project / '.latex-review' / 'live'
+    output.mkdir(parents=True)
+    # A real subprocess exercises the converter call without requiring Poppler.
+    import sys
+    converter = tmp_path / 'pdftoppm'
+    converter.write_text(f'#!{Path(sys.executable).resolve()}\n'
+                         "import pathlib,sys\npathlib.Path(sys.argv[-1]+'.png').write_bytes(b'PNG')\n")
+    converter.chmod(0o755)
+    monkeypatch.setattr(compilation, '_program', lambda name, path, forbidden: str(converter) if name == 'pdftoppm' else None)
+    source = ProjectSource('new', project, 'main.tex', ComparisonSource('directory', str(project)))
+    messages = build(source, output)
+    assert not any('PDF 图预览不可用' in message for message in messages)
+    assert (output / 'previews/new/figure.pdf.page-1.png').read_bytes() == b'PNG'
+    assert 'alt="PDF 图 figure.pdf 的第 1 页预览"' in (output / 'report.html').read_text()
+    monkeypatch.setattr(compilation, '_program', lambda *args: None)
+    messages = build(source, output, 2)
+    assert any('缺少可用的 PDF 转换工具' in message for message in messages)
