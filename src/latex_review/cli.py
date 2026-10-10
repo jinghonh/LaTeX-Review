@@ -161,6 +161,10 @@ def _check_output_separate(path: Path, options: dict) -> None:
         roots = (parent_of(options["entry"]),)
     if any(path == root or path in root.parents for root in roots):
         raise ConfigurationError("输出目录不能覆盖论文来源目录或其上级目录")
+    for root in _source_roots(options):
+        storage = root / ".latex-review" / "annotations"
+        if path == storage or path in storage.parents or storage in path.parents:
+            raise ConfigurationError("输出目录不能覆盖项目共享批注存储")
 
 
 def _source_roots(options: dict) -> tuple[Path, ...]:
@@ -359,7 +363,8 @@ def main(argv: list[str] | None = None) -> int:
                            config={"config": {key: value for key, value in config.items() if key != "translation"}, "math": args.math or "mathjax",
                                    "comments": args.comments if args.comments is not None else config.get("diff", {}).get("comments", False)})
         _progress("正在读取比较来源")
-        with resolve_sources(**options, excluded_paths=(output, cache_dir, output.parent / "translation-cache"),
+        with resolve_sources(**options, excluded_paths=(output, cache_dir, output.parent / "translation-cache",
+                                                           *tuple(root / ".latex-review" / "annotations" for root in _source_roots(options))),
                              ignore_patterns=tuple(config.get("ignore", ()))) as pair:
             _progress("正在展开两版来源")
             old_expanded, new_expanded = pair.old.expand(), pair.new.expand()
@@ -419,7 +424,8 @@ def main(argv: list[str] | None = None) -> int:
             else:
                 report = write_report(parsed[0], parsed[1], comparison, output,
                                       extra_diagnostics=compile_diagnostics,
-                                      rendering=rendering, statuses=statuses)
+                                      rendering=rendering, statuses=statuses,
+                                      annotation_project_root=_source_roots(options)[-1])
             write_cache_metadata(output, cache.metadata())
             run["stages"]["report"] = "degraded" if source_fallback else "complete"
             run["degradation_reasons"] = [{"code": d.code, "severity": d.severity, "message": d.message}

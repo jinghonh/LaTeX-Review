@@ -56,6 +56,9 @@ def build(source: ProjectSource, output: Path, revision: int = 1) -> list[str]:
     project = parse_project(source.expand())
     assets, diagnostics = _figure_assets(None, project, output, _pdf_converters(source, output), 15)
     preview = render_preview(None, project, figure_assets=assets)
+    from .annotations import MANIFEST, build_content, content_meta
+    annotation_content = build_content(project, preview.html)
+    _write(output / MANIFEST, json.dumps(annotation_content, ensure_ascii=False))
     messages = [item.message for item in (*preview.diagnostics, *diagnostics)]
     style = files('latex_review').joinpath('report.css').read_text(encoding='utf-8')
     diagnostic_items = ''.join('<li>' + escape(message) + '</li>' for message in messages)
@@ -78,11 +81,16 @@ def build(source: ProjectSource, output: Path, revision: int = 1) -> list[str]:
                   + str(len(messages)) + '</summary><ul>'
                   + (diagnostic_items or '<li>没有额外诊断。</li>') + '</ul></details>')
     html = preview.html.replace('</style>', style + '</style>', 1)
+    html = html.replace('</head>', content_meta(annotation_content) + '</head>', 1)
     html = html.replace('<body>', '<body class="reading-view live-view">', 1)
     html = html.replace('<title>LaTeX 内容预览</title>', '<title>当前论文持续预览 · ' + escape(source.entry) + '</title>', 1)
     html = re.sub(r'<header>.*?</header>', lambda _: header, html, count=1, flags=re.S)
     html = html.replace('</main>', '</main>' + supplement, 1)
-    html = html.replace('</body>', _reader_script(revision) + '</body>')
+    from .delivery import embed_annotations
+    html = embed_annotations(html, annotation_content, output)
+    annotation_scripts = ''.join('<script>' + files('latex_review').joinpath(name).read_text(encoding='utf-8') + '</script>'
+                                 for name in ('report_annotations.js', 'annotation_delivery.js'))
+    html = html.replace('</body>', annotation_scripts + _reader_script(revision) + '</body>')
     _write(output / 'report.html', html)
     return messages
 
@@ -95,10 +103,14 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument('--open-browser', action='store_true')
     args = parser.parse_args(argv)
     entry = args.entry.resolve()
-    root = args.root.resolve() if args.root else entry.parent
+    from .cli import _source_roots
+    root = args.root.resolve() if args.root else _source_roots({'entry': str(entry)})[-1]
     output = args.output.resolve() if args.output else root / '.latex-review' / 'live'
     if not entry.is_file() or not entry.is_relative_to(root) or root.is_relative_to(output):
         parser.error('入口必须位于项目根目录内，输出目录不能包含项目根目录')
+    storage = root / '.latex-review' / 'annotations'
+    if output == storage or output in storage.parents or storage in output.parents:
+        parser.error('输出目录不能覆盖项目共享批注存储')
     source = ProjectSource('new', root, entry.relative_to(root).as_posix(), ComparisonSource('directory', str(root)))
     output.mkdir(parents=True, exist_ok=True)
     _write(output / 'report.html', '<!doctype html><html lang="zh-CN"><meta charset="utf-8">'
@@ -107,6 +119,7 @@ def main(argv: list[str] | None = None) -> int:
     _write(output / 'live-status.json', json.dumps({'revision': 0, 'message': '正在读取当前论文。'}))
     server = ReportServer(('127.0.0.1', 0), partial(ReportHandler, directory=str(output)))
     server.translation_token = ''
+    server.annotation_project_root = root
     thread = Thread(target=server.serve_forever, daemon=True)
     thread.start()
     url = f'http://127.0.0.1:{server.server_port}/report.html'

@@ -155,6 +155,7 @@
         installed.delete(id);
       }
     });
+    document.getElementById('translation-results').textContent=JSON.stringify(incoming);
     results = incoming; states = {...blockedStates, ...(data.states || {})};
     available = Boolean(data.enabled) && data.available !== false;
     active = Object.values(states).some(state => ['pending', 'running'].includes(state.state));

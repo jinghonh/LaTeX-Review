@@ -71,3 +71,38 @@ flowchart LR
     C --> E[范围核对]
     F[独立验收声明] --> B
 ```
+
+## 批注读取与修改
+
+正文坐标来自报告清单，不能使用 MathJax 内部文字。
+
+```sh
+latex-review-annotations /path/to/report --content
+latex-review-annotations /path/to/report --export > annotations.json
+latex-review-annotations /path/to/report --request request.json
+```
+
+先读取当前 `project_id`、`version_id` 和 `revision`，再提交完整信封。
+
+```json
+{
+  "project_id": "当前项目的64位哈希",
+  "version_id": "当前正文的64位哈希",
+  "request": {
+    "operation": "create",
+    "expected_revision": 0,
+    "selection": {"unit_id": "清单中的单元ID", "start": 0, "end": 4, "quote": "实际原文", "side": "new"},
+    "body": "请核查此处的 $x$。",
+    "author": {"name": "Codex", "type": "agent"},
+    "category": "question"
+  }
+}
+```
+
+本机 HTTP 使用 `GET /api/annotations/content`、`GET /api/annotations/status` 和
+`POST /api/annotations/update`。POST 需要状态接口返回的 token，放入 `X-LaTeX-Review-Token`。
+回复使用 `operation=reply`、`thread_id`、正文、作者和分类。
+编辑使用 `operation=edit`、`thread_id`、`message_id`、正文和分类。
+换版迁移使用 `operation=reconcile`。手动关联使用 `operation=associate` 和新版本选区。
+冲突时保留输入，重新读取修订号后检查对象。不要自动覆盖冲突。
+完整字段及导入规则见 [批注契约](report-annotations-contract.md)。

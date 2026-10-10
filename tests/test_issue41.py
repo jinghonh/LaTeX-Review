@@ -69,6 +69,8 @@ def test_unpreviewable_table_and_unknown_macro_keep_short_placeholder(tmp_path):
         before, after = parse_project(pair.old.expand()), parse_project(pair.new.expand())
         html = write_report(before, after, compare_projects(before, after), tmp_path / "report",
                             pdf_converter="").html.read_text(encoding="utf-8")
+    # Portable annotation JSON retains source snapshots; this assertion checks visible preview markup.
+    html = re.sub(r'<script\b[^>]*>.*?</script>', '', html, flags=re.S)
     assert html.count("此处暂无法预览") >= 2
     assert all(value not in html for value in (r"\multicolumn", r"\mystery", "私密参数"))
     assert "私密源码" in html

@@ -33,7 +33,7 @@ class _Resources(HTMLParser):
 
     def handle_starttag(self, tag, attrs):
         for name, value in attrs:
-            if name not in {"src", "href"} or not value:
+            if name not in {"src", "href", "data-fallback-src"} or not value:
                 continue
             url = urlsplit(value)
             if url.scheme or url.netloc or not url.path:
@@ -64,6 +64,54 @@ def _embed_results(html: str, results: dict) -> str:
                   lambda m: m[1] + payload + m[2], html, flags=re.S)
 
 
+def embed_annotations(html: str, content: dict, directory: Path | None = None) -> str:
+    """Embed a portable manifest and existing backup without creating project paths."""
+    from .annotations import AnnotationStore, SCHEMA_VERSION, validate_content
+    validate_content(content)
+    bundle = {'schema_version': SCHEMA_VERSION, 'project_id': content['project_id'],
+              'revision': 0, 'versions': {}, 'threads': {}}
+    root = Path(content['project_root']) if content.get('project_root') else None
+    carried = re.search(r'<script type="application/json" id="annotation-backup">(.*?)</script>', html, re.S)
+    if carried:
+        original = json.loads(carried[1])
+        verifier = AnnotationStore(root or Path.cwd(), content['project_id'])
+        verifier._import(bundle, original)
+        if type(original['revision']) is not int or original['revision'] < 0:
+            raise DeliveryError('携带批注修订号无效')
+        bundle['revision'] = original['revision']
+    if root is not None and root.is_dir():
+        store = AnnotationStore.for_content(content)
+        if store.path.is_file():
+            bundle = store.export()
+    AnnotationStore(root or Path.cwd(), content['project_id'])._content(bundle, content)
+    assets = {}
+    if directory is not None:
+        total = 0
+        resources = _Resources()
+        resources.feed(html)
+        for name in sorted(set(resources.paths.values())):
+            path = directory / name
+            if any(p.is_symlink() for p in (path, *path.parents)):
+                raise DeliveryError(f'资源不可读取或含符号链接：{name}')
+            if not path.is_file():
+                continue  # Keep the generator's degraded preview; delivery/export still validates assets.
+            size = path.stat().st_size
+            if size > _MAX_EMBEDDED_ASSET or total + size > _MAX_EMBEDDED_TOTAL:
+                continue  # Directory reports retain their original resource links.
+            total += size
+            media = mimetypes.guess_type(path.name)[0] or 'application/octet-stream'
+            assets[name] = f'data:{media};base64,' + base64.b64encode(path.read_bytes()).decode('ascii')
+    for identifier, value in (('annotation-content', content), ('annotation-backup', bundle), ('annotation-assets', assets)):
+        payload = json.dumps(value, ensure_ascii=False).replace('<', '\\u003c')
+        tag = f'<script type="application/json" id="{identifier}">{payload}</script>'
+        pattern = rf'<script type="application/json" id="{identifier}">.*?</script>'
+        if re.search(pattern, html, re.S):
+            html = re.sub(pattern, lambda _: tag, html, flags=re.S)
+        else:
+            html = html.replace('</head>', tag + '</head>', 1)
+    return html
+
+
 def publication_html(directory: Path, translation_config: dict | None = None, *, results: dict | None = None,
                      warnings: tuple[str, ...] = ()) -> str:
     """有配置时使用其有效缓存；无配置时保留已有译文。"""
@@ -71,6 +119,11 @@ def publication_html(directory: Path, translation_config: dict | None = None, *,
     if any(p.is_symlink() for p in (entry, *entry.parents)):
         raise DeliveryError("报告入口不可含符号链接")
     html = entry.read_text(encoding="utf-8")
+    manifest = directory / "annotation-content.json"
+    if manifest.is_file():
+        if manifest.is_symlink():
+            raise DeliveryError("批注清单不可为符号链接")
+        html = embed_annotations(html, json.loads(manifest.read_text(encoding="utf-8")), directory)
     warnings = list(warnings)
     if translation_config is not None:
         from .translation import RULE_VERSION, TranslationConfig, cache_key, read_cached_translations, rendered_result

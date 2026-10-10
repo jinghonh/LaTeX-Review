@@ -552,6 +552,7 @@ def _report_html(document: ReviewDocument, preview_html: str, old: ParsedProject
                      "citations": list(node.citations)}
                     for side, project in (("old", old), ("new", new)) for node in project.nodes]
     reader_data = json.dumps({"fingerprint": fingerprint, "nodes": search_nodes}, ensure_ascii=False).replace("<", "\\u003c")
+    annotation_script = files("latex_review").joinpath("report_annotations.js").read_text(encoding="utf-8")
     reader_script = files("latex_review").joinpath("report_reader.js").read_text(encoding="utf-8")
     severity_labels = {"error": "错误", "warning": "提醒", "info": "说明"}
     diagnostics_html = "".join(
@@ -600,6 +601,8 @@ def _report_html(document: ReviewDocument, preview_html: str, old: ParsedProject
 <script type="application/json" id="translation-results">{{}}</script>
 <script>{reader_script}</script>
 <script>{translation_script}</script>
+<script>{annotation_script}</script>
+<script>{files("latex_review").joinpath("annotation_delivery.js").read_text(encoding="utf-8")}</script>
 {scripts.group(1)}
 </body></html>'''
 
@@ -609,7 +612,7 @@ def write_report(old: ParsedProject, new: ParsedProject, comparison: ComparisonR
                  conversion_timeout: float = 8.0, editor_url_template: str | None = None,
                  single_file: bool = False, extra_diagnostics: tuple[Diagnostic, ...] = (),
                  rendering: dict | None = None, statuses: tuple | None = None,
-                 fragment_timeout: float = 6.0) -> ReportResult:
+                 fragment_timeout: float = 6.0, annotation_project_root: Path | None = None) -> ReportResult:
     """在来源快照有效期内写入 report.html、diff.json、diagnostics.json 和双侧资源。"""
     if conversion_timeout <= 0 or fragment_timeout <= 0:
         raise ValueError("转换超时必须为正数")
@@ -687,9 +690,15 @@ def write_report(old: ParsedProject, new: ParsedProject, comparison: ComparisonR
     units = build_units(document, old, new, diagnostics=translation_diagnostics)
     diagnostics = tuple(dict.fromkeys((*diagnostics, *translation_diagnostics)))
     document = replace(document, diagnostics=diagnostics)
+    from .annotations import MANIFEST, build_content, content_meta
+    annotation_content = build_content(new, preview.html, project_root=annotation_project_root, changes=document.changes)
+    _write_managed(directory, Path(MANIFEST), content=json.dumps(annotation_content, ensure_ascii=False).encode("utf-8"))
     diff_json = dumps(document)
     html = _report_html(document, preview.html, old, new, editor_url_template, pairs,
                         rendering=rendering, statuses=statuses, translation_units=units)
+    html = html.replace("</head>", content_meta(annotation_content) + "</head>", 1)
+    from .delivery import embed_annotations
+    html = embed_annotations(html, annotation_content, directory)
     _write_managed(directory, Path("diff.json"), content=diff_json.encode("utf-8"))
     _write_managed(directory, Path("diagnostics.json"),
                    content=dumps(DiagnosticsDocument(diagnostics)).encode("utf-8"))
@@ -751,6 +760,10 @@ section{min-width:0;border:1px solid #adb7c4;padding:1rem}.old{background:#fce2d
 <main><section class="old"><h2>修改前</h2><p>此处暂无法预览</p></section>
 <section class="new"><h2>修改后</h2><p>此处暂无法预览</p></section></main>"""
             + _rendering_html(rendering, statuses) + '</body></html>')
+    from .annotations import MANIFEST
+    stale_content = directory / MANIFEST
+    if stale_content.is_file() or stale_content.is_symlink():
+        stale_content.unlink()
     _write_managed(directory, Path("diff.json"), content=dumps(document).encode("utf-8"))
     _write_managed(directory, Path("diagnostics.json"),
                    content=dumps(DiagnosticsDocument(document.diagnostics)).encode("utf-8"))

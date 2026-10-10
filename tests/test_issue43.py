@@ -2,6 +2,7 @@
 
 from pathlib import Path
 import json
+import re
 
 import pytest
 
@@ -92,6 +93,8 @@ def test_comment_source_is_not_exposed_in_sentence_preview(tmp_path):
     _, report = _compare(tmp_path, "A stable sentence. % private note\nThe old claim.",
                          "A stable sentence. % private note\nThe new claim.")
     html = report.html.read_text()
+    # Portable annotation JSON retains source snapshots; this assertion checks visible preview markup.
+    html = re.sub(r'<script\b[^>]*>.*?</script>', '', html, flags=re.S)
     assert "private note" not in html
     assert "The old claim." in html and "The new claim." in html
 

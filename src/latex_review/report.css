@@ -1267,3 +1267,33 @@ main {
   .live-controls #live-status { grid-column:1 / -1; grid-row:2; }
   .live-controls>a { grid-column:2; grid-row:1; }
 }
+
+/* Annotation components preserve the report's paper and margin-card layout. */
+.annotation-overview { margin: 1rem auto; padding: 1rem; max-width: 1100px; border: 1px solid var(--line, #ddd); background: var(--paper, #fff); }
+.annotation-filters { display: flex; flex-wrap: wrap; gap: .5rem; }
+.annotation-card { padding: .6rem; margin: .4rem 0; border-left: 3px solid #b18331; background: #fffaf0; font-size: .85rem; color: #29251f; }
+.annotation-card button { margin: .2rem; }
+.annotation-message { border-top: 1px solid #ddd; padding: .5rem 0; }
+.annotation-body { white-space: pre-wrap; overflow-wrap: anywhere; }
+.annotation-mark { font-size: .7rem; color: #735116; background: #fff3cc; border: 1px solid #d8bf85; border-radius: 4px; }
+.annotation-toolbar { position: fixed; z-index: 100; padding: .4rem; background: white; border: 1px solid #bbb; box-shadow: 0 3px 12px #0002; }
+.annotation-editor { position: fixed; right: 1rem; bottom: 1rem; width: min(420px, calc(100vw - 2rem)); padding: 1rem; background: white; border: 1px solid #bbb; box-shadow: 0 4px 20px #0003; z-index: 101; max-height: 85vh; overflow: auto; }
+.annotation-editor textarea { display: block; width: 100%; margin: .6rem 0; box-sizing: border-box; }
+.annotation-editor input { max-width: 45%; }
+::highlight(annotations) { background: #f3dda0; }
+
+/* Independent and orphaned threads share the paper margin. */
+main { position: relative; }
+.annotation-margin { margin: 1rem 0; }
+.annotation-margin-desktop { position: absolute; top: 0; margin: 0; }
+.annotation-margin-desktop .annotation-card { width: 100%; box-sizing: border-box; }
+.annotation-portable-tools button,.annotation-drafts button { margin: .3rem; }
+.live-view.annotation-margin-active main { max-width: 1280px; }
+@media(min-width:800px) {
+  .live-view.annotation-margin-active .preview-side { width: 55%; box-sizing: border-box; margin-left: 0; }
+}
+@media(max-width:799px) {
+  .annotation-margin { position: static; width: auto !important; min-height: 0 !important; }
+}
+
+.live-view.annotation-margin-active main { padding-bottom: calc(64px + var(--margin-overflow, 0px)); }

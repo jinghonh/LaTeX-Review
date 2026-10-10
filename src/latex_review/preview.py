@@ -111,7 +111,7 @@ def _math(raw: str, display: bool, fallback_url: str | None = None) -> str:
     expression = re.sub(r"\\label\s*\{[^{}]*\}", "", expression)
     tag = "div" if display else "span"
     fallback = f' data-fallback-src="{_e(fallback_url)}"' if fallback_url else ""
-    return f'<{tag} class="math-tex" data-display="{str(display).lower()}"{fallback}>{_e(expression)}</{tag}>'
+    return f'<{tag} class="math-tex" data-annotation-math-source="{_e(expression)}" data-display="{str(display).lower()}"{fallback}>{_e(expression)}</{tag}>'
 
 
 def _math_preview(raw: str, project: ParsedProject, side: str, source: SourceLocation,
@@ -140,12 +140,13 @@ def _math_preview(raw: str, project: ParsedProject, side: str, source: SourceLoc
             pieces.append(raw[cursor:])
             expanded = "".join(pieces)
     if unavailable:
-        return '<span class="preview-unavailable">此处暂无法预览</span>'
+        return f'<span class="preview-unavailable" data-annotation-latex="{_e(raw)}">此处暂无法预览</span>'
     if _UNSAFE_MATH.search(expanded):
         diagnostics.append(Diagnostic("preview_unsafe_math", "warning", "公式包含被禁止的命令，已显示占位",
                                       source_old=source if side == "old" else None,
                                       source_new=source if side == "new" else None))
     rendered = _math(expanded, display, fallback_url)
+    rendered = rendered.replace(' class=', f' data-annotation-latex="{_e(raw)}" class=', 1)
     if expanded != raw:
         return f'<span class="macro-placeholder">{rendered}</span>'
     return rendered

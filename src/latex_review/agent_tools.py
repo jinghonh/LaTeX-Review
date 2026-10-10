@@ -152,3 +152,34 @@ def acceptance_main(argv: list[str] | None = None) -> int:
         return 0
     except Exception as exc:
         return error(exc)
+
+
+def annotations_main(argv: list[str] | None = None) -> int:
+    """Read content/threads or execute one version-checked JSON request."""
+    from .annotations import AnnotationStore, execute_request, load_content
+    import sys
+    p = parser('latex-review-annotations')
+    p.add_argument('--project-root', type=Path, help='论文项目根目录，须与报告身份一致')
+    mode = p.add_mutually_exclusive_group()
+    mode.add_argument('--content', action='store_true', help='读取全部当前正文及公式定位坐标')
+    mode.add_argument('--export', action='store_true', help='导出含删除记录的批注备份')
+    mode.add_argument('--request', help='JSON 请求文件；- 表示标准输入')
+    args = p.parse_args(argv)
+    try:
+        content = load_content(args.report)
+        store = AnnotationStore.for_content(content, args.project_root)
+        if args.content:
+            value = content
+        elif args.export:
+            value = store.export()
+        elif args.request:
+            raw = sys.stdin.read() if args.request == '-' else Path(args.request).read_text(encoding='utf-8')
+            if len(raw.encode('utf-8')) > 8 * 1024 * 1024:
+                raise ValueError('批注请求超过 8 MiB')
+            value = execute_request(store, content, json.loads(raw))
+        else:
+            value = store.read(content)
+        emit(value)
+        return 0
+    except Exception as exc:
+        return error(exc)

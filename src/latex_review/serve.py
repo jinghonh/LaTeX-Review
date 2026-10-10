@@ -37,6 +37,8 @@ class ReportHandler(SimpleHTTPRequestHandler):
 
     def do_GET(self):
         path = urlsplit(self.path).path
+        if path.startswith("/api/annotations"):
+            return self._annotation_get(path)
         if not path.startswith("/api/translation/"):
             return super().do_GET()
         if not self._local_request():
@@ -67,6 +69,8 @@ class ReportHandler(SimpleHTTPRequestHandler):
             self._json({"message": "未知的翻译接口"}, 404)
 
     def do_POST(self):
+        if urlsplit(self.path).path.startswith("/api/annotations"):
+            return self._annotation_post()
         if not self._local_request():
             return
         if (not hmac.compare_digest(self.headers.get("X-LaTeX-Review-Token", "").encode(), self.server.translation_token.encode())
@@ -93,6 +97,50 @@ class ReportHandler(SimpleHTTPRequestHandler):
         except (ValueError, UnicodeError) as exc:
             self._json({"message": str(exc) if isinstance(exc, TranslationError) else "翻译请求格式无效"}, 400)
 
+    def _annotation_context(self):
+        from .annotations import AnnotationStore, load_content
+        content = load_content(self.directory)
+        store = AnnotationStore.for_content(content, getattr(self.server, "annotation_project_root", None))
+        return content, store
+
+    def _annotation_get(self, path):
+        if not self._local_request():
+            return
+        try:
+            content, store = self._annotation_context()
+            if path == "/api/annotations/content":
+                self._json(content)
+            elif path == "/api/annotations/status":
+                self._json({**store.read(content), "token": self.server.annotation_token})
+            elif path == "/api/annotations/export":
+                self._json(store.export())
+            else:
+                self._json({"message": "未知批注接口"}, 404)
+        except (OSError, ValueError, TypeError, KeyError) as exc:
+            self._json({"message": str(exc)}, 400)
+
+    def _annotation_post(self):
+        from .annotations import AnnotationConflict, execute_request
+        if not self._local_request():
+            return
+        if (not hmac.compare_digest(self.headers.get("X-LaTeX-Review-Token", "").encode(),
+                                   self.server.annotation_token.encode())
+                or self.headers.get("Content-Type", "").split(";")[0] != "application/json"):
+            return self._json({"message": "批注请求校验失败，请重新打开报告"}, 403)
+        if urlsplit(self.path).path != "/api/annotations/update":
+            return self._json({"message": "未知批注接口"}, 404)
+        try:
+            size = int(self.headers.get("Content-Length", "0"))
+            if not 0 < size <= 8 * 1024 * 1024:
+                raise ValueError("请求大小无效")
+            envelope = json.loads(self.rfile.read(size))
+            content, store = self._annotation_context()
+            self._json(execute_request(store, content, envelope))
+        except AnnotationConflict as exc:
+            self._json({"message": str(exc), "error": "conflict"}, 409)
+        except (OSError, ValueError, TypeError, KeyError, UnicodeError) as exc:
+            self._json({"message": str(exc), "error": "invalid_request"}, 400)
+
     def send_head(self):
         root = Path(self.directory).resolve()
         try:
@@ -116,6 +164,11 @@ class ReportHandler(SimpleHTTPRequestHandler):
 
 class ReportServer(ThreadingHTTPServer):
     translation: TranslationManager | None = None
+    annotation_project_root: Path | None = None
+
+    def __init__(self, *args, **kwargs):
+        self.annotation_token = secrets.token_urlsafe(32)
+        super().__init__(*args, **kwargs)
 
     def server_close(self):
         if self.translation:
@@ -130,7 +183,7 @@ class ReportServer(ThreadingHTTPServer):
 
 
 def create_server(directory: Path, port: int = 0, *, translation_config: TranslationConfig | None = None,
-                  cache_directory: Path | None = None) -> ReportServer:
+                  cache_directory: Path | None = None, annotation_project_root: Path | None = None) -> ReportServer:
     root = directory.expanduser().resolve()
     entry = root / "report.html"
     if not root.is_dir() or not entry.is_file() or not entry.resolve().is_relative_to(root):
@@ -151,6 +204,7 @@ def create_server(directory: Path, port: int = 0, *, translation_config: Transla
             raise ValueError("翻译缓存目录须独立于报告目录，且不可包含符号链接")
     server = ReportServer(("127.0.0.1", port), partial(ReportHandler, directory=str(root)))
     server.translation_token = secrets.token_urlsafe(32)
+    server.annotation_project_root = annotation_project_root
     try:
         if translation_config:
             server.translation = TranslationManager(units, translation_config, cache_directory)
@@ -183,6 +237,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--open-browser", action="store_true", help="启动预览后自动打开默认浏览器")
     parser.add_argument("--config", type=Path, help="项目配置文件，默认当前目录 .latex-review.toml；翻译设置覆盖用户全局默认值")
     parser.add_argument("--translation-cache-dir", type=Path, help="翻译缓存目录，默认报告目录同级的 translation-cache")
+    parser.add_argument("--annotation-project-root", type=Path, help="批注所属论文项目根目录；须与报告项目身份一致")
     args = parser.parse_args(argv)
     if not 0 <= args.port <= 65535:
         parser.error("端口必须在 0 至 65535 之间")
@@ -192,7 +247,7 @@ def main(argv: list[str] | None = None) -> int:
         translation = TranslationConfig.from_mapping(config["translation"]) if "translation" in config else None
         directory = _report_directory(args.directory, config)
         server = create_server(directory, args.port, translation_config=translation,
-                               cache_directory=args.translation_cache_dir)
+                               cache_directory=args.translation_cache_dir, annotation_project_root=args.annotation_project_root)
     except (OSError, ValueError, RuntimeError) as exc:
         print(f"预览启动失败：{exc}", file=sys.stderr)
         return 4

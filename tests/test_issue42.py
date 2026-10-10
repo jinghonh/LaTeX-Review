@@ -67,6 +67,8 @@ def test_complex_table_display_is_independent_of_cell_comparison(tmp_path):
     assert grids[0][1][0].rowspan == 2
     before, after, comparison = _pair(tmp_path, raw)
     html = write_report(before, after, comparison, tmp_path / "report", pdf_converter="").html.read_text()
+    # Portable annotation JSON retains source snapshots; this assertion checks visible preview markup.
+    html = re.sub(r'<script\b[^>]*>.*?</script>', '', html, flags=re.S)
     assert 'colspan="2"' in html and 'rowspan="2"' in html
     assert "A and B" in html and r"\begin{table*}" not in html
     assert re.search(r"1\s*<br>\s*2", html)

@@ -809,15 +809,20 @@
       if (!marginNotes) return;
       const paper = panels.new.getBoundingClientRect();
       let bottom = paper.top;
-      visibleCards().forEach(card => {
-        const detail = inlineChanges.get(card);
-        const anchor = inlineAnchors.get(card);
-        if (!anchor.slot.getClientRects().length) return;
-        const position = anchor.slot.getBoundingClientRect();
-        const top = Math.max(anchor.target.getBoundingClientRect().top, bottom + 12);
-        detail.style.setProperty('--change-left', (paper.right + 24 - position.left) + 'px');
-        detail.style.setProperty('--change-top', (top - position.top) + 'px');
-        bottom = top + detail.getBoundingClientRect().height;
+      window.reviewAnnotationMargin?.arrange();
+      const notes = visibleCards().map(card => {
+        const detail=inlineChanges.get(card), anchor=inlineAnchors.get(card);
+        return {detail,anchor,top:anchor.target.getBoundingClientRect().top};
+      }).filter(note=>note.anchor.slot.getClientRects().length);
+      (window.reviewAnnotationMargin?.entries()||[]).forEach(({card,root})=>notes.push({detail:card,top:root?.getBoundingClientRect().top||paper.top}));
+      notes.sort((a,b)=>a.top-b.top).forEach(({detail,anchor,top:sourceTop})=>{
+        const top=Math.max(sourceTop,bottom+12);
+        if(anchor){
+          const position=anchor.slot.getBoundingClientRect();
+          detail.style.setProperty('--change-left',(paper.right+24-position.left)+'px');
+          detail.style.setProperty('--change-top',(top-position.top)+'px');
+        }else{detail.style.position='absolute';detail.style.top=(top-main.getBoundingClientRect().top)+'px';}
+        bottom=top+detail.getBoundingClientRect().height;
       });
       main.style.setProperty('--margin-overflow', Math.max(0, bottom - paper.bottom) + 'px');
     };
@@ -828,6 +833,7 @@
       requestAnimationFrame(() => { arranging = false; arrangeInlineChanges(); });
     }
     window.addEventListener('resize', scheduleInlineLayout);
+    document.addEventListener('annotation-layout', scheduleInlineLayout);
     panels.new.addEventListener('load', scheduleInlineLayout, true);
     if (typeof ResizeObserver !== 'undefined') {
       const observer = new ResizeObserver(scheduleInlineLayout);
@@ -857,6 +863,10 @@
       });
   }));
   window.reviewNavigation = Object.freeze({
+    annotation(id) {
+      const card = cards.find(item => item.id === id);
+      if (card) navigate(card.querySelector('.change-jump'), 'page');
+    },
     sentence(originalId) { navigate(sentenceTargets.get(originalId), 'translation'); },
     filter,
     selected() { return cards[selected]?.id || null; },
