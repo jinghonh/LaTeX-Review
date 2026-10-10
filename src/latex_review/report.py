@@ -3,11 +3,9 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, replace
-import base64
 from html import escape
 from importlib.resources import files
 import json
-import mimetypes
 import os
 from pathlib import Path
 import re
@@ -20,6 +18,7 @@ import tempfile
 from urllib.parse import quote
 
 from .comparison import ComparisonResult
+from .delivery import DeliveryError as ReportPathError, single_file_html as _single_file_html
 from .contract import (ChangeDetail, Diagnostic, DiagnosticsDocument, PrimaryChange, ReviewDocument,
                        ReviewNode, SourceLocation, build_summary, dumps)
 from .preview import _INLINE_SAFE, _UNSAFE_MATH, _inline_html, render_preview
@@ -35,12 +34,6 @@ _IMAGE_SUFFIXES = {".png", ".jpg", ".jpeg", ".webp", ".gif"}
 _LINKABLE_ASSET_SUFFIXES = _IMAGE_SUFFIXES | {".pdf"}
 _KIND_LABELS = {"added": "新增", "removed": "删除", "modified": "修改", "moved": "移动"}
 _CATEGORY_LABELS = {"text": "正文", "equation": "公式", "figure": "图", "table": "表格", "citation": "引用", "comment": "注释", "move": "移动"}
-_MAX_EMBEDDED_ASSET = 25 * 1024 * 1024
-_MAX_EMBEDDED_TOTAL = 100 * 1024 * 1024
-
-
-class ReportPathError(OSError):
-    """受管报告路径包含链接或越出输出目录。"""
 
 
 @dataclass(frozen=True)
@@ -99,29 +92,6 @@ def _validate_editor_template(template: str | None) -> None:
     if not re.fullmatch(r"vscode://file/\{path\}:\{line\}(?::\{column\})?", template):
         raise ValueError("编辑器模板仅支持 vscode://file/{path}:{line}[:{column}]")
 
-
-def _single_file_html(html: str, directory: Path) -> str:
-    """仅内嵌报告自身生成的受管资源，不将任意外部路径带入单文件。"""
-    embedded_total = 0
-    def replace_url(match: re.Match[str]) -> str:
-        nonlocal embedded_total
-        attr, url = match.group(1), match.group(2)
-        from urllib.parse import unquote
-        relative = Path(unquote(url))
-        if (relative.is_absolute() or ".." in relative.parts or
-                relative.parts[0] not in {"assets", "previews", "pages"}):
-            raise ReportPathError("单文件报告包含不安全的本地资源路径")
-        path = directory / relative
-        if path.is_symlink() or not path.is_file() or not path.resolve().is_relative_to(directory):
-            raise ReportPathError(f"单文件资源无法内嵌：{relative}")
-        size = path.stat().st_size
-        embedded_total += size
-        if size > _MAX_EMBEDDED_ASSET or embedded_total > _MAX_EMBEDDED_TOTAL:
-            raise ReportPathError(f"单文件资源超出内嵌上限：{relative}")
-        media = mimetypes.guess_type(path.name)[0] or "application/octet-stream"
-        encoded = base64.b64encode(path.read_bytes()).decode("ascii")
-        return f'{attr}="data:{media};base64,{encoded}"'
-    return re.sub(r'(src|href)="((?:assets|previews|pages)/[^\"]+)"', replace_url, html)
 
 
 def _location(location: SourceLocation | None) -> str:

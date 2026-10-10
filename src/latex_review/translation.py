@@ -417,6 +417,28 @@ def _write_cache(path: Path, value: dict) -> None:
             temporary.unlink()
 
 
+def read_cached_translations(units: list[dict], config: TranslationConfig, directory: Path) -> tuple[dict, list[str]]:
+    """只读并验证缓存；不创建翻译会话或发起请求。"""
+    results, warnings = {}, []
+    for unit in units:
+        if unit.get("error"):
+            continue
+        key = cache_key(unit, config)
+        path = directory / (key + ".json")
+        try:
+            if any(p.is_symlink() for p in (path, *path.parents)):
+                raise ValueError("缓存路径含符号链接")
+            data = json.loads(path.read_text(encoding="utf-8"))
+            if data["version"] != RULE_VERSION or data["key"] != key:
+                raise ValueError("缓存版本或键不匹配")
+            results[key] = validate_translation(unit, data["translation"])
+        except FileNotFoundError:
+            continue
+        except (OSError, ValueError, KeyError, TypeError):
+            warnings.append("部分译文缓存不兼容或无法读取，已跳过")
+    return results, list(dict.fromkeys(warnings))
+
+
 class TranslationManager:
     def __init__(self, units: list[dict], config: TranslationConfig, directory: Path):
         self.units = {unit["id"]: unit for unit in units}
@@ -431,19 +453,7 @@ class TranslationManager:
         self.usage_path = directory / ("usage-" + uuid4().hex + ".json")
         self.usage_message = ""
         self.keys = {unit_id: cache_key(unit, config) for unit_id, unit in self.units.items() if not unit.get("error")}
-        for unit_id, unit in self.units.items():
-            if unit_id not in self.keys:
-                continue
-            key = self.keys[unit_id]
-            path = directory / (key + ".json")
-            try:
-                if path.is_symlink() or directory.is_symlink() or any(p.is_symlink() for p in directory.parents):
-                    continue
-                data = json.loads(path.read_text(encoding="utf-8"))
-                if data["version"] == RULE_VERSION and data["key"] == key:
-                    self.results[key] = validate_translation(unit, data["translation"])
-            except (OSError, ValueError, KeyError, TypeError):
-                continue
+        self.results, self.cache_warnings = read_cached_translations(list(self.units.values()), config, directory)
 
     def _record_attempt(self, unit_id: str, key: str, record: dict) -> None:
         with self.lock:
@@ -546,6 +556,7 @@ class TranslationManager:
                 message = str(exc)
             return {"enabled": True, "available": not message, "message": message,
                     "concurrency": self.config.concurrency, "states": states, "results": results,
+                    "delivery_warnings": list(self.cache_warnings),
                     "usage": {**_usage_summary(self.request_usage), "message": self.usage_message}}
 
     def close(self) -> None:

@@ -5,7 +5,6 @@ from __future__ import annotations
 import argparse
 import hmac
 import json
-import re
 import secrets
 from functools import partial
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
@@ -49,18 +48,13 @@ class ReportHandler(SimpleHTTPRequestHandler):
             value["token"] = self.server.translation_token
             self._json(value)
         elif path == "/api/translation/export":
-            from .report import _single_file_html
+            from .delivery import publication_html, single_file_html
             try:
                 root = Path(self.directory).resolve()
-                entry = root / "report.html"
-                if entry.is_symlink():
-                    raise ValueError("报告入口不可为符号链接")
-                html = entry.read_text(encoding="utf-8")
-                if manager:
-                    results = json.dumps(manager.snapshot()["results"], ensure_ascii=False).replace("<", "\\u003c")
-                    html = re.sub(r'(<script type="application/json" id="translation-results">).*?(</script>)',
-                                  lambda m: m[1] + results + m[2], html, flags=re.S)
-                content = _single_file_html(html, root).encode()
+                snapshot = manager.snapshot() if manager else {}
+                html = publication_html(root, results=snapshot.get("results"),
+                                        warnings=tuple(snapshot.get("delivery_warnings", ())))
+                content = single_file_html(html, root).encode()
                 self.send_response(200)
                 self.send_header("Content-Type", "text/html; charset=utf-8")
                 self.send_header("Content-Disposition", 'attachment; filename="report-translated.html"')
