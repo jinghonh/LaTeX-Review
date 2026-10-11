@@ -15,7 +15,8 @@ def test_current_preview_updates_without_old_version(tmp_path):
     html = (output / 'report.html').read_text()
     assert 'Hello current.' in html
     assert '当前论文' in html
-    assert '修改前' not in html
+    import re
+    assert '修改前' not in re.sub(r'<script\b.*?</script>', '', html, flags=re.S)
     assert '<section class="preview-side" aria-label="修改前"' not in html
     assert 'live-status.json' in html
     entry.write_text(entry.read_text().replace('Hello current.', 'Updated current.'))

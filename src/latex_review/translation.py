@@ -142,12 +142,49 @@ def _protected_sentence(raw: str, render) -> dict:
     return {"text": walk(clean), "protected": protected}
 
 
-def build_units(document, old, new, *, diagnostics: list | None = None) -> list[dict]:
-    """仅选择主变更中的段落、变更标题和变更图注；不选择表格或源码注释。"""
+def _build_unit(project, node, side: str, change_id: str, changed: set[int], *,
+                diagnostics: list | None = None, highlight_structure: bool = True) -> dict | None:
     from .preview import _inline_html
     from .structure import _argument, _masked
     from .structured_diff import _caption
 
+    kind, node_id = node.review.type, node.review.id
+    raw = node.review.raw_latex
+    if kind == "figure":
+        raw = _caption(raw) or ""
+    elif kind in _HEADINGS:
+        command = re.match(r"\\[A-Za-z@]+", raw)
+        arg = _argument(_masked(raw), command.end()) if command else None
+        raw = raw[arg[2]:arg[0] - 1] if arg else node.review.plain_text or ""
+    unit_id = f"{side}-{node_id}"
+    unit = {"id": unit_id, "side": side, "node_id": node_id,
+            "kind": kind, "change_id": change_id,
+            "rule_version": RULE_VERSION, "sentences": []}
+    sentences = []
+    try:
+        for number, sentence in enumerate(split_sentences(raw), 1):
+            def render(text):
+                return _inline_html(text, project, side, [], source=node.review.source)
+            protected = _protected_sentence(sentence.text, render)
+            if not protected["text"].strip():
+                continue
+            sentences.append({"number": number, "changed": number in changed or (highlight_structure and kind != "paragraph"),
+                              **protected})
+    except TranslationError as exc:
+        unit["error"] = str(exc)
+        if diagnostics is not None:
+            from .contract import Diagnostic
+            diagnostics.append(Diagnostic("translation_unavailable", "warning", str(exc),
+                source_old=node.review.source if side == "old" else None,
+                source_new=node.review.source if side == "new" else None))
+        return unit
+    if sentences:
+        unit["sentences"] = sentences
+    return unit if sentences else None
+
+
+def build_units(document, old, new, *, diagnostics: list | None = None) -> list[dict]:
+    """仅选择主变更中的段落、变更标题和变更图注；不选择表格或源码注释。"""
     projects = {"old": old, "new": new}
     units: dict[str, dict] = {}
     for change in document.changes:
@@ -164,41 +201,36 @@ def build_units(document, old, new, *, diagnostics: list | None = None) -> list[
             node = project.by_id().get(node_id)
             if node is None:
                 continue
-            raw = node.review.raw_latex
-            if change.node_type == "figure":
-                raw = _caption(raw) or ""
-            elif change.node_type in _HEADINGS:
-                command = re.match(r"\\[A-Za-z@]+", raw)
-                arg = _argument(_masked(raw), command.end()) if command else None
-                raw = raw[arg[2]:arg[0] - 1] if arg else node.review.plain_text or ""
             changed = {n for detail in change.details for n in getattr(detail, side + "_sentences")}
-            unit_id = f"{side}-{node_id}"
-            unit = {"id": unit_id, "side": side, "node_id": node_id,
-                    "kind": change.node_type, "change_id": change.id,
-                    "rule_version": RULE_VERSION, "sentences": []}
-            sentences = []
-            try:
-                for number, sentence in enumerate(split_sentences(raw), 1):
-                    def render(text):
-                        return _inline_html(text, project, side, [], source=node.review.source)
-                    protected = _protected_sentence(sentence.text, render)
-                    if not protected["text"].strip():
-                        continue
-                    sentences.append({"number": number, "changed": number in changed or change.node_type != "paragraph",
-                                      **protected})
-            except TranslationError as exc:
-                unit["error"] = str(exc)
-                units[unit_id] = unit
-                if diagnostics is not None:
-                    from .contract import Diagnostic
-                    diagnostics.append(Diagnostic("translation_unavailable", "warning", str(exc),
-                        source_old=node.review.source if side == "old" else None,
-                        source_new=node.review.source if side == "new" else None))
-                continue
-            if sentences:
-                unit["sentences"] = sentences
-                units[unit_id] = unit
+            unit = _build_unit(project, node, side, change.id, changed, diagnostics=diagnostics)
+            if unit:
+                units[unit["id"]] = unit
     return list(units.values())
+
+
+def build_current_units(project) -> list[dict]:
+    """选择当前论文的标题、正文（包括摘要）和图注，排除表格与文献。"""
+    units = []
+    by_id = project.by_id()
+    for node in project.nodes:
+        if node.review.type not in {"paragraph", "figure", *_HEADINGS}:
+            continue
+        parent_id = node.review.parent_id
+        excluded = False
+        while parent_id:
+            parent = by_id[parent_id]
+            if parent.review.type in {"table", "bibliography", "bibliography_entry"}:
+                excluded = True
+                break
+            parent_id = parent.review.parent_id
+        if excluded or node.review.raw_latex.strip() == r"\maketitle":
+            continue
+        unit = _build_unit(project, node, "new", "new-" + node.review.id, set(),
+                           highlight_structure=False)
+        if unit and (unit.get("error") or any(re.search(r"[^\W\d_]", _TOKEN.sub("", s["text"]))
+                                             for s in unit["sentences"])):
+            units.append(unit)
+    return units
 
 
 def cache_key(unit: dict, config: TranslationConfig) -> str:

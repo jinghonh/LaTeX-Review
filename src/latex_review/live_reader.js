@@ -66,6 +66,7 @@
     diagnostics.open = true;
   });
   window.addEventListener('pagehide', remember);
+  if (location.protocol !== 'http:' || location.hostname !== '127.0.0.1') return;
   let revision = LIVE_REVISION;
   async function check() {
     try {

@@ -13,6 +13,7 @@
     .map(unit => [unit.id, {state: 'blocked', message: unit.error}]));
   let states = {...blockedStates}, token = '', active = false, polling = false, available = true;
   const installed = new Set();
+  const live = document.body.classList.contains('live-view');
   const localService = location.protocol === 'http:' && location.hostname === '127.0.0.1';
   const labels = {pending: '等待翻译', running: '正在翻译', ready: '译文已完成', failed: '翻译失败，可重试', cancelled: '已停止，可重试', blocked: '此段无法翻译'};
 
@@ -99,7 +100,7 @@
       const text = button.parentElement.querySelector('.translation-item-status');
       if (text) text.textContent = selected.map(unit => {
         const state = states[unit.id] || (results[unit.id] ? {state: 'ready'} : {});
-        return (unit.side === 'old' ? '修改前：' : '修改后：') + (labels[state.state] || '尚未翻译') +
+        return (live ? '' : unit.side === 'old' ? '修改前：' : '修改后：') + (labels[state.state] || '尚未翻译') +
           (state.message ? ' · ' + state.message : '');
       }).join('；');
     });
@@ -206,6 +207,16 @@
     } catch (error) { showStatus(error.message); }
   }
 
+  if (live) units.forEach(unit => {
+    const node = document.getElementById(unit.id);
+    if (!node) return;
+    const controls = document.createElement('div'); controls.className = 'translation-item-controls';
+    const button = document.createElement('button'); button.type = 'button'; button.dataset.translateChange = unit.change_id;
+    const text = document.createElement('span'); text.className = 'translation-item-status'; text.setAttribute('role', 'status');
+    controls.append(button, text);
+    const heading = Array.from(node.children).find(child => /^H[1-6]$/.test(child.tagName));
+    if (heading) heading.after(controls); else node.append(controls);
+  });
   document.querySelectorAll('.change-card').forEach(card => {
     if (!units.some(unit => unit.change_id === card.id)) return;
     const controls = document.createElement('div'); controls.className = 'translation-item-controls';

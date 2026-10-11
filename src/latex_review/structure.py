@@ -565,7 +565,8 @@ class _Builder:
         return ParsedProject(self.project, tuple(nodes), tuple(self.diagnostics), labels)
 
 
-def parse_project(project: ExpandedProject, *, macros: dict[str, MacroPlaceholder] | None = None) -> ParsedProject:
+def parse_project(project: ExpandedProject, *, macros: dict[str, MacroPlaceholder] | None = None,
+                  include_title: bool = False) -> ParsedProject:
     """解析一侧已展开项目；节点保留精确原文和全部来源片段。"""
     unknown, error = _plastex_unknown(_safe_plastex_input(project))
     unknown.difference_update(macros or {})
@@ -582,12 +583,26 @@ def parse_project(project: ExpandedProject, *, macros: dict[str, MacroPlaceholde
         location = SourceLocation(None, None, None, confidence=0, uncertainty_reason="plasTeX 解析失败")
         builder.diagnostics.append(_diagnostic("plastex_parse_error", f"plasTeX 解析失败：{error}", location, project.source.side))
     document = re.search(r"\\begin\s*\{document\}", builder.mask)
+    if include_title:
+        title_region = builder.mask[:document.start()] if document else builder.mask
+        titles = list(re.finditer(r"\\title(?![A-Za-z@])", title_region))
+        if titles:
+            command = titles[-1]
+            arg = _argument(builder.mask, command.end())
+            if arg:
+                title = builder.add("title", command.start(), arg[0], None)
+                builder._inline(title, arg[2], arg[0] - 1)
     if document:
         extent = _environment_end(builder.mask, document.start(), len(builder.mask))
         builder.scan(document.end(), extent[0] if extent else len(builder.mask))
     else:
         builder.scan(0, len(project.text))
     parsed = builder.finish()
+    if include_title:
+        parsed = replace(parsed, nodes=tuple(
+            replace(node, review=replace(node.review, type="title"))
+            if node.review.type == "metadata" and re.match(r"\\title(?![A-Za-z@])", node.review.raw_latex)
+            else node for node in parsed.nodes))
     bibliography, diagnostics = read_bibliography(project)
     return replace(parsed, bibliography=bibliography, macros=dict(macros or {}),
                    diagnostics=(*parsed.diagnostics, *diagnostics))

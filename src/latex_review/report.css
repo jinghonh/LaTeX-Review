@@ -1379,3 +1379,7 @@ main {
 
 .annotation-suggestion pre {white-space:pre-wrap;overflow-wrap:anywhere;padding:.6rem;background:var(--surface,#f3f4f6);font-family:monospace;}
 .annotation-suggestion-editor textarea {display:block;width:100%;min-height:5rem;margin:.5rem 0;font-family:monospace;}
+
+.live-controls .translation-actions { grid-column:1 / -1; display:flex; flex-wrap:wrap; gap:8px; }
+.live-controls #translation-status { grid-column:1 / -1; margin:0; color:var(--muted); overflow-wrap:anywhere; }
+.live-controls .control-field { min-width:0; }

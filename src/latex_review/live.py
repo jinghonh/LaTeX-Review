@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 import argparse
-from functools import partial
 from hashlib import sha256
 from html import escape
 from importlib.resources import files
@@ -18,7 +17,8 @@ import webbrowser
 from .contract import ComparisonSource
 from .preview import render_preview
 from .report import _figure_assets, _pdf_converters
-from .serve import ReportHandler, ReportServer
+from .serve import ReportServer, create_server
+from .translation import TranslationConfig, TranslationManager, build_current_units
 from .sources import ProjectSource, SourceError
 from .structure import parse_project
 
@@ -28,18 +28,19 @@ def _reader_script(revision: int) -> str:
     return '<script>' + script.replace('LIVE_REVISION', str(revision)) + '</script>'
 
 
-def fingerprint(root: Path, output: Path) -> str:
+def fingerprint(root: Path, output: Path, *, cache_directory: Path | None = None) -> str:
     """内容指纹包括新增、删除文件；服务产物不会触发刷新。"""
     digest = sha256()
+    excluded = (output,) + ((cache_directory,) if cache_directory else ())
     for current, dirs, files in os.walk(root, followlinks=False):
         folder = Path(current)
         dirs[:] = sorted(name for name in dirs if name not in {
             '.git', '.venv', 'venv', '__pycache__', '.latex-review'
         } and not (folder / name).is_symlink()
-            and not (folder / name).resolve().is_relative_to(output))
+            and not any((folder / name).resolve().is_relative_to(path) for path in excluded))
         for name in sorted(files):
             path = folder / name
-            if path.is_symlink() or path.resolve().is_relative_to(output):
+            if path.is_symlink() or any(path.resolve().is_relative_to(excluded_path) for excluded_path in excluded):
                 continue
             digest.update(str(path.relative_to(root)).encode())
             digest.update(path.read_bytes())
@@ -53,7 +54,9 @@ def _write(path: Path, content: str) -> None:
 
 
 def build(source: ProjectSource, output: Path, revision: int = 1) -> list[str]:
-    project = parse_project(source.expand())
+    project = parse_project(source.expand(), include_title=True)
+    units = build_current_units(project)
+    _write(output / "translation-units.json", json.dumps(units, ensure_ascii=False))
     assets, diagnostics = _figure_assets(None, project, output, _pdf_converters(source, output), 15)
     preview = render_preview(None, project, figure_assets=assets)
     from .annotations import MANIFEST, build_content, content_meta
@@ -76,7 +79,12 @@ def build(source: ProjectSource, output: Path, revision: int = 1) -> list[str]:
 <p id="live-search-status" role="status"></p><ol id="live-results"></ol>
 <label for="live-sections">章节</label><select id="live-sections"><option value="">选择章节</option></select>
 </div></details><p id="live-status" role="status">持续预览已启动。</p>
-<a href="#live-diagnostics">预览诊断 · {len(messages)}</a></section>'''
+<a href="#live-diagnostics">预览诊断 · {len(messages)}</a>
+<label class="control-field"><span>译文显示</span><select id="translation-mode"><option value="bilingual">英中对照</option><option value="original">英文原文</option></select></label>
+<div class="translation-actions"><button type="button" id="translate-all">翻译全文</button>
+<button type="button" id="translation-cancel" disabled>停止翻译</button>
+<button type="button" id="translation-export">导出英中对照 HTML</button></div>
+<p id="translation-status" role="status">按需翻译标题、摘要、正文和图注；表格和参考文献保留原文。</p></section>'''
     supplement = ('<details class="report-supplement" id="live-diagnostics"><summary>预览诊断 · '
                   + str(len(messages)) + '</summary><ul>'
                   + (diagnostic_items or '<li>没有额外诊断。</li>') + '</ul></details>')
@@ -90,11 +98,26 @@ def build(source: ProjectSource, output: Path, revision: int = 1) -> list[str]:
     html = embed_annotations(html, annotation_content, output)
     annotation_scripts = ''.join('<script>' + files('latex_review').joinpath(name).read_text(encoding='utf-8') + '</script>'
                                  for name in ('report_annotations.js', 'annotation_delivery.js'))
-    html = html.replace('</body>', annotation_scripts + _reader_script(revision) + '</body>')
+    manifest = json.dumps([{k: v for k, v in unit.items() if k != "sentences"} for unit in units],
+                          ensure_ascii=False).replace("<", "\\u003c")
+    translation_scripts = ('<script type="application/json" id="translation-units">' + manifest + '</script>'
+                           + '<script type="application/json" id="translation-results">{}</script>'
+                           + '<script>' + files('latex_review').joinpath('report_translation.js').read_text(encoding='utf-8') + '</script>')
+    html = html.replace('</body>', annotation_scripts + translation_scripts + _reader_script(revision) + '</body>')
     _write(output / 'report.html', html)
     from .report_rebuild import save_live_recipe
     save_live_recipe(output, source)
     return messages
+
+
+def refresh_translation(server: ReportServer, output: Path) -> None:
+    """重建后仅恢复当前内容的缓存，不自动提交翻译请求。"""
+    previous = server.translation
+    if previous is None:
+        return
+    units = json.loads((output / 'translation-units.json').read_text(encoding='utf-8'))
+    previous.close()
+    server.translation = TranslationManager(units, previous.config, previous.directory)
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -103,6 +126,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument('--root', type=Path, help='论文项目根目录，默认入口文件所在目录')
     parser.add_argument('--output', type=Path, help='预览目录，默认项目内 .latex-review/live')
     parser.add_argument('--open-browser', action='store_true')
+    parser.add_argument('--config', type=Path, help='项目配置文件，默认当前目录 .latex-review.toml')
+    parser.add_argument('--translation-cache-dir', type=Path, help='独立翻译缓存目录')
     args = parser.parse_args(argv)
     entry = args.entry.resolve()
     from .cli import _source_roots
@@ -115,35 +140,46 @@ def main(argv: list[str] | None = None) -> int:
         parser.error('输出目录不能覆盖项目共享批注存储')
     source = ProjectSource('new', root, entry.relative_to(root).as_posix(), ComparisonSource('directory', str(root)))
     output.mkdir(parents=True, exist_ok=True)
-    _write(output / 'report.html', '<!doctype html><html lang="zh-CN"><meta charset="utf-8">'
-           '<title>当前论文持续预览</title><p id="live-status">正在读取当前论文。</p>'
-           + _reader_script(0) + '</html>')
-    _write(output / 'live-status.json', json.dumps({'revision': 0, 'message': '正在读取当前论文。'}))
-    server = ReportServer(('127.0.0.1', 0), partial(ReportHandler, directory=str(output)))
-    server.translation_token = ''
-    server.annotation_project_root = root
+    cache_directory = (args.translation_cache_dir or root / '.latex-review' / 'translation-cache').expanduser().absolute()
+    if root.is_relative_to(cache_directory):
+        parser.error('翻译缓存目录不能包含论文项目根目录')
+    if cache_directory == storage or cache_directory in storage.parents or storage in cache_directory.parents:
+        parser.error('翻译缓存目录不能覆盖项目共享批注存储')
+    try:
+        from .cli import _config
+        config = _config(args.config or Path('.latex-review.toml'), bool(args.config))
+        translation = TranslationConfig.from_mapping(config['translation']) if 'translation' in config else None
+        initial = fingerprint(root, output, cache_directory=cache_directory)
+        messages = build(source, output)
+        server = create_server(output, translation_config=translation, cache_directory=cache_directory,
+                               annotation_project_root=root)
+    except (OSError, ValueError, RuntimeError, SourceError) as exc:
+        print(f'预览启动失败：{exc}', file=sys.stderr)
+        return 4
+    _write(output / 'live-status.json', json.dumps({'revision': 1, 'message': f'持续预览已启动。预览诊断：{len(messages)} 项。'}, ensure_ascii=False))
     thread = Thread(target=server.serve_forever, daemon=True)
     thread.start()
     url = f'http://127.0.0.1:{server.server_port}/report.html'
-    revision = 0
-    previous = None
+    revision = 1
+    previous = initial
     try:
+        if args.open_browser:
+            webbrowser.open(url)
         print(f'持续预览：{url}\n按 Ctrl+C 停止。', flush=True)
         while True:
             try:
-                current = fingerprint(root, output)
+                current = fingerprint(root, output, cache_directory=cache_directory)
                 if current != previous:
                     # 合并连续保存；解析期间的后续保存将在下一轮处理。
                     time.sleep(0.3)
-                    current = fingerprint(root, output)
+                    current = fingerprint(root, output, cache_directory=cache_directory)
                     previous = current
                     from .report_rebuild import rebuild_lock
                     with rebuild_lock(output):
                         messages = build(source, output, revision + 1)
+                        refresh_translation(server, output)
                     revision += 1
                     message = f'已更新当前论文。预览诊断：{len(messages)} 项。'
-                    if revision == 1 and args.open_browser:
-                        webbrowser.open(url)
                     print(message, flush=True)
                     _write(output / 'live-status.json', json.dumps({'revision': revision, 'message': message}, ensure_ascii=False))
             except (OSError, ValueError, SourceError) as exc:

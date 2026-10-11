@@ -490,11 +490,11 @@ def _body(node: ParsedNode, project: ParsedProject, side: str, by_id: dict[str, 
           sentence_highlights: Mapping[tuple[str, str], frozenset[int]] | None = None) -> str:
     kind = node.review.type
     children = [by_id[child] for child in node.review.child_ids]
-    if kind in {"part", "chapter", "section", "subsection", "subsubsection"}:
+    if kind in {"title", "part", "chapter", "section", "subsection", "subsubsection"}:
         arg = _argument(_masked(node.review.raw_latex), len(re.match(r"\\[A-Za-z@]+", node.review.raw_latex).group()))
         title = node.review.raw_latex[arg[2]:arg[0] - 1] if arg else node.review.plain_text or ""
         title_children = [child for child in children if child.expanded_end <= node.expanded_end]
-        depth = {"part": 1, "chapter": 1, "section": 2, "subsection": 3, "subsubsection": 4}[kind]
+        depth = {"title": 1, "part": 1, "chapter": 1, "section": 2, "subsection": 3, "subsubsection": 4}[kind]
         title_html = _inline_html(title, project, side, title_children, diagnostics, node.review.source,
                                   node.expanded_start + arg[2] if arg else None)
         heading = f"<h{depth}>{title_html}</h{depth}>"
