@@ -158,6 +158,8 @@ def annotations_main(argv: list[str] | None = None) -> int:
     """Read annotations or execute a high-level/version-checked JSON request."""
     from .annotations import AnnotationStore, execute_request, load_content
     from .annotation_cli import SelectionError, add_commands, build_request
+    from .annotation_output import add_read_options, read_projection, write_summary
+    from .annotation_batch_cli import add_batch_commands, run_batch, run_audit
     import sys
     p = parser('latex-review-annotations')
     p.add_argument('--project-root', type=Path, help='论文项目根目录，须与报告身份一致')
@@ -165,17 +167,34 @@ def annotations_main(argv: list[str] | None = None) -> int:
     mode.add_argument('--content', action='store_true', help='读取全部当前正文及公式定位坐标')
     mode.add_argument('--export', action='store_true', help='导出含删除记录的批注备份')
     mode.add_argument('--request', help='JSON 请求文件；- 表示标准输入')
-    add_commands(p)
+    add_read_options(p)
+    commands = add_commands(p)
+    add_batch_commands(commands)
     args = p.parse_args(argv)
+    if args.offset < 0 or (args.limit is not None and args.limit < 1):
+        p.error('limit 必须大于零，offset 不得小于零')
     try:
         if args.command and (args.content or args.export or args.request):
             raise ValueError('子命令不能与 --content、--export 或 --request 同时使用')
         content = load_content(args.report)
         store = AnnotationStore.for_content(content, args.project_root)
-        if args.command:
+        if args.command == 'batch':
+            value = run_batch(store, content, args)
+            emit(value)
+            return 0 if all(item['ok'] for item in value['results']) else 4
+        elif args.command == 'audit':
+            value = run_audit(store, content, args.snapshot)
+        elif args.command:
             value = execute_request(store, content, build_request(content, store.read(content), args))
+            if (value.get('result') or {}).get('source_changed'):
+                from .report_rebuild import rebuild_report
+                value['result']['rebuild'] = rebuild_report(args.report)
+            if not args.full:
+                summary = write_summary(value, args.thread_id, getattr(args, 'message_id', None))
+                value = ({**summary, **(value.get('result') or {})}
+                         if args.command in ('preview', 'apply') else summary)
         elif args.content:
-            value = content
+            value = read_projection(content, args)
         elif args.export:
             value = store.export()
         elif args.request:
@@ -183,8 +202,11 @@ def annotations_main(argv: list[str] | None = None) -> int:
             if len(raw.encode('utf-8')) > 8 * 1024 * 1024:
                 raise ValueError('批注请求超过 8 MiB')
             value = execute_request(store, content, json.loads(raw))
+            if (value.get('result') or {}).get('source_changed'):
+                from .report_rebuild import rebuild_report
+                value['result']['rebuild'] = rebuild_report(args.report)
         else:
-            value = store.read(content)
+            value = read_projection(store.read(content), args)
         emit(value)
         return 0
     except SelectionError as exc:

@@ -37,6 +37,13 @@ Git 比较使用原始仓库根目录，不使用临时快照目录。实时预�
 | `source`, `section_path`, `labels` | 原始源码位置、章节及标签 |
 | `order`, `change_ids` | 正文顺序及关联主变更卡片 |
 | `atoms` | 段落中的公式原子；包含位置、原始 LaTeX、节点及选择器 |
+| `subunit`（可选） | 图注或单元格身份；类型为 `caption`、`header`、`cell`，行列从 1 开始 |
+| `source_span`（可选） | 原始 Unicode 字符区间、文件 SHA-256、原文、可靠性及可写性 |
+
+新生成清单的版本哈希包含内容模型版本，避免与旧清单同版本坐标冲突。旧清单和备份仍可读取。
+可靠区间包含 `file`、`start`、`end`、`sha256`、`original_chunk`、`reliable`、`writable`、`reason`。
+区间是 Unicode 字符半开区间，不是选区的 UTF-16 偏移。降级区间包含两个为 false 的状态及理由。
+可靠子单元的 `raw_latex`、源码行列指向实际子区间。复杂结构保留所属节点原文并提供降级理由。
 
 `coordinate_system` 固定为 `utf16-normalized-whitespace-with-formula-atoms`。
 `start` 包含边界，`end` 不包含边界。坐标单位为 UTF-16，与浏览器 DOM Range 一致。
@@ -73,6 +80,7 @@ Git 比较使用原始仓库根目录，不使用临时快照目录。实时预�
 
 存储位置为 `<项目根>/.latex-review/annotations/<project_id>.json`。
 数据包含 `schema_version`、`project_id`、`revision`、`versions` 和 `threads`。
+内部 `requests` 保存批量幂等收据，不进入公开备份。相同请求 ID 的不同载荷返回冲突。
 `versions` 保存历史正文清单。`threads` 按 UUID 索引。
 
 每个线程保存：
@@ -85,6 +93,8 @@ Git 比较使用原始仓库根目录，不使用临时快照目录。实时预�
 - `history`：创建快照和关联内容变化后的快照。
 
 每条内容保存 UUID、正文、作者、分类、时间、删除标记和编辑历史。
+可选 `suggested_replacement` 保存原始及替换 LaTeX、创建版本、单元、可靠区间及 `pending`/`applied` 状态。
+建议应用不改变线程的解决状态。预检不写入；应用校验文件全文指纹、原文、所属区间与修订号。
 作者格式为 `{"name":"显示名称","type":"user"}`；类型还允许 `agent`。
 分类为 `question`、`suggestion` 或 `note`。单条正文上限为 64 KiB UTF-8。
 删除使用持久化删除标记。导出保留删除记录，防止旧备份静默复活已删除内容。
@@ -175,6 +185,13 @@ Python 公开入口：
 | `associate` | `thread_id`, `selection` |
 | `reconcile` | 无 |
 | `import` | `bundle` |
+| `batch` | `request_id`, `items`；可选 `atomic`, `dry_run` |
+| `suggestion_preview`, `suggestion_apply` | `thread_id`, `message_id` |
+
+`create`、`reply` 可携带 `suggested_replacement={original_chunk,replacement_chunk}`。
+批量每项包含唯一 `id` 及单条操作字段，不携带独立修订号。默认提交成功项，并逐条返回结果。
+批量锁覆盖全部校验及一次原子存储写入。原子模式失败只记录幂等收据，线程和修订号保持不变；预检不记录收据。
+CLI 的精简输出及批量快照见 [智能体接口](agent-tools.md#批量与复核)。底层 JSON/HTTP 返回继续兼容完整线程视图。
 
 完整请求信封：
 
@@ -219,6 +236,7 @@ latex-review-annotations /path/to/report --export
 
 | HTTP 接口 | 返回或行为 |
 | --- | --- |
+| `GET /api/report` | 本机报告目录、地址与可用项目身份，不返回 token |
 | `GET /api/annotations/content` | 当前正文清单 |
 | `GET /api/annotations/status` | 当前版本线程视图及请求 token |
 | `GET /api/annotations/export` | 完整备份 |

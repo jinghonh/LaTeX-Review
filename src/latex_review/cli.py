@@ -289,7 +289,8 @@ def _source_recovery(code: str) -> None:
     _progress("恢复操作：" + advice.get(code, "检查上述来源错误和文件读取权限后重新运行。"))
 
 
-def main(argv: list[str] | None = None) -> int:
+def main(argv: list[str] | None = None, *, configuration: dict | None = None,
+         source_exclusions: tuple[Path, ...] = ()) -> int:
     parser = ReviewArgumentParser(prog="latex-review", description="比较论文并生成结构化审阅报告。",
                                   epilog="默认比较 Git HEAD 与磁盘工作区；仅显式 --compile 才运行 TeX。")
     parser.add_argument("paths", nargs="*", help="Git 模式入口，或两个独立源文件")
@@ -325,7 +326,8 @@ def main(argv: list[str] | None = None) -> int:
     run = new_manifest()
     active_stage = "sources"
     try:
-        config = _config(Path(args.config).expanduser() if args.config else Path(".latex-review.toml"), bool(args.config))
+        config = configuration if configuration is not None else _config(
+            Path(args.config).expanduser() if args.config else Path(".latex-review.toml"), bool(args.config))
         compile_config = config.get("compile", {})
         compile_enabled = args.compile or compile_config.get("enabled", False)
         new_only = args.compile_new_only or compile_config.get("new_only", False)
@@ -364,6 +366,7 @@ def main(argv: list[str] | None = None) -> int:
                                    "comments": args.comments if args.comments is not None else config.get("diff", {}).get("comments", False)})
         _progress("正在读取比较来源")
         with resolve_sources(**options, excluded_paths=(output, cache_dir, output.parent / "translation-cache",
+                                                           *source_exclusions,
                                                            *tuple(root / ".latex-review" / "annotations" for root in _source_roots(options))),
                              ignore_patterns=tuple(config.get("ignore", ()))) as pair:
             _progress("正在展开两版来源")
@@ -427,6 +430,14 @@ def main(argv: list[str] | None = None) -> int:
                                       rendering=rendering, statuses=statuses,
                                       annotation_project_root=_source_roots(options)[-1])
             write_cache_metadata(output, cache.metadata())
+            from copy import deepcopy
+            from .report_rebuild import save_recipe
+            effective = deepcopy(config)
+            effective['compile'] = dict(enabled=compile_enabled, new_only=new_only, sandbox_render=sandbox,
+                                        engine=engine, timeout=timeout)
+            effective.setdefault('diff', {})['comments'] = (
+                args.comments if args.comments is not None else config.get('diff', {}).get('comments', False))
+            save_recipe(output, old_expanded, new_expanded, effective)
             run["stages"]["report"] = "degraded" if source_fallback else "complete"
             run["degradation_reasons"] = [{"code": d.code, "severity": d.severity, "message": d.message}
                                           for d in report.document.diagnostics

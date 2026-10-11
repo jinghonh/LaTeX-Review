@@ -468,13 +468,14 @@ def _table_preview(node: ParsedNode, project: ParsedProject, side: str,
                                       source_new=node.review.source if side == "new" else None))
         return None
     rendered = []
-    for table in tables:
+    for table_index, table in enumerate(tables, 1):
         rows = []
         for row_index, row in enumerate(table, 1):
             column = 1
             cells = []
             for cell in row:
-                attrs = (f' data-row="{row_index}" data-column="{column}"'
+                attrs = (f' data-row="{row_index}" data-column="{column}" data-table-index="{table_index}"'
+                         f' data-annotation-subunit="{"header" if row_index == 1 else "cell"}"'
                          + (f' colspan="{cell.colspan}"' if cell.colspan > 1 else "")
                          + (f' rowspan="{cell.rowspan}"' if cell.rowspan > 1 else ""))
                 cells.append(f'<td{attrs}>{_table_cell_html(cell.text, project, side, diagnostics, node.review.source)}</td>')

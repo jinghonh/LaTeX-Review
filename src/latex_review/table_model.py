@@ -34,6 +34,7 @@ class TableGrid:
     end: int
     environment: str
     specification: str
+    cell_ranges: tuple[tuple[tuple[int, int], ...], ...] = ()
 
 
 @dataclass(frozen=True)
@@ -227,16 +228,26 @@ def parse_table(raw: str, *, allowed_commands: Collection[str] = ()) -> tuple[Ta
     rows: list[tuple[str, ...]] = []
     cells: list[str] = []
     cell_start = 0
+    range_rows: list[tuple[tuple[int, int], ...]] = []
+    ranges: list[tuple[int, int]] = []
     depth = 0
     math: str | None = None
     i = 0
 
-    def finish_row(stop: int, *, explicit: bool = False) -> None:
-        nonlocal cell_start, cells
+    def finish_cell(stop: int) -> None:
         cells.append(body[cell_start:stop].strip())
+        left = cell_start + len(body[cell_start:stop]) - len(body[cell_start:stop].lstrip())
+        right = stop - (len(body[cell_start:stop]) - len(body[cell_start:stop].rstrip()))
+        ranges.append((cursor + left, cursor + max(left, right)))
+
+    def finish_row(stop: int, *, explicit: bool = False) -> None:
+        nonlocal cell_start, cells, ranges
+        finish_cell(stop)
         if explicit or any(cells) or len(cells) > 1:
             rows.append(tuple(cells))
+            range_rows.append(tuple(ranges))
         cells = []
+        ranges = []
 
     while i < len(body):
         char = body[i]
@@ -280,7 +291,7 @@ def parse_table(raw: str, *, allowed_commands: Collection[str] = ()) -> tuple[Ta
             if depth < 0:
                 return None, "单元格括号不平衡"
         elif char == "&" and depth == 0 and math is None:
-            cells.append(body[cell_start:i].strip())
+            finish_cell(i)
             cell_start = i + 1
         i += 1
     if depth or math:
@@ -292,7 +303,7 @@ def parse_table(raw: str, *, allowed_commands: Collection[str] = ()) -> tuple[Ta
     if columns < 1 or any(len(row) != columns for row in rows):
         return None, "各行列数与列规格不一致"
     return TableGrid(tuple(rows), columns, opening.start(), end + len(closing.group()), environment,
-                     specification), ""
+                     specification, tuple(range_rows)), ""
 
 
 def _align(old: tuple[object, ...], new: tuple[object, ...]) -> list[tuple[int | None, int | None]] | None:

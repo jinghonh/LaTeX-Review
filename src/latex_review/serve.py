@@ -37,6 +37,19 @@ class ReportHandler(SimpleHTTPRequestHandler):
 
     def do_GET(self):
         path = urlsplit(self.path).path
+        if path == "/api/report":
+            if not self._local_request():
+                return
+            from .annotations import load_content
+            value = {"report_directory": str(Path(self.directory).resolve()),
+                     "report_url": f"http://127.0.0.1:{self.server.server_port}/report.html"}
+            try:
+                content = load_content(self.directory)
+                value.update({key: content[key] for key in
+                              ("project_root", "project_id", "version_id", "entry") if key in content})
+            except (OSError, ValueError, TypeError, KeyError) as exc:
+                value["annotation_content_error"] = str(exc)
+            return self._json(value)
         if path.startswith("/api/annotations"):
             return self._annotation_get(path)
         if not path.startswith("/api/translation/"):
@@ -135,7 +148,20 @@ class ReportHandler(SimpleHTTPRequestHandler):
                 raise ValueError("请求大小无效")
             envelope = json.loads(self.rfile.read(size))
             content, store = self._annotation_context()
-            self._json(execute_request(store, content, envelope))
+            value = execute_request(store, content, envelope)
+            if (value.get('result') or {}).get('source_changed'):
+                from .report_rebuild import rebuild_report
+                value['result']['rebuild'] = rebuild_report(self.directory)
+                if value['result']['rebuild']['status'] == 'updated' and self.server.translation:
+                    previous = self.server.translation
+                    previous.close()
+                    self.server.translation = None
+                    try:
+                        units = json.loads((Path(self.directory) / 'translation-units.json').read_text(encoding='utf-8'))
+                        self.server.translation = TranslationManager(units, previous.config, previous.directory)
+                    except (OSError, ValueError, TypeError) as exc:
+                        value['result']['rebuild']['translation_warning'] = '翻译服务刷新失败：' + str(exc)
+            self._json(value)
         except AnnotationConflict as exc:
             self._json({"message": str(exc), "error": "conflict"}, 409)
         except (OSError, ValueError, TypeError, KeyError, UnicodeError) as exc:

@@ -81,8 +81,11 @@
   const author=select([['user','用户'],['agent','智能体']]); author.setAttribute('aria-label','作者身份');
   const type=select(categories); type.setAttribute('aria-label','内容分类');
   const body=el('textarea'); body.rows=5; body.setAttribute('aria-label','批注正文');
+  const original=el('textarea'); original.setAttribute('aria-label','原始 LaTeX 块');
+  const replacement=el('textarea'); replacement.setAttribute('aria-label','替换 LaTeX 块');
+  const suggestionFields=el('details',null,'annotation-suggestion-editor'); suggestionFields.append(el('summary','源码替换建议'),original,replacement);
   let editing=null;
-  const formState=()=>({body:body.value,name:name.value,author:author.value,category:type.value});
+  const formState=()=>({body:body.value,name:name.value,author:author.value,category:type.value,original:original.value,replacement:replacement.value});
   const save=button('保存',async()=>{
     if(!editing||busy) return;
     if(editing.warning) {status.textContent=editing.warning;recheck.hidden=false;return;}
@@ -96,19 +99,21 @@
     if(editing.message&&editing.operation==='reply') req.reply_to=editing.message.id;
     if(req.operation!=='edit') req.author={name:name.value,type:author.value};
     if(req.operation==='create') req.selection=editing.selection;
+    if(req.operation!=='edit'&&original.value) req.suggested_replacement={original_chunk:original.value,replacement_chunk:replacement.value};
     if(await update(req)) { if(editing===submitted&&JSON.stringify(formState())===submittedForm) {delete drafts[submitted.key];try{localStorage.setItem('latex-review-author-name',name.value);}catch(_){} editor.hidden=true; editing=null;document.dispatchEvent(new CustomEvent('annotation-draft'));} }
   });
   const settings=el('details',null,'annotation-composer-settings');settings.append(el('summary','作者与分类'),name,author,type);
   body.placeholder='写下你的修改意见…';
   const recheck=button('检查当前操作对象',async()=>{await refresh();if(!editing)return;const t=snapshot.threads.find(t=>t.id===editing.thread?.id),m=t?.messages.find(m=>m.id===editing.message?.id);if(t&&(editing.operation==='reply'&&!editing.message||m&&!m.deleted_at)){editing.thread=t;editing.message=m;editing.warning=null;remember();status.textContent='已载入当前对象。请检查输入后保存。';}else status.textContent='对象已删除。输入仍在草稿中。';});recheck.hidden=true;
-  editor.append(el('h3','批注内容'),body,settings,save,recheck,button('收起（保留草稿）',()=>{remember();editor.hidden=true;}));panel.append(editor);
-  function remember(notify=true) { if(editing) drafts[editing.key]={...editing,body:body.value,name:name.value,author:author.value,category:type.value}; if(notify) document.dispatchEvent(new CustomEvent('annotation-draft')); }
-  [body,name,author,type].forEach(e=>e.addEventListener('input',remember));
+  editor.append(el('h3','批注内容'),body,suggestionFields,settings,save,recheck,button('收起（保留草稿）',()=>{remember();editor.hidden=true;}));panel.append(editor);
+  function remember(notify=true) { if(editing) drafts[editing.key]={...editing,body:body.value,name:name.value,author:author.value,category:type.value,original:original.value,replacement:replacement.value}; if(notify) document.dispatchEvent(new CustomEvent('annotation-draft')); }
+  [body,name,author,type,original,replacement].forEach(e=>e.addEventListener('input',remember));
   function openComposer(operation,thread,selection,message) {
     remember(); const key=operation+':'+(message?.id||thread?.id||JSON.stringify(selection));
     editing={operation,thread,selection,message,key}; const d=drafts[key];
     if(d) editing={...d,operation,thread,selection,message,key};
     if(operation==='create'&&content&&selection) {editing.content=structuredClone(content);try{editing.anchor=window.reviewAnnotationDelivery?.anchor(content,selection);}catch(_){}}
+    suggestionFields.hidden=operation==='edit'; original.value=d?.original??''; replacement.value=d?.replacement??'';
     body.value=d?.body??(operation==='reply'?'':message?.body??''); type.value=d?.category??(operation==='edit'?message?.category:null)??'question';
     editor.querySelector('h3').textContent=operation==='reply'&&message?`回复 ${message.author.name}`:'批注内容';
     if(d) {name.value=d.name;author.value=d.author;} name.hidden=author.hidden=operation==='edit';
@@ -150,7 +155,7 @@
       check(content,snapshot); ++readGeneration;
       const envelope={project_id:content.project_id,version_id:content.version_id,request:{...request,expected_revision:snapshot.revision}};
       const s=adapter?await adapter.update(envelope):await json('/api/annotations/update',{method:'POST',headers:{'Content-Type':'application/json','X-LaTeX-Review-Token':token},body:JSON.stringify(envelope)});
-      check(content,s); snapshot=s;if(request.operation==='create'){scope=null;if(editing)active=s.threads.at(-1)?.id;} render(); status.textContent='批注已保存。'; return true;
+      check(content,s); snapshot=s;if(request.operation==='create'){scope=null;if(editing)active=s.threads.at(-1)?.id;} render(); if(s.result?.source_changed&&s.result?.rebuild?.status==='updated')setTimeout(()=>window.location.reload(),800); status.textContent=s.result?.source_changed?'源码已修改。'+(s.result?.rebuild?.message||'报告更新状态请检查服务反馈。'):'批注已保存。'; return true;
     } catch(e) { await refresh(); recheck.hidden=false;status.textContent=e.message+' 输入已保留。请检查后重新保存。'; return false; }
     finally {busy=false;save.disabled=false;}
   }
@@ -257,7 +262,15 @@
     if(replies.length)replySection.append(el('h3',`回复 · ${replies.length}`,'annotation-replies-heading'));
     const replyRows=new Map();
     messages.forEach((m,index)=>{
-      const row=messageRow(m,index>0),edit=button('编辑',()=>openComposer('edit',t,null,m));
+      const row=messageRow(m,index>0);
+      if(m.suggested_replacement){
+        const suggestion=m.suggested_replacement,box=el('details',null,'annotation-suggestion');box.append(el('summary',suggestion.status==='applied'?'源码建议 · 已应用':'源码替换建议'));
+        box.append(el('pre',suggestion.original_chunk),el('pre',suggestion.replacement_chunk));
+        const diff=el('pre',suggestion.reason||'点击预览检查源码差异。');box.append(diff);
+        const preview=button('预览源码差异',async()=>{try{const envelope={project_id:content.project_id,version_id:content.version_id,request:{operation:'suggestion_preview',thread_id:t.id,message_id:m.id,expected_revision:snapshot.revision}};const response=adapter?await adapter.update(envelope):await json('/api/annotations/update',{method:'POST',headers:{'Content-Type':'application/json','X-LaTeX-Review-Token':token},body:JSON.stringify(envelope)});diff.textContent=response.result.diff;}catch(e){diff.textContent=e.message;}});
+        box.append(preview); if(suggestion.status!=='applied')box.append(button('接受并应用源码建议',()=>update({operation:'suggestion_apply',thread_id:t.id,message_id:m.id})));row.append(box);
+      }
+      const edit=button('编辑',()=>openComposer('edit',t,null,m));
       edit.className='annotation-edit';row.append(edit);
       if(index>0){const reply=button('回复',()=>openComposer('reply',t,null,m));reply.className='annotation-edit';row.append(document.createTextNode(' · '),reply);}
       if(index===0)d.append(row);else {
@@ -355,7 +368,7 @@
   });
   [sort,identity,category,resolved,location,search].forEach(e=>e.addEventListener('input',()=>{scope=null;render();}));
   window.reviewAnnotations=Object.freeze({coordinates,selection,refresh,update,openComposer,focus,
-    getDrafts(){remember(false);return structuredClone(drafts);},restoreDrafts(value){Object.assign(drafts,value);const tray=el('div',null,'annotation-drafts');tray.append(el('p','保留的编辑草稿'));Object.entries(value).forEach(([key,d])=>tray.append(button(d.body.slice(0,60)||'空草稿',()=>window.reviewAnnotations.resumeDraft(key))));panel.append(tray);},resumeDraft(key){const d=drafts[key];if(d){openComposer(d.operation,d.thread,d.selection,d.message);editing={...d,key};body.value=d.body;name.value=d.name;author.value=d.author;type.value=d.category;if(d.warning)status.textContent=d.warning;}},
+    getDrafts(){remember(false);return structuredClone(drafts);},restoreDrafts(value){Object.assign(drafts,value);const tray=el('div',null,'annotation-drafts');tray.append(el('p','保留的编辑草稿'));Object.entries(value).forEach(([key,d])=>tray.append(button(d.body.slice(0,60)||'空草稿',()=>window.reviewAnnotations.resumeDraft(key))));panel.append(tray);},resumeDraft(key){const d=drafts[key];if(d){openComposer(d.operation,d.thread,d.selection,d.message);editing={...d,key};body.value=d.body;name.value=d.name;author.value=d.author;type.value=d.category;original.value=d.original||'';replacement.value=d.replacement||'';if(d.warning)status.textContent=d.warning;}},
     setAdapter(value){adapter=value;return refresh();},getContent(){return content;},getSnapshot(){return snapshot;}});
   if(!document.getElementById('annotation-content')&&window.location.protocol!=='file:') refresh();
 })();

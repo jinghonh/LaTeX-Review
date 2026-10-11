@@ -97,14 +97,15 @@ def test_lifecycle_overlap_filters_and_cards(annotated_page):
 def test_conflict_and_mismatch_preserve_draft(annotated_page):
     p=annotated_page
     p.evaluate('''() => {const u=reviewAnnotations.getContent().units.find(u=>u.kind==='text');reviewAnnotations.openComposer('create',null,{unit_id:u.id,start:0,end:3,quote:u.text.slice(0,3)});}''')
-    p.locator('.annotation-editor textarea').fill('Preserved draft')
-    p.evaluate('reviewAnnotations.getSnapshot().revision=999')
-    p.locator('.annotation-editor').get_by_text('保存',exact=True).click()
+    p.locator('.annotation-editor > textarea').fill('Preserved draft')
+    # Set the stale revision and submit in one event, before periodic polling can refresh it.
+    p.evaluate('''() => {reviewAnnotations.getSnapshot().revision=999;
+        Array.from(document.querySelectorAll('.annotation-editor button')).find(b=>b.textContent==='保存').click();}''')
     p.wait_for_function('document.querySelector("#annotation-status").textContent.includes("输入已保留")')
-    assert p.locator('.annotation-editor textarea').input_value()=='Preserved draft'
+    assert p.locator('.annotation-editor > textarea').input_value()=='Preserved draft'
     p.evaluate('document.querySelector("meta[name=latex-review-annotation-version]").content="other"')
     p.evaluate('reviewAnnotations.refresh()')
-    assert p.locator('.annotation-editor textarea').input_value()=='Preserved draft'
+    assert p.locator('.annotation-editor > textarea').input_value()=='Preserved draft'
 
 
 def test_formula_toolbar_render_success_failure_and_ui_save(annotated_page):
@@ -113,7 +114,7 @@ def test_formula_toolbar_render_success_failure_and_ui_save(annotated_page):
     p.locator(formula).click()
     assert p.locator('.annotation-toolbar').is_visible()
     p.locator('.annotation-toolbar button').click()
-    p.locator('.annotation-editor textarea').fill('Formula $x+1$')
+    p.locator('.annotation-editor > textarea').fill('Formula $x+1$')
     p.evaluate('window.MathJax={tex2chtmlPromise:async ()=>{const n=document.createElement("span");n.dataset.rendered="yes";return n;}}')
     p.locator('.annotation-editor').get_by_text('保存',exact=True).click()
     p.wait_for_selector('.annotation-body [data-rendered=yes]',state='attached')
@@ -125,7 +126,7 @@ def test_formula_toolbar_render_success_failure_and_ui_save(annotated_page):
     assert p.evaluate('''() => {const u=reviewAnnotations.getContent().units.find(u=>u.kind==='text'&&u.text.startsWith('Stable'));return reviewAnnotations.coordinates(document.querySelector(u.selector)).text===u.text;}''')
     p.evaluate('''() => {const u=reviewAnnotations.getContent().units.find(u=>u.kind==='text'&&u.text.startsWith('Changed'));const r=reviewAnnotations.coordinates(document.querySelector(u.selector)).range(0,7);getSelection().removeAllRanges();getSelection().addRange(r);document.querySelector(u.selector).dispatchEvent(new MouseEvent('mouseup',{bubbles:true}));}''')
     assert p.locator('.annotation-toolbar').is_visible()
-    p.locator('.annotation-toolbar button').click();p.locator('.annotation-editor textarea').fill('Text via toolbar')
+    p.locator('.annotation-toolbar button').click();p.locator('.annotation-editor > textarea').fill('Text via toolbar')
     p.locator('.annotation-editor').get_by_text('保存',exact=True).click()
     p.wait_for_function('reviewAnnotations.getSnapshot().threads.length===2')
     p.locator('#next-change').click()
@@ -153,7 +154,7 @@ def test_pending_save_preserves_complete_form(annotated_page,field,value):
       api.openComposer('create',null,{unit_id:u.id,start:0,end:3,quote:u.text.slice(0,3)});
     }''')
     p.wait_for_function('document.querySelector("#annotation-status").textContent.includes("条批注")')
-    p.locator('.annotation-editor textarea').fill('Submitted body')
+    p.locator('.annotation-editor > textarea').fill('Submitted body')
     p.locator('.annotation-editor').get_by_text('保存',exact=True).click()
     p.wait_for_function('window.delayedSave !== null')
     if field=='name':
@@ -182,7 +183,7 @@ def test_successful_save_notifies_draft_removal(annotated_page):
       const u=reviewAnnotations.getContent().units.find(u=>u.kind==='text');
       reviewAnnotations.openComposer('create',null,{unit_id:u.id,start:0,end:3,quote:u.text.slice(0,3)});
     }''')
-    p.locator('.annotation-editor textarea').fill('Saved draft')
+    p.locator('.annotation-editor > textarea').fill('Saved draft')
     assert p.evaluate('Object.keys(window.persistedDrafts).length')==1
     p.locator('.annotation-editor').get_by_text('保存',exact=True).click()
     p.wait_for_function('document.querySelector(".annotation-editor").hidden')
@@ -201,7 +202,7 @@ def test_existing_annotation_renders_when_mathjax_arrives_later(annotated_page):
     assert p.locator('.annotation-formula').text_content()=='$x$'
     p.locator('#annotation-overview').evaluate('(e)=>e.open=true');p.locator('.annotation-card').evaluate('(e)=>e.open=true')
     p.locator('.annotation-card').get_by_text('回复',exact=True).click()
-    p.locator('.annotation-editor textarea').fill('Keep this draft')
+    p.locator('.annotation-editor > textarea').fill('Keep this draft')
     p.evaluate('''() => {
       window.cardBeforeMath=document.querySelector('.annotation-card');
       window.MathJax={tex2chtmlPromise:async ()=>{const n=document.createElement('span');n.dataset.lateMath='rendered';n.textContent='Rendered x';return n;}};
@@ -210,7 +211,7 @@ def test_existing_annotation_renders_when_mathjax_arrives_later(annotated_page):
     p.wait_for_selector('.annotation-formula [data-late-math=rendered]',state='attached')
     assert p.evaluate('window.cardBeforeMath===document.querySelector(".annotation-card")')
     assert p.locator('.annotation-card').get_attribute('open') is not None
-    assert p.locator('.annotation-editor textarea').input_value()=='Keep this draft'
+    assert p.locator('.annotation-editor > textarea').input_value()=='Keep this draft'
     assert p.locator('.annotation-body img').count()==0
     assert p.evaluate('Object.values(reviewAnnotations.getDrafts())[0].body')=='Keep this draft'
 
@@ -230,13 +231,13 @@ def test_annotation_panel_progressive_disclosure(annotated_page):
     assert p.locator('.annotation-context').count()==0
     assert p.locator('.annotation-card[open]').first.get_by_text('回复',exact=True).is_visible()
     p.locator('.annotation-card[open]').first.get_by_text('回复',exact=True).click()
-    assert p.locator('.annotation-editor textarea').evaluate('(e)=>e===document.activeElement')
+    assert p.locator('.annotation-editor > textarea').evaluate('(e)=>e===document.activeElement')
     assert not p.locator('.annotation-composer-settings').evaluate('(e)=>e.open')
-    p.locator('.annotation-editor textarea').fill('Draft survives closing')
+    p.locator('.annotation-editor > textarea').fill('Draft survives closing')
     p.locator('.annotation-panel-heading').get_by_text('关闭',exact=True).click()
-    assert p.locator('.annotation-editor textarea').is_hidden()
+    assert p.locator('.annotation-editor > textarea').is_hidden()
     p.locator('.annotation-overview > summary').click()
-    assert p.locator('.annotation-editor textarea').input_value()=='Draft survives closing'
+    assert p.locator('.annotation-editor > textarea').input_value()=='Draft survives closing'
     p.wait_for_function('document.body.classList.contains("annotation-panel-open")')
     p.screenshot(path='/tmp/latex-review-annotations-desktop.png')
     p.set_viewport_size({'width':390,'height':800})
@@ -331,7 +332,7 @@ def test_annotation_metadata_and_reply_hierarchy(annotated_page):
     assert card.get_by_text('消息操作',exact=True).count()==0
     assert reply.get_by_text('编辑',exact=True).is_visible()
     reply.get_by_text('编辑',exact=True).click()
-    assert p.locator('.annotation-editor textarea').input_value()=='建议进一步说明边界条件。'
+    assert p.locator('.annotation-editor > textarea').input_value()=='建议进一步说明边界条件。'
 
 
 def test_navigation_from_single_annotation_marker(annotated_page):
@@ -359,8 +360,8 @@ def test_reply_to_reply(annotated_page):
     p.locator('.annotation-card > summary').click()
     p.locator('.annotation-reply').get_by_text('回复',exact=True).click()
     assert p.locator('.annotation-editor h3').inner_text()=='回复 作者甲'
-    assert p.locator('.annotation-editor textarea').input_value()==''
-    p.locator('.annotation-editor textarea').fill('@作者甲：\n\n补充回复')
+    assert p.locator('.annotation-editor > textarea').input_value()==''
+    p.locator('.annotation-editor > textarea').fill('@作者甲：\n\n补充回复')
     p.locator('.annotation-editor').get_by_text('保存',exact=True).click()
     p.wait_for_function('reviewAnnotations.getSnapshot().threads[0].messages.length===3')
     assert p.locator('.annotation-reply').count()==2
@@ -388,7 +389,7 @@ def test_external_annotation_updates_without_reload_preserve_draft(annotated_pag
     p.locator('.annotation-card > summary').click()
     active=p.locator('.annotation-card.is-active').get_attribute('data-annotation-thread')
     p.locator('.annotation-card-actions').get_by_text('回复',exact=True).click()
-    p.locator('.annotation-editor textarea').fill('Unsaved draft')
+    p.locator('.annotation-editor > textarea').fill('Unsaved draft')
     p.locator('.annotation-card.is-active').evaluate('(e)=>e.dataset.pollSentinel="kept"')
     p.wait_for_timeout(2200)
     assert p.locator('.annotation-card.is-active').get_attribute('data-poll-sentinel')=='kept'
@@ -406,9 +407,9 @@ def test_external_annotation_updates_without_reload_preserve_draft(annotated_pag
     p.wait_for_function('(r)=>reviewAnnotations.getSnapshot().revision>r',arg=revision,timeout=6000)
     assert p.locator('.annotation-card').count()==2
     assert p.locator('.annotation-card.is-active').get_attribute('data-annotation-thread')==active
-    assert p.locator('.annotation-editor textarea').input_value()=='Unsaved draft'
+    assert p.locator('.annotation-editor > textarea').input_value()=='Unsaved draft'
     assert p.locator('.annotation-editor').is_visible()
-    assert p.locator('.annotation-editor textarea').evaluate('(e)=>document.activeElement===e')
+    assert p.locator('.annotation-editor > textarea').evaluate('(e)=>document.activeElement===e')
     assert p.evaluate('CSS.highlights.get("annotation-active").size')==1
     p.locator('.annotation-editor').get_by_text('保存',exact=True).click()
     p.wait_for_function('(id)=>reviewAnnotations.getSnapshot().threads.find(t=>t.id===id).messages.length===2',arg=active)

@@ -92,6 +92,8 @@ def build(source: ProjectSource, output: Path, revision: int = 1) -> list[str]:
                                  for name in ('report_annotations.js', 'annotation_delivery.js'))
     html = html.replace('</body>', annotation_scripts + _reader_script(revision) + '</body>')
     _write(output / 'report.html', html)
+    from .report_rebuild import save_live_recipe
+    save_live_recipe(output, source)
     return messages
 
 
@@ -135,7 +137,9 @@ def main(argv: list[str] | None = None) -> int:
                     time.sleep(0.3)
                     current = fingerprint(root, output)
                     previous = current
-                    messages = build(source, output, revision + 1)
+                    from .report_rebuild import rebuild_lock
+                    with rebuild_lock(output):
+                        messages = build(source, output, revision + 1)
                     revision += 1
                     message = f'已更新当前论文。预览诊断：{len(messages)} 项。'
                     if revision == 1 and args.open_browser:

@@ -19,6 +19,8 @@ def report(tmp_path):
 
 
 def call(report, capsys, *args):
+    if args and args[0] in ('add', 'reply', 'edit', 'delete', 'resolve'):
+        args = (*args, '--full')
     code = annotations_main([str(report[0]), *args])
     return code, json.loads(capsys.readouterr().out)
 
@@ -152,3 +154,74 @@ def test_repeated_formulas_return_candidates_before_write(tmp_path, capsys):
     code, value = call(report, capsys, 'add', '--formula', '--quote', '$x+1$', '--occurrence', '2',
                        '--body', 'Note', '--author', 'Codex')
     assert code == 0 and value['threads'][0]['original_anchor']['order'] == 3
+
+
+def test_default_write_summary_and_filtered_read(report, capsys):
+    code = annotations_main([str(report[0]), 'add', '--quote', 'Other Alpha beta.',
+                             '--body', 'Initial', '--author', 'Codex'])
+    summary = json.loads(capsys.readouterr().out)
+    assert code == 0 and summary['success'] and summary['thread_id']
+    assert 'threads' not in summary and summary['request_id'] is None
+    code = annotations_main([str(report[0]), 'edit', summary['thread_id'], summary['message_id'], '--body', 'Updated'])
+    edited = json.loads(capsys.readouterr().out)
+    assert code == 0 and edited['thread_id'] == summary['thread_id'] and edited['message_id'] == summary['message_id']
+    code = annotations_main([str(report[0]), 'resolve', summary['thread_id']])
+    resolved = json.loads(capsys.readouterr().out)
+    assert code == 0 and resolved['thread_id'] == summary['thread_id'] and 'threads' not in resolved
+    code, value = call(report, capsys, '--thread-id', summary['thread_id'], '--author', 'Codex',
+                       '--fields', 'id,resolved', '--limit', '1')
+    assert code == 0 and value['total_matched'] == 1
+    assert value['threads'] == [{'id': summary['thread_id'], 'resolved': True}]
+    code, value = call(report, capsys, '--content', '--kind', 'formula', '--summary')
+    assert code == 0 and value['total_matched'] == 1
+    assert 'raw_latex' not in value['units'][0]
+
+
+def test_inline_formula_quote_and_wrong_formula_diagnostics(report, capsys):
+    code, value = call(report, capsys, 'add', '--quote', r'Formula \( x + 1 \) end.',
+                       '--body', 'Math', '--author', 'Codex')
+    assert code == 0
+    anchor = value['threads'][0]['original_anchor']
+    assert anchor['quote'] == 'Formula \ufffc end.'
+    revision = value['revision']
+    code, value = call(report, capsys, 'add', '--quote', 'Formula $y+1$ end.',
+                       '--body', 'Wrong', '--author', 'Codex')
+    assert code == 4 and 0 < len(value['candidates']) <= 3
+    assert {'distance', 'context', 'diff', 'source'} <= value['candidates'][0].keys()
+    assert report[2].read(report[1])['revision'] == revision
+
+
+def test_multiple_atoms_exact_formula_check(tmp_path, capsys):
+    content, _ = content_at(tmp_path / 'paper', r'😀 Same $x+1$ and $y+2$. Same $y+1$ and $x+2$.')
+    directory = tmp_path / 'report'
+    directory.mkdir()
+    (directory / MANIFEST).write_text(json.dumps(content))
+    report = directory, content, AnnotationStore.for_content(content)
+    code, value = call(report, capsys, 'add', '--quote', 'Same $x + 1$ and $y + 2$.',
+                       '--body', 'Exact', '--author', 'Codex')
+    assert code == 0
+    assert value['threads'][0]['original_anchor']['start'] == utf16_length('😀 ')
+    code, value = call(report, capsys, 'add', '--quote', 'Same $x+1$ and $x+2$.',
+                       '--body', 'Wrong', '--author', 'Codex')
+    assert code == 4
+
+
+def test_low_level_request_keeps_full_result(report, capsys, tmp_path):
+    unit = next(u for u in report[1]['units'] if u['kind'] == 'text')
+    request = {'project_id': report[1]['project_id'], 'version_id': report[1]['version_id'],
+               'request': {'operation': 'create', 'expected_revision': 0,
+                           'selection': {'unit_id': unit['id'], 'start': utf16_length('😀 '),
+                                         'end': utf16_length('😀 Alpha'), 'quote': 'Alpha'},
+                           'body': 'Low level', 'author': {'name': 'Codex', 'type': 'agent'},
+                           'category': 'note'}}
+    path = tmp_path / 'request.json'
+    path.write_text(json.dumps(request))
+    code, value = call(report, capsys, '--request', str(path))
+    assert code == 0 and value['result']['thread_id'] and len(value['threads']) == 1
+
+
+def test_formula_normalization_preserves_meaning():
+    from latex_review.quote_matching import normalize_formula
+    assert normalize_formula('$x + 1$') == normalize_formula(r'\(x+1\)')
+    assert normalize_formula(r'$\alpha x$') != normalize_formula(r'$\alphax$')
+    assert normalize_formula(r'$\text{a b}$') != normalize_formula(r'$\text{ab}$')

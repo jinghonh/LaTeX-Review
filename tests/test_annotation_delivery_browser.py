@@ -80,11 +80,11 @@ def test_live_draft_auto_refresh_and_history(live_report,chrome):
         try:
             p=chrome.new_page(viewport={'width':1280,'height':900});ready(p,f'http://127.0.0.1:{server.server_port}/report.html');create(p)
             p.evaluate('''()=>{const u=reviewAnnotations.getContent().units.find(u=>u.text.startsWith('Stable'));reviewAnnotations.openComposer('create',null,{unit_id:u.id,start:7,end:15,quote:'original'});}''')
-            p.locator('.annotation-editor textarea').fill('Draft before saving source');p.locator('.annotation-composer-settings').evaluate('(e)=>e.open=true');p.locator('.annotation-editor input').fill('Draft Author');p.locator('.annotation-editor select').nth(0).select_option('agent');p.locator('.annotation-editor select').nth(1).select_option('suggestion')
+            p.locator('.annotation-editor > textarea').fill('Draft before saving source');p.locator('.annotation-composer-settings').evaluate('(e)=>e.open=true');p.locator('.annotation-editor input').fill('Draft Author');p.locator('.annotation-editor select').nth(0).select_option('agent');p.locator('.annotation-editor select').nth(1).select_option('suggestion')
             entry.write_text(entry.read_text().replace('Stable original paragraph.','Other moved text.\n\nStable original paragraph.'))
             old=p.evaluate('reviewAnnotations.getContent().version_id');build(source,output,2);(output/'live-status.json').write_text(json.dumps({'revision':2,'message':'updated'}))
             p.wait_for_function('old=>window.reviewAnnotations?.getContent()?.version_id && reviewAnnotations.getContent().version_id!==old',arg=old)
-            p.wait_for_function('document.querySelector(".annotation-editor textarea").value==="Draft before saving source"')
+            p.wait_for_function('document.querySelector(".annotation-editor > textarea").value==="Draft before saving source"')
             d=p.evaluate('Object.values(reviewAnnotations.getDrafts())[0]');assert d['name']=='Draft Author' and d['author']=='agent' and d['category']=='suggestion' and d['selection']['quote']=='original'
             p.locator('.annotation-editor').get_by_text('保存',exact=True).click();p.wait_for_function('reviewAnnotations.getSnapshot().threads.length===2')
             assert p.evaluate('reviewAnnotations.getSnapshot().threads.every(t=>t.association.persisted!==false)')
@@ -103,9 +103,9 @@ def test_restored_http_edit_draft_can_be_saved(live_report,chrome):
         try:
             p=chrome.new_page();ready(p,f'http://127.0.0.1:{server.server_port}/report.html');create(p)
             p.evaluate('''()=>{const t=reviewAnnotations.getSnapshot().threads[0];reviewAnnotations.openComposer('edit',t,null,t.messages[0]);}''')
-            p.locator('.annotation-editor textarea').fill('Restored edit can be saved')
+            p.locator('.annotation-editor > textarea').fill('Restored edit can be saved')
             p.reload();p.wait_for_function('window.reviewAnnotationDeliveryReady===true')
-            assert p.locator('.annotation-editor textarea').input_value()=='Restored edit can be saved'
+            assert p.locator('.annotation-editor > textarea').input_value()=='Restored edit can be saved'
             # Disk persistence sorts object keys. A field-order change is not an edit conflict.
             assert p.evaluate('''()=>{const d=Object.values(reviewAnnotations.getDrafts())[0];return !d.warning && JSON.stringify(d.message)!==JSON.stringify(reviewAnnotations.getSnapshot().threads[0].messages[0]);}''')
             p.locator('.annotation-editor').get_by_text('保存',exact=True).click()
@@ -182,21 +182,21 @@ def test_live_fuzzy_migration_and_unbound_draft(live_report,chrome):
         try:
             p=chrome.new_page();ready(p,f'http://127.0.0.1:{server.server_port}/report.html')
             assert p.evaluate('''async()=>{const u=reviewAnnotations.getContent().units.find(u=>u.text.startsWith('Stable'));return reviewAnnotations.update({operation:'create',selection:{unit_id:u.id,start:0,end:u.text.length,quote:u.text},body:'Whole paragraph',author:{name:'A',type:'user'},category:'note'});}''')
-            p.evaluate('''()=>{const u=reviewAnnotations.getContent().units.find(u=>u.text.startsWith('Stable'));reviewAnnotations.openComposer('create',null,{unit_id:u.id,start:0,end:6,quote:'Stable'});}''');p.locator('.annotation-editor textarea').fill('Unbound input')
+            p.evaluate('''()=>{const u=reviewAnnotations.getContent().units.find(u=>u.text.startsWith('Stable'));reviewAnnotations.openComposer('create',null,{unit_id:u.id,start:0,end:6,quote:'Stable'});}''');p.locator('.annotation-editor > textarea').fill('Unbound input')
             entry.write_text(entry.read_text().replace('Stable original paragraph.','Stable original paragraph!'));build(source,output,2);(output/'live-status.json').write_text(json.dumps({'revision':2,'message':'updated'}))
             p.wait_for_function('window.reviewAnnotationDeliveryReady===true && reviewAnnotations.getSnapshot().threads[0]?.association.status==="auto_migrated"')
             assert p.locator('.annotation-card').get_by_text('自动迁移',exact=True).count()==1
-            p.wait_for_function('document.querySelector(".annotation-editor textarea").value==="Unbound input"')
+            p.wait_for_function('document.querySelector(".annotation-editor > textarea").value==="Unbound input"')
             draft=p.evaluate('Object.values(reviewAnnotations.getDrafts())[0]');assert draft['selection'] is None and draft['anchor']['quote']=='Stable'
             p.evaluate('''()=>{const u=reviewAnnotations.getContent().units.find(u=>u.text.startsWith('Stable'));const r=reviewAnnotations.coordinates(document.querySelector(u.selector)).range(0,6);getSelection().removeAllRanges();getSelection().addRange(r);document.querySelector(u.selector).dispatchEvent(new MouseEvent('mouseup',{bubbles:true}));}''')
             p.locator('.annotation-editor').get_by_text('保存',exact=True).click();p.wait_for_function('reviewAnnotations.getSnapshot().threads.length===2')
             # Ordinary reopen restores edit input while refusing a changed target.
-            p.evaluate('''()=>{const t=reviewAnnotations.getSnapshot().threads[0];reviewAnnotations.openComposer('edit',t,null,t.messages[0]);}''');p.locator('.annotation-editor textarea').fill('Stale edit input')
+            p.evaluate('''()=>{const t=reviewAnnotations.getSnapshot().threads[0];reviewAnnotations.openComposer('edit',t,null,t.messages[0]);}''');p.locator('.annotation-editor > textarea').fill('Stale edit input')
             c=load_content(output);store=AnnotationStore.for_content(c);snapshot=store.read(c);t=snapshot['threads'][0];store.dispatch(c,{'operation':'edit','expected_revision':snapshot['revision'],'thread_id':t['id'],'message_id':t['messages'][0]['id'],'body':'External change','category':'note'})
-            p.reload();p.wait_for_function('window.reviewAnnotationDeliveryReady===true');assert p.locator('.annotation-editor textarea').input_value()=='Stale edit input'
+            p.reload();p.wait_for_function('window.reviewAnnotationDeliveryReady===true');assert p.locator('.annotation-editor > textarea').input_value()=='Stale edit input'
             assert '操作对象' in p.locator('#annotation-status').text_content()
-            p.locator('.annotation-editor textarea').fill('Edited restored input');p.reload();p.wait_for_function('window.reviewAnnotationDeliveryReady===true')
-            assert p.locator('.annotation-editor textarea').input_value()=='Edited restored input'
+            p.locator('.annotation-editor > textarea').fill('Edited restored input');p.reload();p.wait_for_function('window.reviewAnnotationDeliveryReady===true')
+            assert p.locator('.annotation-editor > textarea').input_value()=='Edited restored input'
         finally:server.shutdown();worker.join()
 
 from test_report_annotations_browser import annotated_page

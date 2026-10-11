@@ -137,7 +137,7 @@ def build_content(project, preview_html: str, *, project_root: Path | None = Non
     root = (project_root or project.expanded.source.worktree_origin or project.expanded.source.root).resolve()
     entry = project.expanded.source.entry
     project_id = _hash({'root': str(root), 'entry': entry})
-    version_id = _hash({'entry': entry, 'files': dependency_fingerprints(project.expanded),
+    version_id = _hash({'entry': entry, 'content_model': 2, 'files': dependency_fingerprints(project.expanded),
                         'macros': {k: asdict(v) for k, v in project.macros.items()}})
     nodes = {n.review.id: n for n in project.nodes}
     parser = _PreviewParser()
@@ -224,6 +224,15 @@ def build_content(project, preview_html: str, *, project_root: Path | None = Non
                            'text': text, 'raw_latex': owner.review.raw_latex, 'atoms': atoms,
                            'selector': element.selector(), 'source': asdict(owner.review.source),
                            'section_path': list(owner.review.section_path), 'labels': list(owner.labels)})
+            role = element.attrs.get('data-annotation-subunit')
+            if element.tag == 'figcaption' or 'table-caption' in element.attrs.get('class', '').split():
+                role = 'caption'
+            if role:
+                subunit = {'type': role}
+                for attribute, key in (('data-row', 'row'), ('data-column', 'column'), ('data-table-index', 'table_index')):
+                    if attribute in element.attrs:
+                        subunit[key] = int(element.attrs[attribute])
+                blocks[-1]['subunit'] = subunit
     # DOM order, not parser node ID, defines navigation order.
     positions = {}
     for section in descendants(parser.root):
@@ -235,6 +244,8 @@ def build_content(project, preview_html: str, *, project_root: Path | None = Non
     for order, unit in enumerate(units):
         unit['order'] = order
         unit['change_ids'] = [c.id for c in changes if c.new_node_id in (unit['node_id'], unit['parent_node_id'])]
+    from .annotation_sources import enrich_content
+    enrich_content(project, units, root)
     return {'schema_version': SCHEMA_VERSION, 'project_id': project_id, 'project_root': str(root),
             'entry': entry, 'version_id': version_id, 'coordinate_system': 'utf16-normalized-whitespace-with-formula-atoms',
             'units': units}
@@ -255,7 +266,7 @@ def validate_content(content):
     ids, orders = set(), set()
     for unit in content['units']:
         _keys(unit, ('id', 'kind', 'node_id', 'parent_node_id', 'text', 'raw_latex', 'atoms', 'selector',
-                     'source', 'section_path', 'labels', 'order', 'change_ids'),
+                     'source', 'section_path', 'labels', 'order', 'change_ids', 'subunit', 'source_span'),
               ('id', 'kind', 'node_id', 'text', 'raw_latex', 'atoms', 'selector', 'source', 'section_path', 'labels', 'order', 'change_ids'))
         _text(unit['id'], 'unit id', 1024)
         if unit['id'] in ids or unit['kind'] not in ('text', 'formula'):
@@ -278,6 +289,31 @@ def validate_content(content):
             SourceLocation(**unit['source'])
         except (TypeError, ValueError) as exc:
             raise AnnotationError('正文源码位置无效') from exc
+        if 'subunit' in unit:
+            subunit = unit['subunit']
+            _keys(subunit, ('type', 'row', 'column', 'table_index'), ('type',))
+            if subunit['type'] not in ('caption', 'header', 'cell'):
+                raise AnnotationError('子单元类型无效')
+            for key in ('row', 'column', 'table_index'):
+                if key in subunit:
+                    _integer(subunit[key], key, 1)
+        if 'source_span' in unit:
+            span = unit['source_span']
+            _keys(span, ('file', 'start', 'end', 'sha256', 'original_chunk', 'reliable', 'writable', 'reason'),
+                  ('reliable', 'writable', 'reason'))
+            if type(span['reliable']) is not bool or type(span['writable']) is not bool:
+                raise AnnotationError('源码区间可靠性无效')
+            if span['reliable']:
+                _keys(span, ('file', 'start', 'end', 'sha256', 'original_chunk', 'reliable', 'writable', 'reason'),
+                      ('file', 'start', 'end', 'sha256', 'original_chunk', 'reliable', 'writable', 'reason'))
+                _integer(span['start'], 'source start')
+                _integer(span['end'], 'source end', span['start'] + 1)
+                if (span['file'] != unit['source'].get('file') or span['original_chunk'] != unit['raw_latex']
+                        or len(span['original_chunk']) != span['end'] - span['start']
+                        or not isinstance(span['sha256'], str) or re.fullmatch('[0-9a-f]{64}', span['sha256']) is None):
+                    raise AnnotationError('源码区间与正文单元不一致')
+            elif span['writable'] or not isinstance(span['reason'], str) or not span['reason']:
+                raise AnnotationError('降级源码区间必须只读并提供理由')
         offsets = set()
         for atom in unit['atoms']:
             _keys(atom, ('offset', 'formula_node_id', 'raw_latex', 'selector'),
@@ -327,13 +363,17 @@ def make_anchor(content, selection):
         suffix = encoded[end * 2:].decode('utf-16-le')[:64]
     if 'quote' in selection and selection['quote'] != quote:
         raise AnnotationConflict('选区原文与正文版本不一致，请保留草稿并重新定位')
-    return {'version_id': content['version_id'], 'unit_id': unit['id'], 'kind': unit['kind'],
+    anchor = {'version_id': content['version_id'], 'unit_id': unit['id'], 'kind': unit['kind'],
             'start': start, 'end': end, 'quote': quote, 'prefix': prefix, 'suffix': suffix,
             'unit_text': unit['text'], 'raw_latex': unit['raw_latex'], 'node_id': unit['node_id'],
             'source': deepcopy(unit['source']), 'section_path': unit['section_path'][:],
             'labels': unit['labels'][:], 'order': unit['order'], 'selector': unit['selector'],
             'change_ids': unit['change_ids'][:],
             'atoms': [deepcopy(a) for a in unit['atoms'] if start is not None and start <= a['offset'] < end]}
+    for key in ('subunit', 'source_span'):
+        if key in unit:
+            anchor[key] = deepcopy(unit[key])
+    return anchor
 
 
 
@@ -530,7 +570,7 @@ class AnnotationStore:
             fcntl.flock(fd, fcntl.LOCK_EX)
             if self.path.exists():
                 data = json.loads(self.path.read_text(encoding='utf-8'))
-                _keys(data, ('schema_version', 'project_id', 'revision', 'threads', 'versions'),
+                _keys(data, ('schema_version', 'project_id', 'revision', 'threads', 'versions', 'requests'),
                       ('schema_version', 'project_id', 'revision', 'threads', 'versions'))
                 _integer(data['revision'], 'revision')
                 if not isinstance(data['threads'], dict) or not isinstance(data['versions'], dict):
@@ -540,6 +580,8 @@ class AnnotationStore:
             else:
                 data = {'schema_version': SCHEMA_VERSION, 'project_id': self.project_id, 'revision': 0,
                         'threads': {}, 'versions': {}}
+            if not isinstance(data.get('requests', {}), dict):
+                raise AnnotationError('批量请求记录无效')
             yield data
         finally:
             fcntl.flock(fd, fcntl.LOCK_UN)
@@ -601,8 +643,25 @@ class AnnotationStore:
 
     def dispatch(self, content, request):
         """Shared structured mutation API used unchanged by CLI and local HTTP."""
+        if isinstance(request, dict) and request.get('operation') == 'batch':
+            return self.batch(content, request)
+        if isinstance(request, dict) and request.get('operation') in ('suggestion_preview', 'suggestion_apply'):
+            from .annotation_suggestions import execute
+            return execute(self, content, request)
+        self._validate_request(request)
+        revision = request['expected_revision']
+        with self._locked() as data:
+            if data['revision'] != revision:
+                raise AnnotationConflict('批注已被其他审阅者更新，请保留草稿并重新读取')
+            self._content(data, content)
+            result = self._apply(data, content, request)
+            self._write(data)
+            return {**self._view(data, content), 'result': result}
+
+    @staticmethod
+    def _validate_request(request):
         _keys(request, ('operation', 'expected_revision', 'thread_id', 'message_id', 'selection', 'body',
-                        'author', 'category', 'bundle', 'reply_to'), ('operation', 'expected_revision'))
+                        'author', 'category', 'bundle', 'reply_to', 'suggested_replacement'), ('operation', 'expected_revision'))
         revision = _integer(request['expected_revision'], 'expected_revision')
         operation = request['operation']
         fields = {
@@ -615,72 +674,84 @@ class AnnotationStore:
         }
         if not isinstance(operation, str) or operation not in fields:
             raise AnnotationError('未知批注操作')
-        _keys(request, fields[operation] | {'operation', 'expected_revision'} | ({'reply_to'} if operation == 'reply' else set()),
+        _keys(request, fields[operation] | {'operation', 'expected_revision'} | ({'reply_to'} if operation == 'reply' else set()) | ({'suggested_replacement'} if operation in ('create', 'reply') else set()),
               fields[operation] | {'operation', 'expected_revision'})
-        with self._locked() as data:
-            if data['revision'] != revision:
-                raise AnnotationConflict('批注已被其他审阅者更新，请保留草稿并重新读取')
-            self._content(data, content)
-            now = _now()
-            result = None
-            if operation == 'create':
-                anchor = make_anchor(content, request['selection'])
+
+    def _apply(self, data, content, request):
+        operation = request['operation']
+        now = _now()
+        result = None
+        if operation == 'create':
+            anchor = make_anchor(content, request['selection'])
+            message = self._message(request, now)
+            if 'suggested_replacement' in request:
+                from .annotation_suggestions import prepare
+                message['suggested_replacement'] = prepare(content, anchor, request['suggested_replacement'])
+            thread_id = str(uuid.uuid4())
+            association = {'status': 'exact', 'anchor': anchor, 'candidates': [], 'reason': None}
+            data['threads'][thread_id] = {'id': thread_id, 'project_id': self.project_id,
+                'created_version_id': content['version_id'], 'created_at': now, 'updated_at': now,
+                'resolved': False, 'deleted_at': None, 'messages': [message], 'original_anchor': deepcopy(anchor),
+                'current_anchor': deepcopy(anchor), 'associations': {content['version_id']: association},
+                'history': [{'at': now, 'method': 'created', 'anchor': deepcopy(anchor)}]}
+            result = {'thread_id': thread_id, 'message_id': message['id']}
+        elif operation == 'reconcile':
+            for thread in data['threads'].values():
+                if thread['deleted_at'] or content['version_id'] in thread['associations']:
+                    continue
+                association = locate(content, thread['current_anchor'])
+                thread['associations'][content['version_id']] = association
+                if association['anchor']:
+                    self._associate(thread, association['anchor'], association['status'], now)
+        elif operation == 'import':
+            result = self._import(data, request['bundle'])
+        else:
+            thread_id = request['thread_id']
+            _text(thread_id, 'thread_id', 256)
+            thread = data['threads'].get(thread_id)
+            if thread is None or thread['deleted_at']:
+                raise AnnotationError('批注线程不存在或已删除')
+            if operation == 'reply':
+                parent_id = request.get('reply_to', thread['messages'][0]['id'])
+                if not any(m['id'] == parent_id and not m['deleted_at'] for m in thread['messages']):
+                    raise AnnotationError('回复对象不存在或已删除')
                 message = self._message(request, now)
-                thread_id = str(uuid.uuid4())
-                association = {'status': 'exact', 'anchor': anchor, 'candidates': [], 'reason': None}
-                data['threads'][thread_id] = {'id': thread_id, 'project_id': self.project_id,
-                    'created_version_id': content['version_id'], 'created_at': now, 'updated_at': now,
-                    'resolved': False, 'deleted_at': None, 'messages': [message], 'original_anchor': deepcopy(anchor),
-                    'current_anchor': deepcopy(anchor), 'associations': {content['version_id']: association},
-                    'history': [{'at': now, 'method': 'created', 'anchor': deepcopy(anchor)}]}
-                result = {'thread_id': thread_id, 'message_id': message['id']}
-            elif operation == 'reconcile':
-                for thread in data['threads'].values():
-                    if thread['deleted_at'] or content['version_id'] in thread['associations']:
-                        continue
-                    association = locate(content, thread['current_anchor'])
-                    thread['associations'][content['version_id']] = association
-                    if association['anchor']:
-                        self._associate(thread, association['anchor'], association['status'], now)
-            elif operation == 'import':
-                result = self._import(data, request['bundle'])
-            else:
-                thread_id = request['thread_id']
-                _text(thread_id, 'thread_id', 256)
-                thread = data['threads'].get(thread_id)
-                if thread is None or thread['deleted_at']:
-                    raise AnnotationError('批注线程不存在或已删除')
-                if operation == 'reply':
-                    parent_id = request.get('reply_to', thread['messages'][0]['id'])
-                    if not any(m['id'] == parent_id and not m['deleted_at'] for m in thread['messages']):
-                        raise AnnotationError('回复对象不存在或已删除')
-                    message = self._message(request, now)
-                    message['reply_to'] = parent_id
-                    thread['messages'].append(message)
-                    result = {'message_id': message['id']}
-                elif operation in ('edit', 'delete_message'):
-                    message = next((m for m in thread['messages'] if m['id'] == request['message_id']), None)
-                    if message is None or message['deleted_at']:
-                        raise AnnotationError('批注内容不存在或已删除')
-                    if operation == 'edit':
-                        body = _text(request['body'], '批注正文')
-                        category = _category(request['category'])
-                        message['edits'].append({'body': message['body'], 'category': message['category'], 'at': now})
-                        message.update(body=body, category=category, updated_at=now)
-                    else:
-                        message['deleted_at'] = now
-                elif operation == 'delete_thread':
-                    thread['deleted_at'] = now
-                elif operation in ('resolve', 'reopen'):
-                    thread['resolved'] = operation == 'resolve'
-                elif operation == 'associate':
-                    anchor = make_anchor(content, request['selection'])
-                    thread['associations'][content['version_id']] = {'status': 'manual', 'anchor': anchor,
-                                                                      'candidates': [], 'reason': None}
-                    self._associate(thread, anchor, 'manual', now)
-                thread['updated_at'] = now
-            self._write(data)
-            return {**self._view(data, content), 'result': result}
+                if 'suggested_replacement' in request:
+                    from .annotation_suggestions import prepare
+                    association = thread['associations'].get(content['version_id'], {})
+                    anchor = association.get('anchor')
+                    if not anchor:
+                        raise AnnotationError('建议需要当前版本的可靠关联')
+                    message['suggested_replacement'] = prepare(content, anchor, request['suggested_replacement'])
+                message['reply_to'] = parent_id
+                thread['messages'].append(message)
+                result = {'message_id': message['id']}
+            elif operation in ('edit', 'delete_message'):
+                message = next((m for m in thread['messages'] if m['id'] == request['message_id']), None)
+                if message is None or message['deleted_at']:
+                    raise AnnotationError('批注内容不存在或已删除')
+                if operation == 'edit':
+                    body = _text(request['body'], '批注正文')
+                    category = _category(request['category'])
+                    message['edits'].append({'body': message['body'], 'category': message['category'], 'at': now})
+                    message.update(body=body, category=category, updated_at=now)
+                else:
+                    message['deleted_at'] = now
+            elif operation == 'delete_thread':
+                thread['deleted_at'] = now
+            elif operation in ('resolve', 'reopen'):
+                thread['resolved'] = operation == 'resolve'
+            elif operation == 'associate':
+                anchor = make_anchor(content, request['selection'])
+                thread['associations'][content['version_id']] = {'status': 'manual', 'anchor': anchor,
+                                                                  'candidates': [], 'reason': None}
+                self._associate(thread, anchor, 'manual', now)
+            thread['updated_at'] = now
+        return result
+
+    def batch(self, content, request):
+        from .annotation_batch import execute_batch
+        return execute_batch(self, content, request)
 
     @staticmethod
     def _message(request, now):
@@ -702,7 +773,7 @@ class AnnotationStore:
 
     def export(self):
         with self._locked() as data:
-            return deepcopy(data)
+            return {key: deepcopy(value) for key, value in data.items() if key != 'requests'}
 
     def _import(self, data, bundle):
         """Atomic deduplication. Divergent same-ID records return conflicts, never overwrite."""
@@ -746,7 +817,7 @@ class AnnotationStore:
             raise AnnotationError('导入线程内容或历史无效')
         message_ids = set()
         for message in thread['messages']:
-            _keys(message, ('id', 'body', 'author', 'category', 'created_at', 'updated_at', 'deleted_at', 'edits', 'reply_to'),
+            _keys(message, ('id', 'body', 'author', 'category', 'created_at', 'updated_at', 'deleted_at', 'edits', 'reply_to', 'suggested_replacement'),
                   ('id', 'body', 'author', 'category', 'created_at', 'updated_at', 'deleted_at', 'edits'))
             _text(message['id'], 'message id', 256)
             if message['id'] in message_ids:
@@ -754,6 +825,9 @@ class AnnotationStore:
             if 'reply_to' in message and message['reply_to'] not in message_ids:
                 raise AnnotationError('回复对象必须是同一线程中的先前消息')
             message_ids.add(message['id'])
+            if 'suggested_replacement' in message:
+                from .annotation_suggestions import validate
+                validate(message['suggested_replacement'])
             _text(message['body'], '批注正文')
             _author(message['author'])
             _category(message['category'])

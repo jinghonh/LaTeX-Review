@@ -36,7 +36,7 @@ latex-review-check-scope .latex-review/latest --allow 'sections/*' --allow main.
 
 清单包含：
 
-- `requested_sources`：本次解析后的来源选项。
+- 重建配方保存在 `.rebuild/recipe.json`，包含有效配置、可写新版入口和固定旧版来源。
 - `baselines`：实际两侧来源标识、入口和内容指纹；来源失败时可能为空。
 - `stages`：来源、解析、比较、编译、报告、上传和预览状态。
 - `exit_code` 和 `status`：本次命令结果；完整为 `complete`，退出码 2 为 `degraded`，其他非零为 `failed`。
@@ -93,8 +93,9 @@ latex-review-annotations REPORT_DIR resolve THREAD_ID
 `delete --yes` 确认删除；无 `--message-id` 时删除整条批注及其回复。
 `resolve` 标记整条批注为已解决；重新打开仍使用 JSON 接口的 `reopen` 操作。
 
-`add --quote` 区分大小写，只折叠连续 ASCII 空白并移除两端 ASCII 空格，不做模糊匹配。
-只能在当前正文的单个单元内匹配。文字中的行内公式使用清单中的 U+FFFC 原子。
+`add --quote` 区分大小写，折叠连续 ASCII 空白并移除两端 ASCII 空格。
+行内公式可直接使用 `$…$` 或 `\(…\)`；包装和无意义数学空白可以等价，公式内容必须相等。
+只能在当前单个单元内匹配。既有 U+FFFC 输入仍兼容；新建定位不会自动采用近似候选。
 重复原文返回 `error` 和 `candidates`，退出码为 4，不写入存储。
 候选包含 `occurrence`、`selection`、`source`、`section_path` 和 `text`。
 使用 `--unit-id` 缩小范围，或使用从 1 开始的 `--occurrence` 选择位置。
@@ -109,10 +110,61 @@ latex-review-annotations REPORT_DIR add --formula --unit-id UNIT_ID --body '公�
 ```
 
 公式模式按完整原始 LaTeX 匹配，包含 `$…$`、`\\(…\\)` 或环境包装；也可只指定公式单元 ID。
-成功输出保持原接口的线程视图、`revision` 和 `result`；创建和回复的 `result` 返回新增 ID。
+高层写入默认返回 `success`、`thread_id`、`message_id`、`revision`、`version_id` 和 `request_id`。
+没有请求 ID 的单条写入返回 `request_id=null`。子命令的 `--full` 返回完整视图；底层 `--request` 保持完整返回。
+未匹配时最多返回三个相近片段，包含 `distance`、`context` 和 `diff`，不直接作为可靠选区。
+长输入的候选诊断最多比较前 512 个字符，定位仍使用完整输入。
 操作失败返回 JSON 错误和退出码 4；参数解析失败由 argparse 输出用法并返回 2。
 命令不自动重试并发冲突。调用者需保留输入，重新读取并检查对象后再决定是否提交。
 `--project-root` 等顶层选项放在子命令之前；子命令不能与旧读取或 JSON 请求模式混用。
+
+读取使用 `--summary`、`--fields`、`--limit`、`--offset`。分页返回 `total_matched`，不截断 JSON 或定位原文。
+过滤参数为 `--thread-id`、`--unit-id`、`--status`、`--author`、`--kind`。
+
+```sh
+latex-review-annotations REPORT_DIR --summary --limit 20
+latex-review-annotations REPORT_DIR --content --fields id,text,raw_latex,source --limit 20
+latex-review-annotations REPORT_DIR --thread-id THREAD_ID --fields id,messages,association
+curl --fail --silent http://127.0.0.1:PORT/api/report
+```
+
+本机 `GET /api/report` 返回 `report_directory`、报告地址及可用的项目身份。它复用 Host/Origin 校验，不返回写入 token。
+
+### 批量与复核
+
+`batch FILE --request-id ID --author NAME` 接受 JSON 数组，或包含 `items`、`request_id`、`expected_revision`、`atomic` 的对象。
+每项需要唯一 `id` 和 `operation`。`add` 接受原文定位参数；底层 `create` 也可提交 `selection`。
+`reply` 接受 `thread_id`、`parent_message_id` 或 `reply_to`。顶层作者为缺省作者，正文及分类复用单条校验。
+
+```json
+[
+  {"id":"a1","operation":"add","quote":"目标 $x$ 原文","body":"修改理由","category":"suggestion"},
+  {"id":"r1","operation":"reply","thread_id":"THREAD_ID","body":"判断：证据不足。依据：尚无实验记录。剩余问题：补充实验。"}
+]
+```
+
+```sh
+latex-review-annotations REPORT_DIR batch batch.json --request-id UNIQUE-ID --author Codex --dry-run
+latex-review-annotations REPORT_DIR batch batch.json --request-id UNIQUE-ID --author Codex
+latex-review-annotations REPORT_DIR batch batch.json --request-id OTHER-ID --author Codex --atomic
+latex-review-annotations REPORT_DIR audit SNAPSHOT_FILE
+```
+
+默认提交成功项。任何项失败退出码为 4，不能假定整批未写入。`--atomic` 要求全部成功；`--dry-run` 不写入或消耗请求 ID。
+每次批量操作只加载一次正文、取得一次存储锁并持久化一次。响应提供全部 `results`、`committed` 和修订号。
+相同请求 ID 和内容重试返回原收据；修订号不属于幂等载荷。不同内容使用相同 ID 返回冲突。
+提交前保存线程快照，默认位于项目 `.latex-review/annotation-batches/`，响应返回 `snapshot_file`。
+自动 `audit` 核对消息、作者、父消息及重复回复；外部新增线程和消息单独列出。再次复核快照可以发现后续新增批注。
+复核回复包含判断、依据和剩余问题。回复完成与问题解决分开；证据不足时保持未解决。
+
+### 源码建议
+
+`add`、`reply` 可传 `--original-chunk` 和 `--replacement-chunk`，替换使用原始 LaTeX，替换块可以为空。
+`preview THREAD_ID MESSAGE_ID` 返回差异，不修改源码或修订号。`apply THREAD_ID MESSAGE_ID` 显式回写。
+应用验证可靠单文件区间、全文指纹、原文和修订号；过期或不可写建议拒绝应用。
+结果包含 `source_changed` 和 `rebuild`，不自动解决线程。Web 提供相同的差异预览与接受入口。
+新报告保存重建配方并固定旧版来源。成功后切换报告，保留 `previous_report`；失败或缺少配方返回 `pending`，说明源码已修改、报告待更新。
+简单图注和单元格提供 `subunit`、`source_span`。第一行使用结构性的 `header` 身份。复杂结构提供只读降级理由，不增加主变更计数。
 
 ```mermaid
 flowchart LR

@@ -109,9 +109,9 @@ def test_table_cells_render_citations_and_configured_macros_with_coordinates(tmp
     with resolve_sources(entry="main.tex", old_dir=old, new_dir=new) as pair:
         before, after = parse_project(pair.old.expand(), macros=macros), parse_project(pair.new.expand(), macros=macros)
         result = render_preview(before, after)
-    assert re.search(r'<td data-row="1" data-column="1">.*?\[ref\]</span>', result.html)
+    assert re.search(r'<td data-row="1" data-column="1"[^>]*>.*?\[ref\]</span>', result.html)
     assert 'KeyA<small class="citation-metadata"' not in result.html
-    assert re.search(r'<td data-row="1" data-column="2">.*?【重点】', result.html)
+    assert re.search(r'<td data-row="1" data-column="2"[^>]*>.*?【重点】', result.html)
     assert not any(item.code == "preview_table_fallback" for item in result.diagnostics)
 
 
@@ -128,7 +128,7 @@ def test_table_cell_with_missing_reference_key_keeps_key_and_diagnostic(tmp_path
     old, new = _roots(tmp_path, r"\begin{document}\begin{tabular}{c}\cite{absent}\end{tabular}\end{document}")
     with resolve_sources(entry="main.tex", old_dir=old, new_dir=new) as pair:
         result = render_preview(parse_project(pair.old.expand()), parse_project(pair.new.expand()))
-    assert re.search(r'<td data-row="1" data-column="1">.*?\[absent\]</span>', result.html)
+    assert re.search(r'<td data-row="1" data-column="1"[^>]*>.*?\[absent\]</span>', result.html)
     assert any(item.code == "bibliography_key_unresolved" and item.source_old for item in result.diagnostics)
 
 
@@ -142,7 +142,7 @@ def test_nested_table_citation_missing_key_reaches_report_diagnostics(tmp_path):
     html = report.html.read_text(encoding="utf-8")
     diff = json.loads(report.diff_json.read_text(encoding="utf-8"))
     diagnostics = json.loads(report.directory.joinpath("diagnostics.json").read_text(encoding="utf-8"))
-    assert re.search(r'<td data-row="1" data-column="1">.*?\[absent\]</span>', html)
+    assert re.search(r'<td data-row="1" data-column="1"[^>]*>.*?\[absent\]</span>', html)
     assert any(item["code"] == "bibliography_key_unresolved" for item in diff["diagnostics"])
     assert any(item["code"] == "bibliography_key_unresolved" for item in diagnostics["diagnostics"])
 
