@@ -6,15 +6,6 @@
   const storageKey = 'latex-live:' + location.pathname;
   let saved = null;
   try { saved = JSON.parse(sessionStorage.getItem(storageKey)); } catch (_) {}
-  const menu = document.getElementById('live-sections');
-  if (menu) {
-    sections.forEach(node => {
-      const option = document.createElement('option');
-      option.value = node.id; option.textContent = heading(node); menu.append(option);
-    });
-    menu.addEventListener('change', () => jump(document.getElementById(menu.value)));
-    menu.disabled = !sections.length;
-  }
   function jump(node) {
     if (!node) return;
     node.scrollIntoView({block:'start'});
@@ -39,9 +30,10 @@
   if (search) { search.value = saved?.query || ''; search.addEventListener('input', find); find(); }
   const panel = document.getElementById('live-navigation');
   if (panel && saved) panel.open = !!saved.open;
+  window.reviewSections.restore(saved?.sections);
   function remember() {
     const near = sections.filter(node => node.getBoundingClientRect().top <= 120).at(-1);
-    const state = {scroll:window.scrollY, query:search?.value || '', open:panel?.open || false,
+    const state = {sections: window.reviewSections.snapshot(), scroll:window.scrollY, query:search?.value || '', open:panel?.open || false,
       section:near ? heading(near) : '', index:sections.indexOf(near),
       occurrence:near ? sections.slice(0, sections.indexOf(near)).filter(item => heading(item) === heading(near)).length : 0,
       offset:near ? near.getBoundingClientRect().top : 0};
@@ -61,7 +53,7 @@
   for (const event of ['pointerdown', 'wheel', 'keydown', 'touchstart']) {
     window.addEventListener(event, () => { restoring = false; }, {once:true, passive:true});
   }
-  document.querySelector('.live-controls>a')?.addEventListener('click', () => {
+  document.querySelector('.live-controls a[href="#live-diagnostics"]')?.addEventListener('click', () => {
     const diagnostics = document.getElementById('live-diagnostics');
     diagnostics.open = true;
   });

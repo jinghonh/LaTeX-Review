@@ -87,7 +87,7 @@ def test_live_navigation_and_refresh_preserve_reading_state(tmp_path):
                 assert paper.count() == 1
                 assert page.evaluate('getComputedStyle(document.querySelector(".preview-side")).fontFamily.includes("Iowan")')
                 box = paper.bounding_box()
-                assert abs(box['x'] + box['width'] / 2 - 640) < 1
+                assert abs(box['x'] + box['width'] / 2 - 810) < 1
                 page.locator('#live-navigation>summary').click()
                 page.locator('#live-search').fill('Target passage')
                 assert page.locator('#live-results button').count() == 1
@@ -120,11 +120,12 @@ def test_live_navigation_and_refresh_preserve_reading_state(tmp_path):
                 for width in (1280, 390):
                     page.set_viewport_size({'width': width, 'height': 900})
                     page.evaluate('window.scrollTo(0,0)')
-                    options = page.locator('#live-sections option')
-                    page.locator('#live-sections').select_option(options.nth(3).get_attribute('value'))
+                    if not page.locator('#sections-side').is_visible():
+                        page.locator('#toggle-sections').click()
+                    page.get_by_role('button', name='Replacement', exact=True).click()
                     assert page.evaluate('scrollY') > 0
                     assert page.evaluate('document.documentElement.scrollWidth <= innerWidth')
-                page.locator('.live-controls>a').click()
+                page.locator('.live-controls a[href="#live-diagnostics"]').click()
                 assert page.locator('#live-diagnostics').get_attribute('open') is not None
                 assert not errors
             finally:
@@ -162,3 +163,38 @@ def test_live_uses_available_pdf_converter(tmp_path, monkeypatch):
     monkeypatch.setattr(compilation, '_program', lambda *args: None)
     messages = build(source, output, 2)
     assert any('缺少可用的 PDF 转换工具' in message for message in messages)
+
+
+def test_live_section_tree_restores_expansion(tmp_path):
+    import pytest
+    api = pytest.importorskip('playwright.sync_api')
+    entry = tmp_path / 'main.tex'
+    entry.write_text(r'\documentclass{article}\begin{document}\section{First}\subsection{Second}\subsubsection{Deep}Text.\end{document}')
+    output = tmp_path / 'preview'
+    output.mkdir()
+    source = ProjectSource('new', tmp_path, 'main.tex', ComparisonSource('directory', str(tmp_path)))
+    build(source, output)
+    with api.sync_playwright() as p:
+        browser = p.chromium.launch()
+        page = browser.new_page(viewport={'width': 1280, 'height': 900})
+        page.route('https://**', lambda route: route.abort())
+        errors = []
+        page.on('pageerror', lambda error: errors.append(str(error)))
+        page.goto((output / 'report.html').as_uri())
+        api.expect(page.locator('#sections-side')).to_be_visible()
+        assert page.locator('.section-count').count() == 0
+        api.expect(page.get_by_role('button', name='Deep', exact=True)).to_be_hidden()
+        page.locator('#section-tree details > summary').nth(1).click(position={'x': 3, 'y': 10})
+        api.expect(page.get_by_role('button', name='Deep', exact=True)).to_be_visible()
+        page.reload()
+        api.expect(page.get_by_role('button', name='Deep', exact=True)).to_be_visible()
+        page.locator('#close-sections').click()
+        page.reload()
+        api.expect(page.locator('#sections-side')).to_be_hidden()
+        page.set_viewport_size({'width': 390, 'height': 900})
+        page.locator('#toggle-sections').click()
+        page.get_by_role('button', name='Second', exact=True).click()
+        api.expect(page.locator('#sections-side')).to_be_hidden()
+        api.expect(page.get_by_role('button', name='Second', exact=True, include_hidden=True)).to_have_attribute('aria-current', 'location')
+        assert not errors
+        browser.close()

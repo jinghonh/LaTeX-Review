@@ -43,6 +43,7 @@
     return {...values, sync: document.getElementById('sync-scroll').checked,
       selected: navigation.selected(), scrollY: window.scrollY,
       readerOpen: document.getElementById('reader-tools').open, query: document.getElementById('report-search').value,
+      sections: window.reviewSections.snapshot(),
       directoryOpen: document.body.classList.contains('directory-open'),
       panels: Object.fromEntries(['old', 'new'].map(side => [side,
         document.querySelector('.preview-side[data-side="' + side + '"]').scrollTop]))};
@@ -69,6 +70,7 @@
         editor.note.value = records[card.id]?.note || '';
       });
     });
+    window.reviewSections.counts();
     progress.textContent = '已审阅 ' + reviewed + ' / ' + cards.length + ' · 待处理 ' + pending;
   }
   function select(id) {
@@ -190,6 +192,8 @@
   sectionFilter.addEventListener('change', () => { search(); persist(); });
   document.addEventListener('review-translations-updated', search);
 
+  window.reviewSections.restore(ui.sections);
+  document.addEventListener('review-sections-changed', persist);
   renderProgress();
   for (const id of ['kind-filter', 'category-filter', 'reading-mode', 'layout-mode', 'translation-mode', 'review-filter', 'section-filter']) {
     const field = document.getElementById(id);

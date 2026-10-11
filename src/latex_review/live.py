@@ -74,17 +74,19 @@ def build(source: ProjectSource, output: Path, revision: int = 1) -> list[str]:
 <p>内容预览不代表最终编译版式。保存论文后自动更新。</p>
 <p id="math-status" role="status">正在加载在线公式排版。</p></div></details></header>
 <section class="report-controls live-controls" aria-label="持续预览工具栏">
-<details id="live-navigation"><summary>搜索与章节导航</summary><div class="live-navigation-panel">
+<div class="live-toolbar-navigation"><button type="button" id="toggle-sections" aria-expanded="false" aria-controls="sections-side">章节</button>
+<details id="live-navigation"><summary>搜索</summary><div class="live-navigation-panel">
 <label for="live-search">搜索当前论文</label><input type="search" id="live-search" placeholder="输入文字">
 <p id="live-search-status" role="status"></p><ol id="live-results"></ol>
-<label for="live-sections">章节</label><select id="live-sections"><option value="">选择章节</option></select>
-</div></details><p id="live-status" role="status">持续预览已启动。</p>
-<a href="#live-diagnostics">预览诊断 · {len(messages)}</a>
+</div></details>
+<a href="#live-diagnostics">预览诊断 · {len(messages)}</a></div>
+<div class="live-toolbar-reading">
 <label class="control-field"><span>译文显示</span><select id="translation-mode"><option value="bilingual">英中对照</option><option value="original">英文原文</option></select></label>
 <div class="translation-actions"><button type="button" id="translate-all">翻译全文</button>
 <button type="button" id="translation-cancel" disabled>停止翻译</button>
-<button type="button" id="translation-export">导出英中对照 HTML</button></div>
-<p id="translation-status" role="status">按需翻译标题、摘要、正文和图注；表格和参考文献保留原文。</p></section>'''
+<button type="button" id="translation-export">导出英中对照 HTML</button></div></div>
+<div class="live-toolbar-status"><p id="live-status" role="status">持续预览已启动。</p>
+<p id="translation-status" role="status">按需翻译标题、摘要、正文和图注；表格和参考文献保留原文。</p></div></section>'''
     supplement = ('<details class="report-supplement" id="live-diagnostics"><summary>预览诊断 · '
                   + str(len(messages)) + '</summary><ul>'
                   + (diagnostic_items or '<li>没有额外诊断。</li>') + '</ul></details>')
@@ -93,6 +95,7 @@ def build(source: ProjectSource, output: Path, revision: int = 1) -> list[str]:
     html = html.replace('<body>', '<body class="reading-view live-view">', 1)
     html = html.replace('<title>LaTeX 内容预览</title>', '<title>当前论文持续预览 · ' + escape(source.entry) + '</title>', 1)
     html = re.sub(r'<header>.*?</header>', lambda _: header, html, count=1, flags=re.S)
+    html = html.replace('<main>', '<nav id="sections-side" aria-label="章节目录" hidden><div class="directory-heading"><h2>章节目录</h2><button type="button" id="close-sections">收起</button></div><ol id="section-tree"></ol></nav><main>', 1)
     html = html.replace('</main>', '</main>' + supplement, 1)
     from .delivery import embed_annotations
     html = embed_annotations(html, annotation_content, output)
@@ -103,7 +106,13 @@ def build(source: ProjectSource, output: Path, revision: int = 1) -> list[str]:
     translation_scripts = ('<script type="application/json" id="translation-units">' + manifest + '</script>'
                            + '<script type="application/json" id="translation-results">{}</script>'
                            + '<script>' + files('latex_review').joinpath('report_translation.js').read_text(encoding='utf-8') + '</script>')
-    html = html.replace('</body>', annotation_scripts + translation_scripts + _reader_script(revision) + '</body>')
+    reader_data = json.dumps({'live': True, 'nodes': [
+        {'side': 'new', 'id': node.review.id, 'type': node.review.type,
+         'parent': node.review.parent_id, 'section': list(node.review.section_path)}
+        for node in project.nodes]}, ensure_ascii=False).replace('<', '\\u003c')
+    sections_script = ('<script type="application/json" id="reader-data">' + reader_data + '</script>'
+                       + '<script>' + files('latex_review').joinpath('report_sections.js').read_text(encoding='utf-8') + '</script>')
+    html = html.replace('</body>', annotation_scripts + translation_scripts + sections_script + _reader_script(revision) + '</body>')
     _write(output / 'report.html', html)
     from .report_rebuild import save_live_recipe
     save_live_recipe(output, source)

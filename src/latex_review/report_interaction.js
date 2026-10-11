@@ -419,6 +419,7 @@
   if (layout) {
     const directoryButton = document.getElementById('toggle-changes');
     function directory(open) {
+      if (open) window.reviewSections?.close();
       document.body.classList.toggle('directory-open', open);
       directoryButton.setAttribute('aria-expanded', String(open));
       arrangeInlineChanges();
@@ -800,7 +801,7 @@
     });
     // Keep notes beside their source; expanded or adjacent notes move down without overlapping.
     arrangeInlineChanges = () => {
-      const availableWidth = innerWidth - (document.body.classList.contains('directory-open') ? 340 : 0);
+      const availableWidth = innerWidth - ((document.body.classList.contains('directory-open') || document.body.classList.contains('sections-open')) ? 340 : 0);
       const marginNotes = readingView() && availableWidth >= 800;
       document.body.classList.toggle('margin-notes', marginNotes);
       const main = document.querySelector('main');
@@ -874,7 +875,19 @@
       const card = cards.find(item => item.id === id);
       if (card && !card.hidden) navigate(card.querySelector('.change-jump'), 'step');
     },
-    node(side, id, translated = false) {
+    chapter(side, id, otherId) {
+      this.node(side, id, false, true);
+      if (!readingView() && otherId) {
+        const otherSide = side === 'new' ? 'old' : 'new';
+        const other = document.getElementById(otherSide + '-' + otherId);
+        if (other) {
+          revealAncestors(other, otherSide);
+          const heading = Array.from(other.children).find(child => /^H[1-6]$/.test(child.tagName));
+          (heading || other).scrollIntoView({block: 'start', behavior: 'auto'});
+        }
+      }
+    },
+    node(side, id, translated = false, start = false) {
       const target = document.getElementById(side + '-' + id);
       if (!target) return;
       if (side === 'old' && readingView()) {
@@ -892,7 +905,8 @@
       document.querySelectorAll('.search-target').forEach(node => node.classList.remove('search-target'));
       target.classList.add('search-target');
       mutedUntil = performance.now() + 500;
-      target.scrollIntoView({block: 'center', behavior: 'auto'});
+      const heading = start && Array.from(target.children).find(child => /^H[1-6]$/.test(child.tagName));
+      (heading || target).scrollIntoView({block: start ? 'start' : 'center', behavior: 'auto'});
       target.tabIndex = -1; target.focus({preventScroll: true});
       status.textContent = '已定位' + (side === 'old' ? '修改前' : '修改后') + '内容；保留当前变更筛选。';
     }

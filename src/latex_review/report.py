@@ -503,7 +503,8 @@ def _report_overview(document: ReviewDocument) -> str:
 
 def _report_controls(change_count: int) -> str:
     return f'''<nav class="report-controls" aria-label="审阅工具">
-<button type="button" id="toggle-changes" aria-expanded="false" aria-controls="changes-side"><span class="control-icon" aria-hidden="true">☷</span>变更目录 <span class="control-count">{change_count}</span></button>
+<div class="directory-controls"><button type="button" id="toggle-sections" aria-expanded="false" aria-controls="sections-side">章节</button>
+<button type="button" id="toggle-changes" aria-expanded="false" aria-controls="changes-side"><span class="control-icon" aria-hidden="true">☷</span>变更目录 <span class="control-count">{change_count}</span></button></div>
 <div class="reading-options" role="group" aria-label="阅读设置">
 <label class="control-field"><span>阅读范围</span><select id="reading-mode"><option value="full">完整文档</option><option value="context">变更上下文</option></select></label>
 <label class="control-field"><span>对照方式</span><select id="layout-mode"><option value="reading">新稿阅读</option><option value="compare">双稿对照</option></select></label>
@@ -548,11 +549,13 @@ def _report_html(document: ReviewDocument, preview_html: str, old: ParsedProject
     }
     fingerprint = sha256(json.dumps(fingerprint_data, ensure_ascii=False, sort_keys=True).encode()).hexdigest()
     search_nodes = [{"side": side, "id": node.review.id,
+                     "type": node.review.type, "parent": node.review.parent_id,
                      "section": list(node.review.section_path),
                      "citations": list(node.citations)}
                     for side, project in (("old", old), ("new", new)) for node in project.nodes]
     reader_data = json.dumps({"fingerprint": fingerprint, "nodes": search_nodes}, ensure_ascii=False).replace("<", "\\u003c")
     annotation_script = files("latex_review").joinpath("report_annotations.js").read_text(encoding="utf-8")
+    sections_script = files("latex_review").joinpath("report_sections.js").read_text(encoding="utf-8")
     reader_script = files("latex_review").joinpath("report_reader.js").read_text(encoding="utf-8")
     severity_labels = {"error": "错误", "warning": "提醒", "info": "说明"}
     diagnostics_html = "".join(
@@ -573,6 +576,7 @@ def _report_html(document: ReviewDocument, preview_html: str, old: ParsedProject
 <p id="math-status" role="status">正在加载在线公式排版。</p>
 </div></details></header>
 {_report_controls(counts.changes)}
+<nav id="sections-side" aria-label="章节目录" hidden><div class="directory-heading"><h2>章节目录</h2><button type="button" id="close-sections">收起</button></div><p class="section-legend">变更总数 · 未审阅</p><ol id="section-tree"></ol></nav>
 <section class="reader-tools" aria-label="搜索与审阅记录">
 <details id="reader-tools"><summary>搜索与审阅记录 <span id="review-progress" role="status"></span></summary>
 <div class="reader-grid">
@@ -599,7 +603,7 @@ def _report_html(document: ReviewDocument, preview_html: str, old: ParsedProject
 <script>window.reviewNodePairs={pairs_json};</script><script>{interaction}</script>
 <script type="application/json" id="translation-units">{translation_units}</script>
 <script type="application/json" id="translation-results">{{}}</script>
-<script>{reader_script}</script>
+<script>{sections_script}</script><script>{reader_script}</script>
 <script>{translation_script}</script>
 <script>{annotation_script}</script>
 <script>{files("latex_review").joinpath("annotation_delivery.js").read_text(encoding="utf-8")}</script>
