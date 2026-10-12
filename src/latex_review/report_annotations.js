@@ -361,7 +361,7 @@
   document.addEventListener('click',e=>{
     if(!ready||e.target.closest('.annotation-overview,.annotation-mark')) return;
     const point=document.caretRangeFromPoint?.(e.clientX,e.clientY);
-    if(point&&getSelection().isCollapsed) {
+    if(point&&getSelection().isCollapsed&&!(document.body.classList.contains('live-view')&&document.body.classList.contains('bilingual-view')&&e.target.closest('.review-sentence,.translated-sentence'))) {
       for(const u of content.units.filter(u=>u.kind==='text')) {const root=rootFor(u);if(root?.contains(point.startContainer)){const map=coordinates(root),offset=map.offset(point.startContainer,point.startOffset);const t=snapshot.threads.find(t=>{const a=t.association.anchor;return a?.unit_id===u.id&&a.start<=offset&&a.end>offset;});if(t) overlap({...t.association.anchor,start:offset,end:offset+1});break;}}
     }
     const formula=e.target.closest('[data-annotation-latex]'); if(formula) {const u=content.units.find(u=>u.kind==='formula'&&rootFor(u)===formula);if(u){pending={unit_id:u.id,side:'new'};if(relocation){const t=relocation;relocation=null;update({operation:'associate',thread_id:t.id,selection:pending});return;}if(editing?.operation==='create'&&!editing.selection){editing.selection=pending;editing.content=structuredClone(content);editing.anchor=window.reviewAnnotationDelivery?.anchor(content,pending);editing.warning=null;remember();return;}toolbar.hidden=false;const r=formula.getBoundingClientRect();toolbar.style.top=r.bottom+'px';toolbar.style.left=Math.min(innerWidth-130,r.left)+'px';}}

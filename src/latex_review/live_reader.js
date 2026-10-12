@@ -30,11 +30,19 @@
   if (search) { search.value = saved?.query || ''; search.addEventListener('input', find); find(); }
   const panel = document.getElementById('live-navigation');
   if (panel && saved) panel.open = !!saved.open;
+  const mode = document.getElementById('translation-mode');
+  if (mode && ['original', 'bilingual'].includes(saved?.mode)) {
+    mode.value = saved.mode;
+    mode.dispatchEvent(new Event('change'));
+  }
   window.reviewSections.restore(saved?.sections);
   function remember() {
-    const near = sections.filter(node => node.getBoundingClientRect().top <= 120).at(-1);
+    const paragraphs = Array.from(paper.querySelectorAll('.node-paragraph,.node-figure'));
+    const near = paragraphs.filter(node => node.getBoundingClientRect().top <= 120).at(-1) ||
+      sections.filter(node => node.getBoundingClientRect().top <= 120).at(-1);
     const state = {sections: window.reviewSections.snapshot(), scroll:window.scrollY, query:search?.value || '', open:panel?.open || false,
-      section:near ? heading(near) : '', index:sections.indexOf(near),
+      mode:mode?.value, paragraph:near && paragraphs.includes(near) ? near.id : null,
+      paragraphIndex:paragraphs.indexOf(near), section:near ? heading(near) : '', index:sections.indexOf(near),
       occurrence:near ? sections.slice(0, sections.indexOf(near)).filter(item => heading(item) === heading(near)).length : 0,
       offset:near ? near.getBoundingClientRect().top : 0};
     try { sessionStorage.setItem(storageKey, JSON.stringify(state)); } catch (_) {}
@@ -44,12 +52,15 @@
   function restore() {
     if (!restoring) return;
     const matches = sections.filter(item => heading(item) === saved.section);
-    const node = matches[Math.min(saved.occurrence || 0, matches.length - 1)] ||
+    const paragraphs = Array.from(paper.querySelectorAll('.node-paragraph,.node-figure'));
+    const node = (saved.paragraph && (document.getElementById(saved.paragraph) || paragraphs[saved.paragraphIndex])) ||
+      matches[Math.min(saved.occurrence || 0, matches.length - 1)] ||
       (saved.index >= 0 ? sections[Math.min(saved.index, sections.length - 1)] : null);
     window.scrollTo(0, node ? window.scrollY + node.getBoundingClientRect().top - saved.offset : saved.scroll || 0);
   }
   window.addEventListener('load', restore);
   window.addEventListener('review-math-ready', restore);
+  document.addEventListener('review-translations-updated', restore);
   for (const event of ['pointerdown', 'wheel', 'keydown', 'touchstart']) {
     window.addEventListener(event, () => { restoring = false; }, {once:true, passive:true});
   }
@@ -65,9 +76,14 @@
       const response = await fetch('live-status.json', {cache:'no-store'});
       if (!response.ok) throw new Error('status');
       const state = await response.json();
-      document.getElementById('live-status').textContent = state.message;
+      const status = document.getElementById('live-status');
+      status.textContent = state.message;
+      status.hidden = state.message.startsWith('持续预览已启动') || state.message.startsWith('已更新当前论文');
       if (state.revision !== revision) { remember(); location.reload(); }
-    } catch (_) { document.getElementById('live-status').textContent = '预览服务连接中断。'; }
+    } catch (_) {
+      const status = document.getElementById('live-status');
+      status.textContent = '预览服务连接中断。'; status.hidden = false;
+    }
   }
   check(); setInterval(check, 1000);
 })();

@@ -22,7 +22,7 @@ def paper(tmp_path):
 \begin{document}\maketitle
 \begin{abstract}Abstract content.\end{abstract}
 \section{Introduction}
-Stable content with $x$ and \cite{key}.
+Stable content with $x$ and \cite{key}. Another sentence.
 
 Editable content.
 \begin{figure}\caption{Figure caption.}\end{figure}
@@ -102,6 +102,7 @@ def test_live_translation_browser_retry_full_export_and_reload(tmp_path, provide
                 page.route('https://**', lambda route: route.abort())
                 page.goto(f'http://127.0.0.1:{server.server_port}/report.html')
                 page.wait_for_function('document.querySelectorAll("[data-translate-change]").length === 6')
+                page.locator('#close-sections').click()
                 assert not calls
                 codes.append(500)
                 paragraph = page.locator('.node-paragraph').filter(has_text='Editable content.')
@@ -110,6 +111,30 @@ def test_live_translation_browser_retry_full_export_and_reload(tmp_path, provide
                 paragraph.locator('button[data-translate-change]').click()
                 paragraph.locator('.translation-block').wait_for(state='visible')
                 assert len(calls) == 2
+                pair = paragraph
+                original = paragraph.locator('.review-sentence').first
+                translated = paragraph.locator('.translated-sentence').first
+                original.hover()
+                assert translated.evaluate('(node) => node.classList.contains("sentence-linked")')
+                translated.click()
+                assert original.evaluate('(node) => node.classList.contains("sentence-pinned")')
+                page.keyboard.press('Escape')
+                assert paragraph.locator('.sentence-pinned').count() == 0
+                assert pair.evaluate('(node) => getComputedStyle(node).gridTemplateColumns.split(" ").length') == 2
+                page.locator('#toggle-sections').click()
+                page.set_viewport_size({'width': 1140, 'height': 900})
+                assert pair.evaluate('(node) => getComputedStyle(node).gridTemplateColumns.split(" ").length') == 1
+                page.locator('#close-sections').click()
+                page.set_viewport_size({'width': 1280, 'height': 900})
+                page.wait_for_function('window.reviewAnnotations.getContent() !== null')
+                assert page.evaluate('''() => {
+                    const sentence = document.querySelector('.node-paragraph .review-sentence');
+                    const range = document.createRange(); range.selectNodeContents(sentence);
+                    getSelection().removeAllRanges(); getSelection().addRange(range);
+                    const selection = window.reviewAnnotations.selection();
+                    getSelection().removeAllRanges();
+                    return !!selection && selection.quote.includes('Abstract');
+                }''')
                 # Stop keeps completed translations and permits a later full request.
                 gate.clear()
                 page.locator('#translate-all').click()
@@ -120,12 +145,16 @@ def test_live_translation_browser_retry_full_export_and_reload(tmp_path, provide
                 assert paragraph.locator('.translation-block').is_visible()
                 page.locator('#translate-all').click()
                 page.wait_for_function('document.querySelectorAll(".translation-block").length === 6')
+                stable = page.locator('.node-paragraph').filter(has_text='Stable content with')
+                original_ids = stable.locator('.review-sentence').evaluate_all('(nodes) => nodes.map(node => node.id)')
+                assert stable.locator('.translated-sentence').evaluate_all('(nodes) => nodes.map(node => node.dataset.originalSentence)') == original_ids
                 page.locator('#translation-mode').select_option('original')
                 assert not paragraph.locator('.translation-block').is_visible()
                 page.locator('#translation-mode').select_option('bilingual')
                 for width in (1280, 390):
                     page.set_viewport_size({'width': width, 'height': 900})
                     assert page.evaluate('document.documentElement.scrollWidth <= innerWidth')
+                    assert pair.evaluate('(node) => getComputedStyle(node).gridTemplateColumns.split(" ").length') == (2 if width == 1280 else 1)
                 with page.expect_download() as download:
                     page.locator('#translation-export').click()
                 exported = tmp_path / 'translated.html'
@@ -133,6 +162,7 @@ def test_live_translation_browser_retry_full_export_and_reload(tmp_path, provide
                 page.goto(exported.as_uri())
                 page.wait_for_function('document.querySelectorAll(".translation-block").length === 6')
                 assert page.locator('.translation-block').first.is_visible()
+                assert page.locator('.live-bilingual-pair').count() == 4
                 assert '连接中断' not in page.locator('#live-status').inner_text()
                 before = len(calls)
                 entry.write_text(entry.read_text().replace('Editable content.', 'Updated content.'))
@@ -145,6 +175,9 @@ def test_live_translation_browser_retry_full_export_and_reload(tmp_path, provide
                 updated = page.locator('.node-paragraph').filter(has_text='Updated content.')
                 assert updated.locator('.translation-block').count() == 0
                 assert updated.locator('button[data-translate-change]').is_enabled()
+                page.locator('#translation-mode').select_option('original')
+                page.reload()
+                assert page.locator('#translation-mode').input_value() == 'original'
                 assert not errors
             finally:
                 browser.close()
@@ -195,3 +228,62 @@ def test_live_command_refreshes_translation_manifest(tmp_path, provider):
         finally:
             process.send_signal(signal.SIGINT)
             process.wait(timeout=8)
+
+
+def test_live_incomplete_alignment_retry_preserves_translation(tmp_path, provider):
+    api = pytest.importorskip('playwright.sync_api')
+    source, output, _ = paper(tmp_path)
+    config, calls, _, gate = provider
+    server = create_server(output, translation_config=config, cache_directory=tmp_path / 'cache')
+    unit = next(unit for unit in server.translation.units.values()
+                if unit['sentences'][0]['text'] == 'Editable content.')
+    server.translation.submit([unit['id']])
+    _wait(lambda: unit['id'] in server.translation.snapshot()['results'])
+    thread = Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        with api.sync_playwright() as playwright:
+            browser = playwright.chromium.launch(executable_path=os.environ.get('LATEX_REVIEW_BROWSER'))
+            try:
+                page = browser.new_page(viewport={'width': 1280, 'height': 900})
+                page.route('https://**', lambda route: route.abort())
+                corrupted = True
+
+                def status(route):
+                    response = route.fetch()
+                    data = response.json()
+                    if corrupted:
+                        data['results'][unit['id']]['sentences'][0]['number'] = 999
+                    route.fulfill(response=response, json=data)
+
+                def start(route):
+                    nonlocal corrupted
+                    assert route.request.post_data_json['retry'] is True
+                    corrupted = False
+                    route.continue_()
+
+                page.route('**/api/translation/status', status)
+                page.route('**/api/translation/start', start)
+                page.goto(f'http://127.0.0.1:{server.server_port}/report.html')
+                page.locator('#close-sections').click()
+                paragraph = page.locator('.node-paragraph').filter(has_text='Editable content.')
+                paragraph.locator('.translation-block').wait_for(state='visible')
+                assert '对应关系不完整' in paragraph.locator('.translation-item-status').inner_text()
+                paragraph.locator('.translated-sentence').hover()
+                assert paragraph.locator('.sentence-linked').count() == 0
+                gate.clear()
+                paragraph.get_by_role('button', name='重试翻译').click()
+                page.wait_for_function('!document.querySelector("#translation-cancel").hidden')
+                _wait(lambda: len(calls) == 2)
+                assert paragraph.locator('.translation-block').is_visible()
+                gate.set()
+                page.wait_for_function('document.querySelector("#translation-cancel").hidden')
+                assert '对应关系不完整' not in paragraph.locator('.translation-item-status').inner_text()
+                assert paragraph.locator('[data-unmatched]').count() == 0
+            finally:
+                browser.close()
+    finally:
+        gate.set()
+        server.shutdown()
+        server.server_close()
+        thread.join()

@@ -16,6 +16,57 @@
   const live = document.body.classList.contains('live-view');
   const localService = location.protocol === 'http:' && location.hostname === '127.0.0.1';
   const labels = {pending: '等待翻译', running: '正在翻译', ready: '译文已完成', failed: '翻译失败，可重试', cancelled: '已停止，可重试', blocked: '此段无法翻译'};
+  let pinnedSentence = '', hoveredSentence = '';
+  const liveCells = new Map();
+
+  function readingAnchor() {
+    if (!live) return null;
+    const nodes = Array.from(document.querySelectorAll('.preview-side .review-node'));
+    const node = nodes.find(node => {
+      const rect = node.getBoundingClientRect();
+      return rect.bottom > 120 && rect.top <= 120 && !node.querySelector('.review-node');
+    }) || nodes.find(node => node.getBoundingClientRect().top > 120);
+    return node ? {node, top: node.getBoundingClientRect().top} : null;
+  }
+
+  function paintSentences() {
+    document.querySelectorAll('.sentence-linked,.sentence-pinned').forEach(node => {
+      node.classList.remove('sentence-linked', 'sentence-pinned');
+    });
+    if (!live || mode.value !== 'bilingual') return;
+    for (const id of new Set([hoveredSentence, pinnedSentence].filter(Boolean))) {
+      const original = document.getElementById(id);
+      const translated = document.querySelector('.translated-sentence[data-original-sentence="' + CSS.escape(id) + '"]');
+      if (!original || !translated || translated.dataset.unmatched) continue;
+      for (const node of [original, translated]) {
+        node.classList.add('sentence-linked');
+        node.classList.toggle('sentence-pinned', id === pinnedSentence);
+      }
+    }
+  }
+
+  function sentenceId(target) {
+    if (!live || mode.value !== 'bilingual' || target.closest('a,button,input,select,textarea,[data-annotation-latex]')) return '';
+    const sentence = target.closest('.review-sentence,.translated-sentence');
+    if (!sentence || sentence.dataset.unmatched) return '';
+    const id = sentence.dataset.originalSentence || sentence.id;
+    return document.getElementById(id) && document.querySelector('.translated-sentence:not([data-unmatched])[data-original-sentence="' + CSS.escape(id) + '"]') ? id : '';
+  }
+  if (live) {
+    document.addEventListener('pointerover', event => { hoveredSentence = sentenceId(event.target); paintSentences(); });
+    document.addEventListener('pointerout', event => {
+      hoveredSentence = event.relatedTarget instanceof Element ? sentenceId(event.relatedTarget) : '';
+      paintSentences();
+    });
+    document.addEventListener('click', event => {
+      if (!getSelection().isCollapsed) return;
+      const id = sentenceId(event.target);
+      if (id) { pinnedSentence = pinnedSentence === id ? '' : id; hoveredSentence = ''; paintSentences(); }
+    });
+    document.addEventListener('keydown', event => {
+      if (event.key === 'Escape') { pinnedSentence = ''; hoveredSentence = ''; paintSentences(); }
+    });
+  }
 
   function showStatus(message) {
     status.textContent = message;
@@ -23,6 +74,7 @@
   }
 
   function applyResults() {
+    const anchor = readingAnchor();
     Object.values(results).forEach(result => {
       if (installed.has(result.id)) return;
       const target = document.getElementById(result.side + '-' + result.node_id);
@@ -40,7 +92,23 @@
         span.innerHTML = sentence.html;
         block.append(span, document.createTextNode(' '));
       });
+      if (live && liveCells.has(result.id)) {
+        const cell = liveCells.get(result.id);
+        const originalIds = Array.from(cell.original.querySelectorAll('.review-sentence')).map(sentence => sentence.id);
+        const translatedIds = result.sentences.map(sentence => result.side + '-' + result.node_id + '-sentence-' + sentence.number);
+        const incomplete = originalIds.length !== translatedIds.length || new Set(translatedIds).size !== translatedIds.length ||
+          translatedIds.some(id => !originalIds.includes(id));
+        cell.incomplete = incomplete;
+        block.querySelectorAll('.translated-sentence').forEach(sentence => {
+          const id = sentence.dataset.originalSentence;
+          if (!originalIds.includes(id) || translatedIds.filter(value => value === id).length !== 1) sentence.dataset.unmatched = 'true';
+        });
+      }
       function insert(container, translation) {
+        if (live) {
+          const cell = liveCells.get(result.id);
+          if (cell) { cell.translation.prepend(translation); return; }
+        }
         if (result.kind === 'paragraph') {
           const paragraph = Array.from(container.children).find(child => child.tagName === 'P');
           if (paragraph) paragraph.after(translation); else container.append(translation);
@@ -70,6 +138,8 @@
     renderTranslatedMath();
     window.dispatchEvent(new Event('resize'));
     document.dispatchEvent(new Event('review-translations-updated'));
+    paintSentences();
+    if (anchor) window.scrollBy(0, anchor.node.getBoundingClientRect().top - anchor.top);
   }
 
   function renderTranslatedMath() {
@@ -93,16 +163,24 @@
       const selected = units.filter(unit => unit.change_id === button.dataset.translateChange);
       const pending = selected.some(unit => ['running', 'pending'].includes((states[unit.id] || {}).state));
       const complete = selected.length > 0 && selected.every(unit => results[unit.id]);
+      const incomplete = selected.some(unit => liveCells.get(unit.id)?.incomplete);
       const blocked = selected.every(unit => unit.error);
       button.disabled = pending || blocked || (!available && !complete);
-      button.hidden = complete;
-      button.textContent = blocked ? '此段无法翻译' : pending ? '正在翻译…' : '翻译此处';
+      button.hidden = complete && !incomplete;
+      button.textContent = blocked ? '此段无法翻译' : pending ? '正在翻译…' : incomplete ? '重试翻译' : '翻译此处';
       const text = button.parentElement.querySelector('.translation-item-status');
       if (text) text.textContent = selected.map(unit => {
         const state = states[unit.id] || (results[unit.id] ? {state: 'ready'} : {});
-        return (live ? '' : unit.side === 'old' ? '修改前：' : '修改后：') + (labels[state.state] || '尚未翻译') +
+        return (live ? '' : unit.side === 'old' ? '修改前：' : '修改后：') + (liveCells.get(unit.id)?.incomplete ? '对应关系不完整' : labels[state.state] || '尚未翻译') +
           (state.message ? ' · ' + state.message : '');
       }).join('；');
+      if (live && text) {
+        text.hidden = complete && !incomplete && selected.every(unit => {
+          const state = states[unit.id] || {state: 'ready'};
+          return state.state === 'ready' && !state.message;
+        });
+        button.parentElement.hidden = button.hidden && text.hidden;
+      }
     });
     document.querySelectorAll('.group-translation-side[data-translation-node],.inline-translation-side[data-translation-node]').forEach(side => {
       const id = side.dataset.translationNode;
@@ -154,6 +232,7 @@
       if (JSON.stringify(results[id]) !== JSON.stringify(incoming[id])) {
         document.querySelectorAll('[data-translation-unit="' + CSS.escape(id) + '"]').forEach(block => block.remove());
         installed.delete(id);
+        if (liveCells.has(id)) liveCells.get(id).incomplete = false;
       }
     });
     document.getElementById('translation-results').textContent=JSON.stringify(incoming);
@@ -194,15 +273,15 @@
     finally { polling = false; }
   }
 
-  async function translate(ids) {
+  async function translate(ids, retry = false) {
     mode.value = 'bilingual'; applyResults();
-    const remaining = ids.filter(id => !results[id] && !blockedStates[id]);
+    const remaining = ids.filter(id => (retry || !results[id]) && !blockedStates[id]);
     if (!remaining.length) return;
     try {
       const configuration = await api('status');
       accept(configuration);
       if (!available) throw new Error(configuration.message);
-      accept(await api('start', {units: remaining}));
+      accept(await api('start', {units: remaining, retry}));
       await poll();
     } catch (error) { showStatus(error.message); }
   }
@@ -214,8 +293,18 @@
     const button = document.createElement('button'); button.type = 'button'; button.dataset.translateChange = unit.change_id;
     const text = document.createElement('span'); text.className = 'translation-item-status'; text.setAttribute('role', 'status');
     controls.append(button, text);
-    const heading = Array.from(node.children).find(child => /^H[1-6]$/.test(child.tagName));
-    if (heading) heading.after(controls); else node.append(controls);
+    const original = unit.kind === 'paragraph' ? Array.from(node.children).find(child => child.tagName === 'P') :
+      unit.kind === 'figure' ? node.querySelector('figcaption') : null;
+    if (original) {
+      const translation = document.createElement('div'); translation.className = 'live-translation-cell';
+      node.classList.add('live-bilingual-pair');
+      original.after(translation); translation.append(controls);
+      original.lang = 'en';
+      liveCells.set(unit.id, {original, translation, incomplete: false});
+    } else {
+      const heading = Array.from(node.children).find(child => /^H[1-6]$/.test(child.tagName));
+      if (heading) heading.after(controls); else node.append(controls);
+    }
   });
   document.querySelectorAll('.change-card').forEach(card => {
     if (!units.some(unit => unit.change_id === card.id)) return;
@@ -281,7 +370,8 @@
     const inline = document.getElementById('inline-' + button.dataset.translateChange);
     const translation = button.closest('.group-translation') || (inline && inline.querySelector('.inline-translation'));
     if (translation) translation.open = true;
-    translate(units.filter(unit => unit.change_id === button.dataset.translateChange).map(unit => unit.id));
+    const ids = units.filter(unit => unit.change_id === button.dataset.translateChange).map(unit => unit.id);
+    translate(ids, ids.some(id => liveCells.get(id)?.incomplete));
   });
   all.addEventListener('click', () => translate(units.map(unit => unit.id)));
   cancel.addEventListener('click', async () => {

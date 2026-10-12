@@ -306,12 +306,12 @@ def _figure_assets(old: ParsedProject | None, new: ParsedProject, directory: Pat
                     diagnostics.append(_asset_diagnostic("report_asset_unsupported",
                                                          f"图资源格式不允许复制或链接：{asset}", node, side))
                     cards.append(f'<div class="asset-card asset-missing" role="note">'
-                                 f'<strong>图资源格式未支持：{_e(asset)}</strong><p>{_e(provenance)}</p></div>')
+                                 f'<strong>图资源格式未支持：{_e(asset)}</strong><p class="asset-metadata">{_e(provenance)}</p></div>')
                     continue
                 if relative is None:
                     diagnostics.append(_asset_diagnostic("report_asset_missing", f"图资源无法定位：{asset}", node, side))
                     cards.append(f'<div class="asset-card asset-missing" role="note"><strong>图缺失：{_e(asset)}</strong>'
-                                 f'<p>{_e(provenance)}</p><p>尺寸：未知</p></div>')
+                                 f'<p class="asset-metadata">{_e(provenance)}</p><p class="asset-metadata">尺寸：未知</p></div>')
                     continue
                 try:
                     root = project.expanded.source.root.resolve()
@@ -322,7 +322,7 @@ def _figure_assets(old: ParsedProject | None, new: ParsedProject, directory: Pat
                         diagnostics.append(_asset_diagnostic("report_asset_unsupported",
                                                              f"图资源内容与格式不符，未复制或链接：{asset}", node, side))
                         cards.append(f'<div class="asset-card asset-missing" role="note">'
-                                     f'<strong>图资源格式未支持：{_e(asset)}</strong><p>{_e(provenance)}</p></div>')
+                                     f'<strong>图资源格式未支持：{_e(asset)}</strong><p class="asset-metadata">{_e(provenance)}</p></div>')
                         continue
                     copied, url = _copy_asset(project, relative, directory, side)
                 except ReportPathError:
@@ -330,7 +330,7 @@ def _figure_assets(old: ParsedProject | None, new: ParsedProject, directory: Pat
                 except OSError:
                     diagnostics.append(_asset_diagnostic("report_asset_missing", f"图资源复制失败：{asset}", node, side))
                     cards.append(f'<div class="asset-card asset-missing" role="note"><strong>图缺失：{_e(asset)}</strong>'
-                                 f'<p>{_e(provenance)}</p><p>尺寸：未知</p></div>')
+                                 f'<p class="asset-metadata">{_e(provenance)}</p><p class="asset-metadata">尺寸：未知</p></div>')
                     continue
                 suffix = copied.suffix.lower()
                 picture = ""
@@ -350,8 +350,8 @@ def _figure_assets(old: ParsedProject | None, new: ParsedProject, directory: Pat
                         diagnostics.append(_asset_diagnostic("report_pdf_preview_unavailable",
                                                             f"PDF 图预览不可用：{asset}；{reason}", node, side))
                         picture = '<p class="asset-fallback">此处暂无法预览</p>'
-                cards.append(f'<div class="asset-card">{picture}<p>图文件：<a href="{_e(url)}">{_e(asset)}</a></p>'
-                             f'<p>{_e(provenance)}</p><p>尺寸：未知</p></div>')
+                cards.append(f'<div class="asset-card">{picture}<p class="asset-metadata">图文件：<a href="{_e(url)}">{_e(asset)}</a></p>'
+                             f'<p class="asset-metadata">{_e(provenance)}</p><p class="asset-metadata">尺寸：未知</p></div>')
             html[(side, node.review.id)] = "".join(cards)
     return html, diagnostics
 

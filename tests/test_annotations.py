@@ -55,6 +55,21 @@ def create(store, content, quote, **extra):
                   author=AUTHOR, category='question', **extra)
 
 
+def test_sentence_layout_preserves_existing_annotation_coordinates(tmp_path):
+    root = tmp_path / 'paper'
+    content, _ = content_at(root, 'First sentence.\n' + r'\paragraph{Hidden $x$ heading}')
+    store = AnnotationStore(root, content['project_id'])
+    thread = create(store, content, 'First sentence.')
+    source = ProjectSource('new', root, 'main.tex', ComparisonSource('directory', str(root)))
+    project = parse_project(source.expand())
+    highlights = {('new', node.review.id): frozenset() for node in project.nodes
+                  if node.review.type == 'paragraph'}
+    highlighted = build_content(project, render_preview(None, project, sentence_highlights=highlights).html)
+    assert highlighted['version_id'] == content['version_id']
+    snapshot = store.read(highlighted)
+    assert snapshot['threads'][0]['id'] == thread['result']['thread_id']
+
+
 def test_actual_preview_coordinates_all_new_content_and_formula_atoms(tmp_path):
     content, html = content_at(tmp_path / 'paper', r'\section{Heading}Unchanged \textbf{bold} 😀 $x+1$ end.' + '\n\n' +
                                r'Other text.\begin{equation}a=b\label{eq:a}\end{equation}', old_body='Old only.')

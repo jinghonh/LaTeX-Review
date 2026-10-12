@@ -86,8 +86,26 @@ def test_live_navigation_and_refresh_preserve_reading_state(tmp_path):
                 paper = page.locator('.preview-side')
                 assert paper.count() == 1
                 assert page.evaluate('getComputedStyle(document.querySelector(".preview-side")).fontFamily.includes("Iowan")')
-                box = paper.bounding_box()
-                assert abs(box['x'] + box['width'] / 2 - 810) < 1
+                page.set_viewport_size({'width': 2560, 'height': 900})
+                for mode in ('original', 'bilingual'):
+                    page.locator('#translation-mode').select_option(mode)
+                    for sections, annotations in ((True, False), (False, True), (True, True), (False, False)):
+                        if page.locator('#sections-side').is_visible() != sections:
+                            page.locator('#toggle-sections' if sections else '#close-sections').click()
+                        page.locator('.annotation-overview').evaluate('(node, open) => node.open = open', annotations)
+                        page.wait_for_function('(open) => document.body.classList.contains("annotation-panel-open") === open', arg=annotations)
+                        gaps = page.evaluate('''() => {
+                            const paper = document.querySelector('.preview-side').getBoundingClientRect();
+                            const sections = document.body.classList.contains('sections-open');
+                            const annotations = document.body.classList.contains('annotation-panel-open');
+                            const left = sections ? document.querySelector('#sections-side').getBoundingClientRect().right : 0;
+                            const right = annotations ? document.querySelector('.annotation-overview').getBoundingClientRect().left : innerWidth;
+                            return [paper.left - left, right - paper.right];
+                        }''')
+                        assert abs(gaps[0] - gaps[1]) < 1
+                page.locator('#translation-mode').select_option('bilingual')
+                page.locator('#toggle-sections').click()
+                page.set_viewport_size({'width': 1280, 'height': 900})
                 page.locator('#live-navigation>summary').click()
                 page.locator('#live-search').fill('Target passage')
                 assert page.locator('#live-results button').count() == 1

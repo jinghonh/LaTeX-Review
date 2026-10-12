@@ -58,7 +58,8 @@ def build(source: ProjectSource, output: Path, revision: int = 1) -> list[str]:
     units = build_current_units(project)
     _write(output / "translation-units.json", json.dumps(units, ensure_ascii=False))
     assets, diagnostics = _figure_assets(None, project, output, _pdf_converters(source, output), 15)
-    preview = render_preview(None, project, figure_assets=assets)
+    preview = render_preview(None, project, figure_assets=assets,
+                             sentence_highlights={(unit['side'], unit['node_id']): frozenset() for unit in units})
     from .annotations import MANIFEST, build_content, content_meta
     annotation_content = build_content(project, preview.html)
     _write(output / MANIFEST, json.dumps(annotation_content, ensure_ascii=False))
@@ -74,7 +75,7 @@ def build(source: ProjectSource, output: Path, revision: int = 1) -> list[str]:
 <p>内容预览不代表最终编译版式。保存论文后自动更新。</p>
 <p id="math-status" role="status">正在加载在线公式排版。</p></div></details></header>
 <section class="report-controls live-controls" aria-label="持续预览工具栏">
-<div class="live-toolbar-navigation"><button type="button" id="toggle-sections" aria-expanded="false" aria-controls="sections-side">章节</button>
+<div class="live-toolbar-navigation">
 <details id="live-navigation"><summary>搜索</summary><div class="live-navigation-panel">
 <label for="live-search">搜索当前论文</label><input type="search" id="live-search" placeholder="输入文字">
 <p id="live-search-status" role="status"></p><ol id="live-results"></ol>
@@ -85,7 +86,7 @@ def build(source: ProjectSource, output: Path, revision: int = 1) -> list[str]:
 <div class="translation-actions"><button type="button" id="translate-all">翻译全文</button>
 <button type="button" id="translation-cancel" disabled>停止翻译</button>
 <button type="button" id="translation-export">导出英中对照 HTML</button></div></div>
-<div class="live-toolbar-status"><p id="live-status" role="status">持续预览已启动。</p>
+<div class="live-toolbar-status"><p id="live-status" role="status" hidden></p>
 <p id="translation-status" role="status">按需翻译标题、摘要、正文和图注；表格和参考文献保留原文。</p></div></section>'''
     supplement = ('<details class="report-supplement" id="live-diagnostics"><summary>预览诊断 · '
                   + str(len(messages)) + '</summary><ul>'
@@ -95,7 +96,7 @@ def build(source: ProjectSource, output: Path, revision: int = 1) -> list[str]:
     html = html.replace('<body>', '<body class="reading-view live-view">', 1)
     html = html.replace('<title>LaTeX 内容预览</title>', '<title>当前论文持续预览 · ' + escape(source.entry) + '</title>', 1)
     html = re.sub(r'<header>.*?</header>', lambda _: header, html, count=1, flags=re.S)
-    html = html.replace('<main>', '<nav id="sections-side" aria-label="章节目录" hidden><div class="directory-heading"><h2>章节目录</h2><button type="button" id="close-sections">收起</button></div><ol id="section-tree"></ol></nav><main>', 1)
+    html = html.replace('<main>', '<button type="button" id="toggle-sections" aria-expanded="false" aria-controls="sections-side">章节</button><nav id="sections-side" aria-label="章节目录" hidden><div class="directory-heading"><h2>章节目录</h2><button type="button" id="close-sections">收起</button></div><ol id="section-tree"></ol></nav><main>', 1)
     html = html.replace('</main>', '</main>' + supplement, 1)
     from .delivery import embed_annotations
     html = embed_annotations(html, annotation_content, output)

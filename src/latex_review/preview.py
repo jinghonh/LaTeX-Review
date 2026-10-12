@@ -502,11 +502,13 @@ def _body(node: ParsedNode, project: ParsedProject, side: str, by_id: dict[str, 
     if kind == "paragraph":
         changed = (sentence_highlights or {}).get((side, node.review.id))
         if changed is not None:
-            pieces = []
+            pieces, original_pieces = [], []
             cursor = 0
             raw = node.review.raw_latex
             for number, sentence in enumerate(split_sentences(raw), 1):
-                pieces.append(_e(_without_comments(raw[cursor:sentence.start])[0]))
+                gap = _e(_without_comments(raw[cursor:sentence.start])[0])
+                pieces.append(gap)
+                original_pieces.append(gap)
                 contained = [child for child in children if node.expanded_start + sentence.start <= child.expanded_start
                              and child.expanded_end <= node.expanded_start + sentence.end]
                 body = _inline_html(sentence.text, project, side, contained, diagnostics, node.review.source,
@@ -514,8 +516,16 @@ def _body(node: ParsedNode, project: ParsedProject, side: str, by_id: dict[str, 
                 sentence_id = f"{side}-{node.review.id}-sentence-{number}"
                 sentence_class = "review-sentence sentence-changed" if number in changed else "review-sentence"
                 pieces.append(f'<span class="{sentence_class}" id="{_e(sentence_id)}">{body}</span>')
+                original_pieces.append(body)
                 cursor = sentence.end
-            pieces.append(_e(_without_comments(raw[cursor:])[0]))
+            suffix = _e(_without_comments(raw[cursor:])[0])
+            pieces.append(suffix)
+            original_pieces.append(suffix)
+            canonical = _inline_html(raw, project, side, children, diagnostics, node.review.source, node.expanded_start)
+            # Sentence fragments can change plasTeX context or inline-node matching.
+            # Keep the canonical rendering when marking sentences would change it.
+            if re.sub(r'\s+', ' ', ''.join(original_pieces)).strip() != re.sub(r'\s+', ' ', canonical).strip():
+                return f'<p>{canonical}</p>'
             return f'<p>{"".join(pieces)}</p>'
         return f'<p>{_inline_html(node.review.raw_latex, project, side, children, diagnostics, node.review.source, node.expanded_start)}</p>'
     if kind == "equation":
@@ -552,7 +562,27 @@ def _body(node: ParsedNode, project: ParsedProject, side: str, by_id: dict[str, 
         missing = ('<p class="preview-unavailable">此处暂无法预览</p>' if any(
             diag.code in {"missing_dependency", "dependency_outside_root"} for diag in node.diagnostics) else "")
         caption_children = [child for child in children if child.review.type != "fallback"]
-        return assets + missing + (f'<figcaption>{_inline_html(caption[0], project, side, caption_children, diagnostics, node.review.source, node.expanded_start + caption[1])}</figcaption>' if caption else "") + _embedded_fallbacks(children, side)
+        caption_html = ""
+        if caption:
+            caption_html = _inline_html(caption[0], project, side, caption_children, diagnostics,
+                                        node.review.source, node.expanded_start + caption[1])
+            if (side, node.review.id) in (sentence_highlights or {}):
+                pieces, original_pieces, cursor = [], [], 0
+                for number, sentence in enumerate(split_sentences(caption[0]), 1):
+                    gap = _e(_without_comments(caption[0][cursor:sentence.start])[0])
+                    pieces.append(gap)
+                    original_pieces.append(gap)
+                    body = _inline_html(sentence.text, project, side, caption_children, diagnostics,
+                                        node.review.source, node.expanded_start + caption[1] + sentence.start)
+                    pieces.append(f'<span class="review-sentence" id="{_e(side)}-{_e(node.review.id)}-sentence-{number}">{body}</span>')
+                    original_pieces.append(body)
+                    cursor = sentence.end
+                suffix = _e(_without_comments(caption[0][cursor:])[0])
+                pieces.append(suffix)
+                original_pieces.append(suffix)
+                if re.sub(r'\s+', ' ', ''.join(original_pieces)).strip() == re.sub(r'\s+', ' ', caption_html).strip():
+                    caption_html = "".join(pieces)
+        return assets + missing + (f'<figcaption>{caption_html}</figcaption>' if caption else "") + _embedded_fallbacks(children, side)
     if kind == "table":
         caption = _caption(node.review.raw_latex)
         caption_children = [child for child in children if child.review.type != "fallback"]

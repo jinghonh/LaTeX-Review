@@ -94,6 +94,7 @@ def test_pdf_preview_failure_keeps_provenance_and_caption(tmp_path: Path) -> Non
     data = json.loads(report.diff_json.read_text(encoding="utf-8"))
     assert "旧图注" in html and "新图注" in html
     assert "此处暂无法预览" in html and "尺寸：未知" in html
+    assert '<p class="asset-metadata">图文件：' in html
     assert 'href="assets/old/fig/chart.pdf"' in html
     assert 'href="assets/new/fig/chart.pdf"' in html
     assert sum(item["code"] == "report_pdf_preview_unavailable" for item in data["diagnostics"]) == 2

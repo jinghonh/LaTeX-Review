@@ -101,7 +101,9 @@ class ReportHandler(SimpleHTTPRequestHandler):
                 raise ValueError("请求须为对象")
             path = urlsplit(self.path).path
             if path == "/api/translation/start":
-                manager.submit(body.get("units"))
+                if not isinstance(body.get("retry", False), bool):
+                    raise ValueError("重试标记须为布尔值")
+                manager.submit(body.get("units"), retry=body.get("retry", False))
             elif path == "/api/translation/cancel":
                 manager.cancel()
             else:

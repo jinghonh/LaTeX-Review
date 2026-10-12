@@ -545,13 +545,13 @@ class TranslationManager:
             with self.lock:
                 self._update(key, "failed", "翻译处理失败，请重试")
 
-    def submit(self, unit_ids: list[str]) -> None:
+    def submit(self, unit_ids: list[str], *, retry: bool = False) -> None:
         if not isinstance(unit_ids, list) or any(not isinstance(i, str) or i not in self.units for i in unit_ids):
             raise TranslationError("请求含未知的翻译内容")
         with self.lock:
             if self.closed.is_set():
                 raise TranslationError("翻译服务已关闭")
-            if any(unit_id in self.keys and self.keys[unit_id] not in self.results for unit_id in unit_ids):
+            if any(unit_id in self.keys and (retry or self.keys[unit_id] not in self.results) for unit_id in unit_ids):
                 _api_key(self.config)
             if self.stopped.is_set():
                 self.stopped = Event()
@@ -559,7 +559,7 @@ class TranslationManager:
                 if unit_id not in self.keys:
                     continue
                 key = self.keys[unit_id]
-                if key in self.results:
+                if key in self.results and not retry:
                     continue
                 future = self.jobs.get(key)
                 self.states[unit_id] = {"state": "running" if future and future.running() else "pending", "message": ""}
@@ -580,7 +580,7 @@ class TranslationManager:
             for unit_id, unit in self.units.items():
                 if unit_id in self.keys and self.keys[unit_id] in self.results:
                     results[unit_id] = rendered_result(unit, self.results[self.keys[unit_id]])
-                    states[unit_id] = {"state": "ready", "message": states.get(unit_id, {}).get("message", "")}
+                    states.setdefault(unit_id, {"state": "ready", "message": ""})
             message = ""
             try:
                 _api_key(self.config)
