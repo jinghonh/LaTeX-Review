@@ -590,7 +590,8 @@ def test_browser_partial_translation_keeps_retry_until_complete(provider, transl
             page.goto(f'http://127.0.0.1:{server.server_port}/report.html')
             page.wait_for_function("!document.querySelector('#translate-all').disabled")
             page.locator('#translate-all').click()
-            page.wait_for_function("document.querySelector('#translation-status').textContent.includes('1 段失败')")
+            page.wait_for_function("document.querySelector('#translation-status').textContent.includes('1 段失败') && "
+                                   "!document.querySelector('#translate-all').disabled")
             assert page.locator('#translation-status').is_visible()
             assert page.locator('#translate-all').is_visible()
             assert '译文 1 / 2 段' in page.locator('#overview-translation').inner_text()

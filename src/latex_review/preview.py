@@ -511,8 +511,9 @@ def _body(node: ParsedNode, project: ParsedProject, side: str, by_id: dict[str, 
                 original_pieces.append(gap)
                 contained = [child for child in children if node.expanded_start + sentence.start <= child.expanded_start
                              and child.expanded_end <= node.expanded_start + sentence.end]
+                # Preserve source gaps; plasTeX adds padding around each fragment.
                 body = _inline_html(sentence.text, project, side, contained, diagnostics, node.review.source,
-                                    node.expanded_start + sentence.start)
+                                    node.expanded_start + sentence.start).strip()
                 sentence_id = f"{side}-{node.review.id}-sentence-{number}"
                 sentence_class = "review-sentence sentence-changed" if number in changed else "review-sentence"
                 pieces.append(f'<span class="{sentence_class}" id="{_e(sentence_id)}">{body}</span>')
@@ -573,7 +574,7 @@ def _body(node: ParsedNode, project: ParsedProject, side: str, by_id: dict[str, 
                     pieces.append(gap)
                     original_pieces.append(gap)
                     body = _inline_html(sentence.text, project, side, caption_children, diagnostics,
-                                        node.review.source, node.expanded_start + caption[1] + sentence.start)
+                                        node.review.source, node.expanded_start + caption[1] + sentence.start).strip()
                     pieces.append(f'<span class="review-sentence" id="{_e(side)}-{_e(node.review.id)}-sentence-{number}">{body}</span>')
                     original_pieces.append(body)
                     cursor = sentence.end
