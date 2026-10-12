@@ -138,26 +138,13 @@
     event.target.value = '';
   });
 
-  // Original index is captured before translations and excludes nested nodes and review excerpts.
-  const searchItems = [];
-  data.nodes.forEach(item => {
-    const target = document.getElementById(item.side + '-' + item.id);
-    if (!target?.classList.contains('review-node')) return;
-    const copy = target.cloneNode(true);
-    copy.querySelectorAll('.review-node,.change-anchor,.inline-change,.change-review-editor,.translation-block,.deletion-marker,.change-trigger').forEach(node => {
-      // Change triggers can wrap original text, so remove only their interactive semantics.
-      if (node.classList.contains('change-trigger')) node.replaceWith(...node.childNodes);
-      else node.remove();
-    });
-    searchItems.push({...item, text: (copy.textContent || "") + ' ' + item.citations.join(' ')});
-  });
+  const searchItems = window.reviewSearch.items;
   const searchInput = document.getElementById('report-search');
   const sectionFilter = document.getElementById('section-filter');
   const searchStatus = document.getElementById('search-status');
   const results = document.getElementById('search-results');
   const sections = new Map();
   searchItems.forEach(item => {
-    item.sectionKey = JSON.stringify(item.section);
     sections.set(item.sectionKey, item.section.join(' / ') || '正文前置内容');
   });
   for (const [value, label] of sections) {
@@ -167,26 +154,17 @@
     const query = searchInput.value.trim().toLocaleLowerCase();
     results.replaceChildren();
     if (!query && sectionFilter.value === 'all') { searchStatus.textContent = '输入文字，或选择章节。'; return; }
-    let found = 0;
-    searchItems.forEach(item => {
-      if (sectionFilter.value !== 'all' && sectionFilter.value !== item.sectionKey) return;
-      const target = document.getElementById(item.side + '-' + item.id);
-      const translatedText = Array.from(target.querySelectorAll('.translation-block'))
-        .filter(block => block.closest('.review-node') === target).map(block => block.textContent).join(' ');
-      const originalMatch = !query || item.text.toLocaleLowerCase().includes(query);
-      const translatedMatch = query && translatedText.toLocaleLowerCase().includes(query);
-      if (!originalMatch && !translatedMatch) return;
-      found++;
-      const text = originalMatch ? item.text : translatedText;
-      const index = query ? text.toLocaleLowerCase().indexOf(query) : 0;
-      const snippet = text.slice(Math.max(0, index - 35), Math.max(0, index - 35) + 160).trim();
+    const matches = window.reviewSearch.find(query, sectionFilter.value);
+    matches.forEach(item => {
+      const originalMatch = !item.translated;
+      const snippet = item.snippet;
       const button = document.createElement('button'); button.type = 'button';
       button.textContent = (item.side === 'old' ? '修改前' : '修改后') + ' · ' + sections.get(item.sectionKey) +
         (originalMatch ? '' : ' · 中文译文') + '：' + snippet;
       button.addEventListener('click', () => { navigation.node(item.side, item.id, !originalMatch); persist(); });
       const li = document.createElement('li'); li.append(button); results.append(li);
     });
-    searchStatus.textContent = found ? '找到 ' + found + ' 处内容。' : '没有匹配内容。';
+    searchStatus.textContent = matches.length ? '找到 ' + matches.length + ' 处内容。' : '没有匹配内容。';
   }
   searchInput.addEventListener('input', () => { search(); persist(); });
   sectionFilter.addEventListener('change', () => { search(); persist(); });

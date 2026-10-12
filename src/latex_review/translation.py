@@ -528,14 +528,16 @@ class TranslationManager:
             if self.closed.is_set():
                 return
             texts = request.result()
-            warning = ""
-            try:
-                _write_cache(self.directory / (key + ".json"), {"version": RULE_VERSION, "key": key,
-                    "translation": {"sentences": [{"id": s["number"], "text": text}
-                        for s, text in zip(unit["sentences"], texts)]}})
-            except OSError:
-                warning = "译文已完成，但本机缓存保存失败；请导出保存"
             with self.lock:
+                if self.closed.is_set():
+                    return
+                warning = ""
+                try:
+                    _write_cache(self.directory / (key + ".json"), {"version": RULE_VERSION, "key": key,
+                        "translation": {"sentences": [{"id": s["number"], "text": text}
+                            for s, text in zip(unit["sentences"], texts)]}})
+                except OSError:
+                    warning = "译文已完成，但本机缓存保存失败；请导出保存"
                 self.results[key] = texts
                 self._update(key, "ready", warning)
         except TranslationError as exc:
@@ -592,9 +594,9 @@ class TranslationManager:
                     "usage": {**_usage_summary(self.request_usage), "message": self.usage_message}}
 
     def close(self) -> None:
-        self.closed.set()
-        self.cancel()
         with self.lock:
+            self.closed.set()
+            self.cancel()
             for unit_id, state in self.states.items():
                 if state["state"] in {"pending", "running"}:
                     self.states[unit_id] = {"state": "cancelled", "message": "翻译服务已关闭"}

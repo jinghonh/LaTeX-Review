@@ -469,20 +469,18 @@ def _report_overview(document: ReviewDocument) -> str:
 <div class="word-summary"><span class="word-summary-label">正文变更词数</span><span class="word-added">+{counts.added_words}</span><span class="word-divider">/</span><span class="word-removed">−{counts.removed_words}</span><span class="word-unit">词</span></div></div>'''
 
 
-def _report_controls(change_count: int) -> str:
+def _report_controls(change_count: int, reading) -> str:
     return f'''<nav class="report-controls" aria-label="审阅工具">
-<div class="directory-controls"><button type="button" id="toggle-sections" aria-expanded="false" aria-controls="sections-side">章节</button>
+<div class="directory-controls">{reading.section_toggle}
 <button type="button" id="toggle-changes" aria-expanded="false" aria-controls="changes-side"><span class="control-icon" aria-hidden="true">☷</span>变更目录 <span class="control-count">{change_count}</span></button></div>
 <div class="reading-options" role="group" aria-label="阅读设置">
 <label class="control-field"><span>阅读范围</span><select id="reading-mode"><option value="full">完整文档</option><option value="context">变更上下文</option></select></label>
 <label class="control-field"><span>对照方式</span><select id="layout-mode"><option value="reading">新稿阅读</option><option value="compare">双稿对照</option></select></label>
-<label class="control-field"><span>译文显示</span><select id="translation-mode"><option value="original">英文原文</option><option value="bilingual">英中对照</option></select></label>
+{reading.translation_mode}
 <label class="sync-option"><input type="checkbox" id="sync-scroll"> 同步滚动</label></div>
-<div class="translation-controls" role="group" aria-label="译文操作"><div class="translation-actions">
-<button type="button" id="translate-all">翻译全部变更</button><button type="button" id="translation-cancel" disabled>停止翻译</button>
-<button type="button" id="translation-export"><svg class="control-icon" width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M10 2v10m-4-4 4 4 4-4M3 12v5h14v-5"/></svg>导出译文报告</button></div></div>
+<div class="translation-controls" role="group" aria-label="译文操作">{reading.translation_actions}</div>
 <div class="step-controls" role="group" aria-label="变更导航"><span id="current-change" role="status">尚未选择变更</span><div class="step-buttons"><button type="button" id="previous-change" aria-label="上一变更" title="上一处变更（Alt + ↑）"><span aria-hidden="true">↑</span>上一处</button><button type="button" id="next-change" aria-label="下一变更" title="下一处变更（Alt + ↓）">下一处<span aria-hidden="true">↓</span></button></div></div>
-<span id="translation-status" role="status">点击后翻译变更段落、标题和图注；表格暂不翻译。</span>
+{reading.translation_status}
 </nav>'''
 
 
@@ -495,14 +493,10 @@ def _report_html(document: ReviewDocument, preview: PreviewResult, old: ParsedPr
     category_counts = " · ".join(f"{_CATEGORY_LABELS.get(key, key)} {value}" for key, value in counts.category_hits.items())
     anchors = preview.anchors()
     cards = _change_cards(document, anchors, old, new, editor_template, rendering)
-    interaction = files("latex_review").joinpath("report_interaction.js").read_text(encoding="utf-8")
-    pairs_json = json.dumps(pairs, ensure_ascii=False).replace("<", "\\u003c")
     report_style = files("latex_review").joinpath("report.css").read_text(encoding="utf-8")
     from .translation import build_units
-    translation_units = json.dumps([{k: v for k, v in unit.items() if k != "sentences"}
-                                   for unit in (translation_units if translation_units is not None else build_units(document, old, new))],
-                                   ensure_ascii=False).replace("<", "\\u003c")
-    translation_script = files("latex_review").joinpath("report_translation.js").read_text(encoding="utf-8")
+    from .reading import build_reading
+    units = translation_units if translation_units is not None else build_units(document, old, new)
     from .cache import dependency_fingerprints
     fingerprint_data = {
         "entry": document.entry,
@@ -511,15 +505,7 @@ def _report_html(document: ReviewDocument, preview: PreviewResult, old: ParsedPr
         "nodes": [[asdict(node) for node in project.review_nodes] for project in (old, new)],
     }
     fingerprint = sha256(json.dumps(fingerprint_data, ensure_ascii=False, sort_keys=True).encode()).hexdigest()
-    search_nodes = [{"side": side, "id": node.review.id,
-                     "type": node.review.type, "parent": node.review.parent_id,
-                     "section": list(node.review.section_path),
-                     "citations": list(node.citations)}
-                    for side, project in (("old", old), ("new", new)) for node in project.nodes]
-    reader_data = json.dumps({"fingerprint": fingerprint, "nodes": search_nodes}, ensure_ascii=False).replace("<", "\\u003c")
-    annotation_script = files("latex_review").joinpath("report_annotations.js").read_text(encoding="utf-8")
-    sections_script = files("latex_review").joinpath("report_sections.js").read_text(encoding="utf-8")
-    reader_script = files("latex_review").joinpath("report_reader.js").read_text(encoding="utf-8")
+    reading = build_reading(new, units, old=old, pairs=pairs, fingerprint=fingerprint)
     severity_labels = {"error": "错误", "warning": "提醒", "info": "说明"}
     diagnostics_html = "".join(
         f'<li><strong>{_e(severity_labels.get(item.severity, item.severity))}</strong> · {_e(item.message)}</li>'
@@ -536,8 +522,8 @@ def _report_html(document: ReviewDocument, preview: PreviewResult, old: ParsedPr
 <p>右侧页边卡片显示变更摘要。点击正文划线或卡片，展开修改前后对比；窄屏卡片显示在对应段落下方。按 Alt+↑ / Alt+↓ 可跳到上一项 / 下一项；输入时快捷键不生效。公式排版可能需要联网。</p>
 <p id="math-status" role="status">正在加载在线公式排版。</p>
 </div></details></header>
-{_report_controls(counts.changes)}
-<nav id="sections-side" aria-label="章节目录" hidden><div class="directory-heading"><h2>章节目录</h2><button type="button" id="close-sections">收起</button></div><p class="section-legend">变更总数 · 未审阅</p><ol id="section-tree"></ol></nav>
+{_report_controls(counts.changes, reading)}
+{reading.section_directory}
 <section class="reader-tools" aria-label="搜索与审阅记录">
 <details id="reader-tools"><summary>搜索与审阅记录 <span id="review-progress" role="status"></span></summary>
 <div class="reader-grid">
@@ -562,15 +548,7 @@ def _report_html(document: ReviewDocument, preview: PreviewResult, old: ParsedPr
 </details>
 {('<details class="report-supplement" id="compiled-pages"><summary>编译页面与视觉差异</summary>' + _rendering_html(rendering, statuses) + '</details>') if rendering is not None and statuses is not None else ''}
 ''',
-        scripts_before_math=f'''<script type="application/json" id="reader-data">{reader_data}</script>
-<script>window.reviewNodePairs={pairs_json};</script><script>{interaction}</script>
-<script type="application/json" id="translation-units">{translation_units}</script>
-<script type="application/json" id="translation-results">{{}}</script>
-<script>{sections_script}</script><script>{reader_script}</script>
-<script>{translation_script}</script>
-<script>{annotation_script}</script>
-<script>{files("latex_review").joinpath("annotation_delivery.js").read_text(encoding="utf-8")}</script>
-''')
+        scripts_before_math=reading.scripts)
 
 
 def write_report(old: ParsedProject, new: ParsedProject, comparison: ComparisonResult,

@@ -16,14 +16,17 @@
     if (!results) return;
     results.replaceChildren();
     const query = search.value.trim().toLocaleLowerCase();
-    const matches = query && paper ? Array.from(paper.querySelectorAll('.review-node')).filter(node => {
-      return node.textContent.toLocaleLowerCase().includes(query) &&
-        !Array.from(node.querySelectorAll('.review-node')).some(child => child.textContent.toLocaleLowerCase().includes(query));
-    }) : [];
-    matches.forEach(node => {
+    const matches = query ? window.reviewSearch.find(query) : [];
+    matches.forEach(match => {
+      const node = match.target;
       const item = document.createElement('li'), button = document.createElement('button');
-      button.type = 'button'; button.textContent = node.textContent.trim().replace(/\s+/g, ' ').slice(0, 160);
-      button.addEventListener('click', () => jump(node)); item.append(button); results.append(item);
+      button.type = 'button'; button.textContent = (match.translated ? '中文译文：' : '') + match.snippet.replace(/\s+/g, ' ');
+      button.addEventListener('click', () => {
+        if (match.translated) {
+          mode.value = 'bilingual'; mode.dispatchEvent(new Event('change'));
+        }
+        jump(node);
+      }); item.append(button); results.append(item);
     });
     document.getElementById('live-search-status').textContent = query ? `找到 ${matches.length} 处。` : '输入文字搜索当前论文。';
   }
@@ -60,7 +63,7 @@
   }
   window.addEventListener('load', restore);
   window.addEventListener('review-math-ready', restore);
-  document.addEventListener('review-translations-updated', restore);
+  document.addEventListener('review-translations-updated', () => { find(); restore(); });
   for (const event of ['pointerdown', 'wheel', 'keydown', 'touchstart']) {
     window.addEventListener(event, () => { restoring = false; }, {once:true, passive:true});
   }

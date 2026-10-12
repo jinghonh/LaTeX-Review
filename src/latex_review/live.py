@@ -17,14 +17,9 @@ from .contract import ComparisonSource
 from .preview import render_preview
 from .report import _figure_assets, _pdf_converters
 from .serve import ReportServer, create_server
-from .translation import TranslationConfig, TranslationManager, build_current_units
+from .translation import TranslationConfig, build_current_units
 from .sources import ProjectSource, SourceError
 from .structure import parse_project
-
-
-def _reader_script(revision: int) -> str:
-    script = files('latex_review').joinpath('live_reader.js').read_text(encoding='utf-8')
-    return '<script>' + script.replace('LIVE_REVISION', str(revision)) + '</script>'
 
 
 def fingerprint(root: Path, output: Path, *, cache_directory: Path | None = None) -> str:
@@ -63,6 +58,8 @@ def build(source: ProjectSource, output: Path, revision: int = 1) -> list[str]:
     annotation_content = build_content(project, preview.html)
     _write(output / MANIFEST, json.dumps(annotation_content, ensure_ascii=False))
     messages = [item.message for item in (*preview.diagnostics, *diagnostics)]
+    from .reading import build_reading
+    reading = build_reading(project, units, revision=revision)
     style = files('latex_review').joinpath('report.css').read_text(encoding='utf-8')
     diagnostic_items = ''.join('<li>' + escape(message) + '</li>' for message in messages)
     header = f'''<header class="report-header">
@@ -81,34 +78,18 @@ def build(source: ProjectSource, output: Path, revision: int = 1) -> list[str]:
 </div></details>
 <a href="#live-diagnostics">预览诊断 · {len(messages)}</a></div>
 <div class="live-toolbar-reading">
-<label class="control-field"><span>译文显示</span><select id="translation-mode"><option value="bilingual">英中对照</option><option value="original">英文原文</option></select></label>
-<div class="translation-actions"><button type="button" id="translate-all">翻译全文</button>
-<button type="button" id="translation-cancel" disabled>停止翻译</button>
-<button type="button" id="translation-export">导出英中对照 HTML</button></div></div>
+{reading.translation_mode}
+{reading.translation_actions}</div>
 <div class="live-toolbar-status"><p id="live-status" role="status" hidden></p>
-<p id="translation-status" role="status">按需翻译标题、摘要、正文和图注；表格和参考文献保留原文。</p></div></section>'''
+{reading.translation_status}</div></section>'''
     supplement = ('<details class="report-supplement" id="live-diagnostics"><summary>预览诊断 · '
                   + str(len(messages)) + '</summary><ul>'
                   + (diagnostic_items or '<li>没有额外诊断。</li>') + '</ul></details>')
-    annotation_scripts = ''.join('<script>' + files('latex_review').joinpath(name).read_text(encoding='utf-8') + '</script>'
-                                 for name in ('report_annotations.js', 'annotation_delivery.js'))
-    manifest = json.dumps([{k: v for k, v in unit.items() if k != "sentences"} for unit in units],
-                          ensure_ascii=False).replace("<", "\\u003c")
-    translation_scripts = ('<script type="application/json" id="translation-units">' + manifest + '</script>'
-                           + '<script type="application/json" id="translation-results">{}</script>'
-                           + '<script>' + files('latex_review').joinpath('report_translation.js').read_text(encoding='utf-8') + '</script>')
-    reader_data = json.dumps({'live': True, 'nodes': [
-        {'side': 'new', 'id': node.review.id, 'type': node.review.type,
-         'parent': node.review.parent_id, 'section': list(node.review.section_path)}
-        for node in project.nodes]}, ensure_ascii=False).replace('<', '\\u003c')
-    sections_script = ('<script type="application/json" id="reader-data">' + reader_data + '</script>'
-                       + '<script>' + files('latex_review').joinpath('report_sections.js').read_text(encoding='utf-8') + '</script>')
-    navigation = '<button type="button" id="toggle-sections" aria-expanded="false" aria-controls="sections-side">章节</button><nav id="sections-side" aria-label="章节目录" hidden><div class="directory-heading"><h2>章节目录</h2><button type="button" id="close-sections">收起</button></div><ol id="section-tree"></ol></nav>'
     html = preview.compose(
         title='当前论文持续预览 · ' + source.entry, style=style,
         head=content_meta(annotation_content), body_class='reading-view live-view',
-        before_main=header + navigation, after_main=supplement,
-        scripts_after_math=annotation_scripts + translation_scripts + sections_script + _reader_script(revision))
+        before_main=header + reading.section_toggle + reading.section_directory, after_main=supplement,
+        scripts_after_math=reading.scripts)
     from .delivery import embed_annotations
     html = embed_annotations(html, annotation_content, output)
     _write(output / 'report.html', html)
@@ -119,12 +100,8 @@ def build(source: ProjectSource, output: Path, revision: int = 1) -> list[str]:
 
 def refresh_translation(server: ReportServer, output: Path) -> None:
     """重建后仅恢复当前内容的缓存，不自动提交翻译请求。"""
-    previous = server.translation
-    if previous is None:
-        return
-    units = json.loads((output / 'translation-units.json').read_text(encoding='utf-8'))
-    previous.close()
-    server.translation = TranslationManager(units, previous.config, previous.directory)
+    if server.translation is not None:
+        server.translation.refresh()
 
 
 def main(argv: list[str] | None = None) -> int:

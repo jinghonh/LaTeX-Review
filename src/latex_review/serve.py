@@ -15,7 +15,8 @@ import sys
 import webbrowser
 from urllib.parse import urlsplit
 
-from .translation import RULE_VERSION, TranslationConfig, TranslationError, TranslationManager
+from .translation import TranslationConfig, TranslationError
+from .translation_session import TranslationSession
 
 
 class ReportHandler(SimpleHTTPRequestHandler):
@@ -155,14 +156,9 @@ class ReportHandler(SimpleHTTPRequestHandler):
                 from .report_rebuild import rebuild_report
                 value['result']['rebuild'] = rebuild_report(self.directory)
                 if value['result']['rebuild']['status'] == 'updated' and self.server.translation:
-                    previous = self.server.translation
-                    previous.close()
-                    self.server.translation = None
-                    try:
-                        units = json.loads((Path(self.directory) / 'translation-units.json').read_text(encoding='utf-8'))
-                        self.server.translation = TranslationManager(units, previous.config, previous.directory)
-                    except (OSError, ValueError, TypeError) as exc:
-                        value['result']['rebuild']['translation_warning'] = '翻译服务刷新失败：' + str(exc)
+                    warning = self.server.translation.refresh()
+                    if warning:
+                        value['result']['rebuild']['translation_warning'] = warning
             self._json(value)
         except AnnotationConflict as exc:
             self._json({"message": str(exc), "error": "conflict"}, 409)
@@ -191,7 +187,7 @@ class ReportHandler(SimpleHTTPRequestHandler):
 
 
 class ReportServer(ThreadingHTTPServer):
-    translation: TranslationManager | None = None
+    translation: TranslationSession | None = None
     annotation_project_root: Path | None = None
 
     def __init__(self, *args, **kwargs):
@@ -216,16 +212,7 @@ def create_server(directory: Path, port: int = 0, *, translation_config: Transla
     entry = root / "report.html"
     if not root.is_dir() or not entry.is_file() or not entry.resolve().is_relative_to(root):
         raise ValueError("报告目录必须包含目录内的 report.html 文件")
-    units = []
     if translation_config:
-        manifest = root / "translation-units.json"
-        if manifest.is_symlink():
-            raise ValueError("翻译清单不可为符号链接")
-        if manifest.is_file():
-            units = json.loads(manifest.read_text(encoding="utf-8"))
-            if (not isinstance(units, list) or any(not isinstance(unit, dict)
-                    or unit.get("rule_version") != RULE_VERSION for unit in units)):
-                raise ValueError("翻译清单的保护规则已更新或格式无效，请重新生成报告后启动预览服务")
         cache_directory = (cache_directory or root.parent / "translation-cache").expanduser().absolute()
         if (cache_directory == root or cache_directory in root.parents or root in cache_directory.parents
                 or any(p.is_symlink() for p in (cache_directory, *cache_directory.parents))):
@@ -235,7 +222,7 @@ def create_server(directory: Path, port: int = 0, *, translation_config: Transla
     server.annotation_project_root = annotation_project_root
     try:
         if translation_config:
-            server.translation = TranslationManager(units, translation_config, cache_directory)
+            server.translation = TranslationSession(root, translation_config, cache_directory)
     except Exception:
         server.server_close()
         raise
