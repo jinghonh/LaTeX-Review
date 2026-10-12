@@ -22,12 +22,11 @@ from .comparison import ComparisonResult
 from .delivery import DeliveryError as ReportPathError, single_file_html as _single_file_html
 from .contract import (ChangeDetail, Diagnostic, DiagnosticsDocument, PrimaryChange, ReviewDocument,
                        ReviewNode, SourceLocation, build_summary, dumps)
-from .preview import _INLINE_SAFE, _UNSAFE_MATH, _inline_html, render_preview
+from .preview import PreviewResult, _UNSAFE_MATH, render_preview, render_sentence_copy
 from .rules import check_rules
 from .structure import ParsedNode, ParsedProject
 from .sources import ExpandedProject, ProjectSource
 from .table_model import display_tables
-from .text_diff import split_sentences
 from .latex_commands import MATH_COMMANDS
 
 
@@ -54,37 +53,6 @@ class ReportResult:
 
 def _e(value: object) -> str:
     return escape(str(value), quote=True)
-
-
-def _sentence_card_html(raw: str | None, project: ParsedProject, side: str,
-                        node_id: str | None, numbers: tuple[int, ...]) -> str:
-    if raw is None:
-        return "该侧无内容"
-    if (re.search(r"<[^>]+>|(?:javascript|data|vbscript)\s*:", raw, re.I) or
-            _UNSAFE_MATH.search(raw) or
-            any(match.group(1) not in _INLINE_SAFE and match.group(1) not in {"paragraph", "subparagraph"}
-                and match.group(1) not in project.macros
-                for match in re.finditer(r"\\([A-Za-z@]+)", raw))):
-        return "此处暂无法预览"
-    parent = project.by_id().get(node_id) if node_id else None
-    if parent is None or not numbers:
-        return "此处暂无法预览"
-    children = [project.by_id()[child] for child in parent.review.child_ids]
-    sentences = split_sentences(parent.review.raw_latex)
-    rendered_parts = []
-    for number in numbers:
-        if number > len(sentences):
-            return "此处暂无法预览"
-        sentence = sentences[number - 1]
-        contained = [child for child in children if parent.expanded_start + sentence.start <= child.expanded_start
-                     and child.expanded_end <= parent.expanded_start + sentence.end]
-        rendered_parts.append(_inline_html(sentence.text, project, side, contained, source=parent.review.source,
-                                           base_start=parent.expanded_start + sentence.start))
-    rendered = " ".join(rendered_parts)
-    # 明细是正文的副本，导航锚点只保留在原文中。
-    rendered = re.sub(r'\s+id="[^"]*"', "", rendered)
-    # 明细本身是按钮，行内引用在这里保留文字但不嵌套交互链接。
-    return re.sub(r"<a\b[^>]*>", "<span>", rendered).replace("</a>", "</span>").strip()
 
 
 def _validate_editor_template(template: str | None) -> None:
@@ -394,8 +362,8 @@ def _change_cards(document: ReviewDocument, anchors: set[str], old: ParsedProjec
                     detail_new_id = ""
                     new_source = None
             sentence_text = (f'<span class="sentence-pair">'
-                             f'<span class="sentence-before">修改前：{_sentence_card_html(detail.old_text, old, "old", change.old_node_id, detail.old_sentences)}</span>'
-                             f'<span class="sentence-after">修改后：{_sentence_card_html(detail.new_text, new, "new", change.new_node_id, detail.new_sentences)}</span>'
+                             f'<span class="sentence-before">修改前：{render_sentence_copy(detail.old_text, old, "old", change.old_node_id, detail.old_sentences)}</span>'
+                             f'<span class="sentence-after">修改后：{render_sentence_copy(detail.new_text, new, "new", change.new_node_id, detail.new_sentences)}</span>'
                              f'</span>') if detail.old_sentences or detail.new_sentences else ""
             old_location = "所属段落；" + _location(old_source) if detail.old_sentences else _location(old_source)
             new_location = "所属段落；" + _location(new_source) if detail.new_sentences else _location(new_source)
@@ -518,19 +486,14 @@ def _report_controls(change_count: int) -> str:
 </nav>'''
 
 
-def _report_html(document: ReviewDocument, preview_html: str, old: ParsedProject,
+def _report_html(document: ReviewDocument, preview: PreviewResult, old: ParsedProject,
                  new: ParsedProject, editor_template: str | None,
                  pairs: tuple[tuple[str, str], ...], *, rendering: dict | None = None,
-                 statuses: tuple | None = None, translation_units: list[dict] | None = None) -> str:
-    # 预览层拥有节点 HTML 和公式降级逻辑；报告提供以新稿为主体的阅读容器。
-    style = re.search(r"<style>(.*?)</style>", preview_html, re.S)
-    main = re.search(r"<main>(.*?)</main>", preview_html, re.S)
-    scripts = re.search(r"(<script>.*?</script>\s*<script async .*?</script>)", preview_html, re.S)
-    if not (style and main and scripts):
-        raise ValueError("预览页面缺少报告所需的节点或公式脚本")
+                 statuses: tuple | None = None, translation_units: list[dict] | None = None,
+                 head: str = "") -> str:
     counts = document.summary
     category_counts = " · ".join(f"{_CATEGORY_LABELS.get(key, key)} {value}" for key, value in counts.category_hits.items())
-    anchors = set(re.findall(r'\bid="([^"]+)"', main.group(1)))
+    anchors = preview.anchors()
     cards = _change_cards(document, anchors, old, new, editor_template, rendering)
     interaction = files("latex_review").joinpath("report_interaction.js").read_text(encoding="utf-8")
     pairs_json = json.dumps(pairs, ensure_ascii=False).replace("<", "\\u003c")
@@ -561,12 +524,10 @@ def _report_html(document: ReviewDocument, preview_html: str, old: ParsedProject
     diagnostics_html = "".join(
         f'<li><strong>{_e(severity_labels.get(item.severity, item.severity))}</strong> · {_e(item.message)}</li>'
         for item in document.diagnostics) or '<li>没有额外诊断。</li>'
-    return f'''<!doctype html>
-<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-<title>论文修改审阅 · {_e(document.entry)}</title><style>{style.group(1)}
-{report_style}
-</style></head><body class="reading-view">
-<header class="report-header">
+    return preview.compose(
+        title='论文修改审阅 · ' + document.entry, style='\n' + report_style + '\n',
+        body_class='reading-view', head=head,
+        before_main=f'''<header class="report-header">
 {_report_overview(document)}
 <details class="report-help"><summary>报告说明</summary><div>
 <p>内容预览供审阅，不代表最终编译版式；来源位置可能为近似值。</p>
@@ -591,15 +552,17 @@ def _report_html(document: ReviewDocument, preview_html: str, old: ParsedProject
 <div class="review-backup"><button type="button" id="review-export">导出审阅备份</button><label class="backup-import">导入审阅备份<input type="file" id="review-import" accept="application/json,.json"></label></div>
 <p id="review-storage-status" role="status">审阅记录保存在当前浏览器；可导出 JSON 备份。</p>
 </div></div></details></section>
-<main>{main.group(1)}<section class="changes-side" aria-label="变更" id="changes-side"><div class="directory-heading"><h2>变更目录</h2><button type="button" id="close-changes" aria-label="收起变更目录">收起</button></div>
+''',
+        main_end=f'''<section class="changes-side" aria-label="变更" id="changes-side"><div class="directory-heading"><h2>变更目录</h2><button type="button" id="close-changes" aria-label="收起变更目录">收起</button></div>
 <div class="filters"><label>操作 <select id="kind-filter"><option value="all">全部</option><option value="added">新增</option><option value="removed">删除</option><option value="modified">修改</option><option value="moved">移动</option></select></label>
 <label>类别 <select id="category-filter"><option value="all">全部</option><option value="text">正文</option><option value="equation">公式</option><option value="figure">图</option><option value="table">表格</option><option value="citation">引用</option><option value="comment">注释</option><option value="move">移动</option></select></label></div>
-<p id="filter-count" role="status"></p><p id="jump-status" class="jump-status" role="status"></p>{cards}</section></main>
-<details class="report-supplement"><summary>报告诊断 <span>{len(document.diagnostics)} 条诊断</span></summary>
+<p id="filter-count" role="status"></p><p id="jump-status" class="jump-status" role="status"></p>{cards}</section>''',
+        after_main=f'''<details class="report-supplement"><summary>报告诊断 <span>{len(document.diagnostics)} 条诊断</span></summary>
 <ul>{diagnostics_html}</ul>
 </details>
 {('<details class="report-supplement" id="compiled-pages"><summary>编译页面与视觉差异</summary>' + _rendering_html(rendering, statuses) + '</details>') if rendering is not None and statuses is not None else ''}
-<script type="application/json" id="reader-data">{reader_data}</script>
+''',
+        scripts_before_math=f'''<script type="application/json" id="reader-data">{reader_data}</script>
 <script>window.reviewNodePairs={pairs_json};</script><script>{interaction}</script>
 <script type="application/json" id="translation-units">{translation_units}</script>
 <script type="application/json" id="translation-results">{{}}</script>
@@ -607,8 +570,7 @@ def _report_html(document: ReviewDocument, preview_html: str, old: ParsedProject
 <script>{translation_script}</script>
 <script>{annotation_script}</script>
 <script>{files("latex_review").joinpath("annotation_delivery.js").read_text(encoding="utf-8")}</script>
-{scripts.group(1)}
-</body></html>'''
+''')
 
 
 def write_report(old: ParsedProject, new: ParsedProject, comparison: ComparisonResult,
@@ -698,9 +660,9 @@ def write_report(old: ParsedProject, new: ParsedProject, comparison: ComparisonR
     annotation_content = build_content(new, preview.html, project_root=annotation_project_root, changes=document.changes)
     _write_managed(directory, Path(MANIFEST), content=json.dumps(annotation_content, ensure_ascii=False).encode("utf-8"))
     diff_json = dumps(document)
-    html = _report_html(document, preview.html, old, new, editor_url_template, pairs,
-                        rendering=rendering, statuses=statuses, translation_units=units)
-    html = html.replace("</head>", content_meta(annotation_content) + "</head>", 1)
+    html = _report_html(document, preview, old, new, editor_url_template, pairs,
+                        rendering=rendering, statuses=statuses, translation_units=units,
+                        head=content_meta(annotation_content))
     from .delivery import embed_annotations
     html = embed_annotations(html, annotation_content, directory)
     _write_managed(directory, Path("diff.json"), content=diff_json.encode("utf-8"))

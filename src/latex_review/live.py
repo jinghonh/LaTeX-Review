@@ -7,7 +7,6 @@ from html import escape
 from importlib.resources import files
 import json
 import os
-import re
 from pathlib import Path
 import sys
 from threading import Thread
@@ -91,15 +90,6 @@ def build(source: ProjectSource, output: Path, revision: int = 1) -> list[str]:
     supplement = ('<details class="report-supplement" id="live-diagnostics"><summary>预览诊断 · '
                   + str(len(messages)) + '</summary><ul>'
                   + (diagnostic_items or '<li>没有额外诊断。</li>') + '</ul></details>')
-    html = preview.html.replace('</style>', style + '</style>', 1)
-    html = html.replace('</head>', content_meta(annotation_content) + '</head>', 1)
-    html = html.replace('<body>', '<body class="reading-view live-view">', 1)
-    html = html.replace('<title>LaTeX 内容预览</title>', '<title>当前论文持续预览 · ' + escape(source.entry) + '</title>', 1)
-    html = re.sub(r'<header>.*?</header>', lambda _: header, html, count=1, flags=re.S)
-    html = html.replace('<main>', '<button type="button" id="toggle-sections" aria-expanded="false" aria-controls="sections-side">章节</button><nav id="sections-side" aria-label="章节目录" hidden><div class="directory-heading"><h2>章节目录</h2><button type="button" id="close-sections">收起</button></div><ol id="section-tree"></ol></nav><main>', 1)
-    html = html.replace('</main>', '</main>' + supplement, 1)
-    from .delivery import embed_annotations
-    html = embed_annotations(html, annotation_content, output)
     annotation_scripts = ''.join('<script>' + files('latex_review').joinpath(name).read_text(encoding='utf-8') + '</script>'
                                  for name in ('report_annotations.js', 'annotation_delivery.js'))
     manifest = json.dumps([{k: v for k, v in unit.items() if k != "sentences"} for unit in units],
@@ -113,7 +103,14 @@ def build(source: ProjectSource, output: Path, revision: int = 1) -> list[str]:
         for node in project.nodes]}, ensure_ascii=False).replace('<', '\\u003c')
     sections_script = ('<script type="application/json" id="reader-data">' + reader_data + '</script>'
                        + '<script>' + files('latex_review').joinpath('report_sections.js').read_text(encoding='utf-8') + '</script>')
-    html = html.replace('</body>', annotation_scripts + translation_scripts + sections_script + _reader_script(revision) + '</body>')
+    navigation = '<button type="button" id="toggle-sections" aria-expanded="false" aria-controls="sections-side">章节</button><nav id="sections-side" aria-label="章节目录" hidden><div class="directory-heading"><h2>章节目录</h2><button type="button" id="close-sections">收起</button></div><ol id="section-tree"></ol></nav>'
+    html = preview.compose(
+        title='当前论文持续预览 · ' + source.entry, style=style,
+        head=content_meta(annotation_content), body_class='reading-view live-view',
+        before_main=header + navigation, after_main=supplement,
+        scripts_after_math=annotation_scripts + translation_scripts + sections_script + _reader_script(revision))
+    from .delivery import embed_annotations
+    html = embed_annotations(html, annotation_content, output)
     _write(output / 'report.html', html)
     from .report_rebuild import save_live_recipe
     save_live_recipe(output, source)

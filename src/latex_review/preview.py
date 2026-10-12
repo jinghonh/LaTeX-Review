@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field, replace
 from functools import lru_cache
 from html import escape
 import re
@@ -39,6 +39,72 @@ _UNSAFE_MATH = re.compile(
 class PreviewResult:
     html: str
     diagnostics: tuple[Diagnostic, ...]
+    _style: str = field(default="", repr=False, compare=False)
+    _content: str | None = field(default=None, repr=False, compare=False)
+    _math_scripts: str = field(default="", repr=False, compare=False)
+
+    def compose(self, *, title: str = "LaTeX 内容预览", style: str = "",
+                head: str = "", body_class: str = "", before_main: str | None = None,
+                main_end: str = "", after_main: str = "",
+                scripts_before_math: str = "", scripts_after_math: str = "") -> str:
+        """Assemble trusted HTML slots; escape the title and body class.
+
+        A custom before_main must retain the math-status element. Script slots
+        preserve the caller's order relative to the preview's math startup.
+        """
+        if self._content is None:
+            raise ValueError("页面组装需要 render_preview 生成的预览结果")
+        # Slots contain trusted generated HTML; title and body_class are plain text.
+        if before_main is None:
+            before_main = ('<header><h1>LaTeX 内容预览</h1><p class="notice">用于审阅正文内容，不代表最终编译版式。</p>\n'
+                           '<p id="math-status" role="status">正在加载在线公式排版。</p></header>')
+        body = '<body class="' + _e(body_class) + '">' if body_class else '<body>'
+        return f'''<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{_e(title)}</title>
+<style>{self._style}{style}</style>{head}</head>{body}
+{before_main}
+<main>{self._content}{main_end}</main>
+{after_main}{scripts_before_math}{self._math_scripts}{scripts_after_math}
+</body></html>'''
+
+    def anchors(self) -> set[str]:
+        """Return navigation anchors from the rendered review content."""
+        if self._content is None:
+            raise ValueError("导航锚点需要 render_preview 生成的预览结果")
+        return set(re.findall(r'\bid="([^"]+)"', self._content))
+
+
+def render_sentence_copy(raw: str | None, project: ParsedProject, side: str,
+                         node_id: str | None, numbers: tuple[int, ...]) -> str:
+    """Render a non-interactive sentence copy without duplicating navigation anchors."""
+    if raw is None:
+        return "该侧无内容"
+    if (re.search(r"<[^>]+>|(?:javascript|data|vbscript)\s*:", raw, re.I) or
+            _UNSAFE_MATH.search(raw) or
+            any(match.group(1) not in _INLINE_SAFE and match.group(1) not in {"paragraph", "subparagraph"}
+                and match.group(1) not in project.macros
+                for match in re.finditer(r"\\([A-Za-z@]+)", raw))):
+        return "此处暂无法预览"
+    parent = project.by_id().get(node_id) if node_id else None
+    if parent is None or not numbers:
+        return "此处暂无法预览"
+    children = [project.by_id()[child] for child in parent.review.child_ids]
+    sentences = split_sentences(parent.review.raw_latex)
+    rendered_parts = []
+    for number in numbers:
+        if number > len(sentences):
+            return "此处暂无法预览"
+        sentence = sentences[number - 1]
+        contained = [child for child in children if parent.expanded_start + sentence.start <= child.expanded_start
+                     and child.expanded_end <= parent.expanded_start + sentence.end]
+        rendered_parts.append(_inline_html(sentence.text, project, side, contained, source=parent.review.source,
+                                           base_start=parent.expanded_start + sentence.start))
+    rendered = " ".join(rendered_parts)
+    # 明细是正文的副本，导航锚点只保留在原文中。
+    rendered = re.sub(r'\s+id="[^"]*"', "", rendered)
+    # 明细本身是按钮，行内引用在这里保留文字但不嵌套交互链接。
+    return re.sub(r"<a\b[^>]*>", "<span>", rendered).replace("</a>", "</span>").strip()
 
 
 def _e(value: object) -> str:
@@ -694,11 +760,7 @@ def render_preview(old: ParsedProject | None, new: ParsedProject, *,
                                                   source_old=node.review.source if side == "old" else None,
                                                   source_new=node.review.source if side == "new" else None))
     extra = extra_nodes or {}
-    html = f'''<!doctype html>
-<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-<title>LaTeX 内容预览</title>
-<style>
-*{{box-sizing:border-box}}body{{margin:0;color:#1f2937;background:#f5f4f0;font:16px/1.7 system-ui,sans-serif}}
+    style = f'''\n*{{box-sizing:border-box}}body{{margin:0;color:#1f2937;background:#f5f4f0;font:16px/1.7 system-ui,sans-serif}}
 header{{padding:1rem 1.5rem;background:#fff;border-bottom:1px solid #d8d5ca}}header h1{{margin:0;font-size:1.25rem}}
 .notice{{margin:.4rem 0 0;color:#75531e}}#math-status{{margin:.45rem 0 0;color:#8b3d24}}
 main{{display:grid;grid-template-columns:repeat({2 if old else 1},minmax(0,1fr));gap:1rem;padding:1rem}}
@@ -717,11 +779,9 @@ figcaption,.table-caption{{font-style:italic}}.asset,.fallback-label{{color:#755
 .citation,.cross-ref{{color:#315c86}}.unresolved-ref{{color:#9b3c26}}
 .macro-placeholder{{background:#edf4ed;border-bottom:1px dotted #48734b}}
 @media(max-width:800px){{main{{grid-template-columns:1fr}}.preview-side{{max-height:none}}}}
-</style></head><body>
-<header><h1>LaTeX 内容预览</h1><p class="notice">用于审阅正文内容，不代表最终编译版式。</p>
-<p id="math-status" role="status">正在加载在线公式排版。</p></header>
-<main>{_side(old, "old", "修改前", diagnostics, figure_assets, extra.get("old", ()), sentence_highlights) if old else ""}{_side(new, "new", "修改后" if old else "当前论文", diagnostics, figure_assets, extra.get("new", ()), sentence_highlights)}</main>
-<script>
+'''
+    content = f'''{_side(old, "old", "修改前", diagnostics, figure_assets, extra.get("old", ()), sentence_highlights) if old else ""}{_side(new, "new", "修改后" if old else "当前论文", diagnostics, figure_assets, extra.get("new", ()), sentence_highlights)}'''
+    math_scripts = f'''<script>
 (function(){{
  window.MathJax={{loader:{{load:['[tex]/boldsymbol']}},startup:{{typeset:false}},tex:{{packages:{{'[+]':['ams','newcommand','boldsymbol']}}}}}};
  const status=document.getElementById('math-status');
@@ -758,6 +818,6 @@ figcaption,.table-caption{{font-style:italic}}.asset,.fallback-label{{color:#755
  }};
 }})();
 </script>
-<script async src="{_MATHJAX_URL}" onload="mathDependencyReady()" onerror="mathDependencyFailed()"></script>
-</body></html>'''
-    return PreviewResult(html, tuple(diagnostics))
+<script async src="{_MATHJAX_URL}" onload="mathDependencyReady()" onerror="mathDependencyFailed()"></script>'''
+    result = PreviewResult("", tuple(diagnostics), style, content, math_scripts)
+    return replace(result, html=result.compose())
