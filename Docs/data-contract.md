@@ -9,7 +9,7 @@
 - `SourceLocation` 的 `file` 是非空的原始源文件相对路径；未知文件可填 `null`，但不得使用空字符串或绝对路径。行列号从 1 开始。未知文件或行号填 `null`，同时提供非空 `uncertainty_reason`；`confidence` 为独立的源码定位置信度。整侧不存在时，主变更中的对应位置直接为 `null`。
 - `PrimaryChange` 是总数计数单位，包含旧新节点标识、旧新位置、独立的 `matching_confidence`、类别和明细。节点存在的一侧必须有 `SourceLocation` 对象，即使文件或行号未知。新增仅有新侧，删除仅有旧侧。匹配不确定仍可通过置信度表示，不得伪造源码坐标。
 - `ChangeDetail` 记录所属主变更内的引用、公式等细节。`category_hits` 按包含该类别的**主变更**计数，同一主变更中的同类多个明细只命中一次；同一主变更可命中多个类别，所以各类别之和可以大于 `changes`。
-- `ChangeDetail.source_old` 与 `source_new` 是可选位置；引用位置、段内公式等可在保留父主变更位置的同时标明各自的原始源码位置。缺侧字段可省略，已有 1.0 输出保持兼容。结构化内容用法见[结构化内容差异接口](structured-content.md)。
+- `ChangeDetail.source_old` 与 `source_new` 是可选位置；引用位置、段内公式等可在保留父主变更位置的同时标明各自的原始源码位置。缺侧字段可省略，已有 1.0 输出保持兼容。表格、移动与公式明细见[高级差异](advanced-diff.md)。
 - 正文句子明细可选用 `old_sentences`、`new_sentences` 记录所属段落中从 1 开始的句子序号。修改可两侧都有，新增和删除只在存在的一侧给出；拆句与合句可包含多个序号。这些序号用于页面内句子定位，不是原始源码行号，也不增加主变更数。
 - 1.1 增加 `move` 类别。`moved` 主变更携带双侧节点、章节路径与源码位置；移动后的局部改动仍是同一主变更内的明细。表格明细可选用从 1 开始的 `row_old`、`column_old`、`row_new`、`column_new` 标记可确定的行或列；未提供的坐标不代表第零行或第零列。
 - `Summary.added_words` 与 `removed_words` 是正文词数，由后续比较器提供；注释主变更计入 `changes` 和 `comment` 类别，但不得计入这两个词数。`category_hits` 在构造时复制并冻结，避免构造后改动摘要。
@@ -17,8 +17,6 @@
 - 规则诊断在 1.1 契约中增加可选的 `rule_status`、`evidence`、`related_sources_old`、`related_sources_new`；非规则诊断维持既有序列化。详见[论文规则诊断](paper-rules.md)。
 
 `dumps` 使用 UTF-8 可表示的中文、字典键排序、两侧节点按 ID 排序、主变更和明细按 ID 排序、类别去重排序，并以换行结尾。`child_ids` 和 `section_path` 的顺序表示文档结构，保留原序。相同输入产生逐字节相同的输出。代表性样例见 `tests/snapshots/representative_diff.json`。
-
-主票 #8 的比较器接口、匹配置信度与正文词数规则见 [核心结构匹配与正文差异](core-comparison.md)。
 
 ## 兼容性
 

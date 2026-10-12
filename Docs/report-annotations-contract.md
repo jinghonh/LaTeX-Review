@@ -217,21 +217,8 @@ CLI 的精简输出及批量快照见 [智能体接口](agent-tools.md#批量与
 
 ## CLI 与本机 HTTP
 
-安装项目后，命令为 `latex-review-annotations`。操作结果为 JSON，操作失败退出码为 4。
-参数解析失败输出用法，退出码为 2。
-高层 `add`、`reply`、`edit`、`delete` 和 `resolve` 自动构造版本检查信封。
-命令复用相同存储与修订检查，不自动重试冲突。定位失败或歧义不会创建批注。
-完整参数、候选选择和示例见 [智能体接口](agent-tools.md#批注读取与修改)。
+CLI 参数、返回值、退出码和示例见[智能体接口](agent-tools.md#批注读取与修改)。
 
-```sh
-latex-review-annotations /path/to/report --content
-latex-review-annotations /path/to/report
-latex-review-annotations /path/to/report --request request.json
-latex-review-annotations /path/to/report --request - < request.json
-latex-review-annotations /path/to/report --export
-```
-
-`--project-root` 可明确指定本机项目目录，但必须符合清单的项目身份。
 项目根目录不会由 HTTP 请求指定。
 
 | HTTP 接口 | 返回或行为 |
