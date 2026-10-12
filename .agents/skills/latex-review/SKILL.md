@@ -39,9 +39,9 @@ description: 使用 LaTeX Review 生成论文修改审阅报告、翻译报告�
 
 ## 产品文档
 
-需要补充细节时读取对应文档：
+以下参考文件随技能一起安装。命令参数以本机 `--help` 为准：
 
-- [使用指南](../../../Docs/user-guide.md)：来源模式、配置和分享。
-- [智能体接口](../../../Docs/agent-tools.md)：查询、范围检查和验收记录。
-- [翻译说明](../../../Docs/translation.md)：接口配置、术语、缓存和导出。
-- [编译说明](../../../Docs/compiled-rendering.md)：显式编译和受限渲染。
+- [审阅与分享](references/review.md)：来源模式、配置和分享。
+- [批注接口](references/annotations.md)：查询、范围检查和验收记录。
+- [翻译说明](references/translation.md)：接口配置、术语、缓存和导出。
+- [编译说明](references/review.md#能力边界)：显式编译和受限渲染。

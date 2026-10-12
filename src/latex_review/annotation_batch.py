@@ -6,8 +6,8 @@ from .annotations import AnnotationConflict, AnnotationError, _atomic_write, _ha
 OPERATIONS = {'create', 'reply', 'edit', 'delete_message', 'delete_thread', 'resolve', 'reopen', 'associate'}
 
 
-def execute_batch(store, content, request):
-    _keys(request, ('operation', 'expected_revision', 'request_id', 'atomic', 'dry_run', 'items'),
+def execute_batch(store, content, request, progress=None):
+    _keys(request, ('operation', 'expected_revision', 'request_id', 'atomic', 'dry_run', 'items', 'preflight_token'),
           ('operation', 'expected_revision', 'request_id', 'items'))
     if request['operation'] != 'batch':
         raise AnnotationError('批量操作须为 batch')
@@ -30,6 +30,11 @@ def execute_batch(store, content, request):
     # Revision is a concurrency precondition, not part of the requested mutation.
     fingerprint = _hash({'project_id': content['project_id'], 'version_id': content['version_id'],
                          'items': items, 'atomic': atomic})
+    from . import annotation_preflight
+    def report(phase, completed=0):
+        if progress:
+            progress(phase, completed, len(items))
+    report('lock')
     with store._locked() as data:
         previous = data.get('requests', {}).get(request_id)
         if previous:
@@ -37,14 +42,24 @@ def execute_batch(store, content, request):
                 raise AnnotationConflict('请求 ID 已用于不同载荷')
             if not dry_run:
                 return deepcopy(previous['response'])
+        plan = None if dry_run else annotation_preflight.load(store, content, request, fingerprint, data['revision'])
         if revision != data['revision']:
             raise AnnotationConflict('批注已被其他审阅者更新，请保留草稿并重新读取')
-        working = deepcopy(data)
+        report('validate')
+        # Copy only containers and affected threads, never all stored versions per item.
+        working = {**data, 'threads': dict(data['threads']), 'versions': dict(data['versions']),
+                   'requests': dict(data.get('requests', {}))}
         store._content(working, content)
-        before = store._view(data, content)
-        results = []
-        for item in items:
-            candidate = deepcopy(working)
+        results = deepcopy(plan['results']) if plan else []
+        changed = {}
+        if plan:
+            working['threads'].update(deepcopy(plan['threads']))
+            report('reuse', len(items))
+        for index, item in enumerate([] if plan else items):
+            candidate = {**working, 'threads': dict(working['threads'])}
+            target = item.get('thread_id')
+            if isinstance(target, str) and target in candidate['threads']:
+                candidate['threads'][target] = deepcopy(candidate['threads'][target])
             try:
                 if 'error' in item:
                     _keys(item, ('id', 'operation', 'error'), ('id', 'operation', 'error'))
@@ -67,6 +82,9 @@ def execute_batch(store, content, request):
                 if item['operation'] == 'edit':
                     result['message_id'] = item['message_id']
                 working = candidate
+                thread_id = result.get('thread_id', item.get('thread_id'))
+                if thread_id:
+                    changed[thread_id] = working['threads'][thread_id]
                 results.append({'id': item['id'], 'operation': item['operation'], 'ok': True,
                                 'thread_id': result.get('thread_id', item.get('thread_id')),
                                 **result})
@@ -74,6 +92,8 @@ def execute_batch(store, content, request):
                 results.append({'id': item['id'], 'operation': item.get('operation'), 'ok': False,
                                 'error': {'code': 'conflict' if isinstance(exc, AnnotationConflict) else 'validation',
                                           'message': str(exc)}})
+            finally:
+                report('preflight' if dry_run else 'apply', index + 1)
         failed = any(not result['ok'] for result in results)
         committed = not dry_run and any(result['ok'] for result in results) and not (atomic and failed)
         if atomic and failed:
@@ -82,20 +102,29 @@ def execute_batch(store, content, request):
                     result.update(ok=False, error={'code': 'atomic_rollback', 'message': '整批校验失败，未提交'})
                     result.pop('thread_id', None)
                     result.pop('message_id', None)
-            working = deepcopy(data)
+            working = {**data, 'requests': dict(data.get('requests', {}))}
+            changed = {}
         if dry_run:
+            plan = annotation_preflight.save(store, content, request, fingerprint, revision, changed, results)
+            results = deepcopy(results)
             for result in results:
                 result.pop('thread_id', None) if result['operation'] == 'create' else None
                 result.pop('message_id', None)
         response = {'request_id': request_id, 'atomic': atomic, 'dry_run': dry_run, 'committed': committed,
                     'version_id': content['version_id'], 'revision': data['revision'] + int(committed),
-                    'start_revision': data['revision'], 'start_thread_ids': [t['id'] for t in before['threads']],
-                    'results': results}
+                    'start_revision': data['revision'], 'start_thread_ids': [t['id'] for t in data['threads'].values() if not t.get('deleted_at')],
+                    'results': results, 'preflight_reused': bool(plan and not dry_run)}
+        if plan:
+            response.update(preflight_token=plan['token'], preflight_expires_at=plan['expires_at'])
         if not dry_run:
+            report('write', len(items))
             working.setdefault('requests', {})[request_id] = {'fingerprint': fingerprint, 'response': deepcopy(response)}
             if committed:
                 store._write(working)
             else:
                 # An atomic rejection records only its receipt, without advancing annotation revision.
                 _atomic_write(store.path, working)
+            if plan:
+                annotation_preflight.path_for(store, request_id).unlink(missing_ok=True)
+        report('complete', len(items))
         return response

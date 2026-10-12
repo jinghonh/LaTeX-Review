@@ -12,6 +12,7 @@ from latex_review.sources import ProjectSource
 from latex_review.contract import ComparisonSource
 from latex_review.serve import create_server
 from latex_review.annotations import AnnotationStore, load_content
+from latex_review.delivery import publication_html
 
 @pytest.fixture
 def live_report(tmp_path):
@@ -39,6 +40,8 @@ def create(p,body='Offline question'):
 @pytest.mark.parametrize('scheme',['file','http'])
 def test_offline_lifecycle_reopen_export_import(live_report,chrome,scheme,tmp_path):
     root,entry,output,source=live_report
+    from latex_review.delivery import publication_html
+    (output/'report.html').write_text(publication_html(output))
     server=None;worker=None
     if scheme=='http':
         server=ThreadingHTTPServer(('127.0.0.1',0),partial(SimpleHTTPRequestHandler,directory=str(output)));worker=Thread(target=server.serve_forever);worker.start();url=f'http://127.0.0.1:{server.server_port}/report.html'
@@ -118,6 +121,7 @@ def test_restored_http_edit_draft_can_be_saved(live_report,chrome):
 
 def test_same_project_windows_and_contract(live_report,chrome):
     root,entry,output,source=live_report
+    (output/'report.html').write_text(publication_html(output))
     context=chrome.new_context();p=context.new_page();q=context.new_page();url=(output/'report.html').as_uri();ready(p,url);ready(q,url)
     create(p,'First window');q.wait_for_function('reviewAnnotations.getSnapshot().threads.length===1');create(q,'Second window');p.wait_for_function('reviewAnnotations.getSnapshot().threads.length===2')
     at=p.evaluate('Date.now()+300')
@@ -168,7 +172,7 @@ def test_images_and_formula_export(live_report,chrome,tmp_path):
     import base64
     (root/'figure.png').write_bytes(base64.b64decode('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII='))
     entry.write_text(entry.read_text().replace(r'\end{document}',r'\begin{figure}\includegraphics{figure.png}\caption{Picture}\end{figure}'+'\n'+r'\[x+1\]'+'\n'+r'\end{document}'))
-    build(source,output);p=chrome.new_page();ready(p,(output/'report.html').as_uri());create(p)
+    build(source,output);(output/'report.html').write_text(publication_html(output));p=chrome.new_page();ready(p,(output/'report.html').as_uri());create(p)
     html=p.evaluate('reviewAnnotationDelivery.exportHTML()');path=tmp_path/'image-export.html';path.write_text(html)
     fresh=chrome.new_context();q=fresh.new_page();ready(q,path.as_uri());assert q.locator('img[src^="data:"]').count()>=1
     assert q.evaluate('reviewAnnotations.getContent().units.some(u=>u.kind==="formula")')
@@ -227,4 +231,27 @@ def test_report_and_live_share_project(annotated_page,tmp_path):
             q=p.context.browser.new_page();ready(q,f'http://127.0.0.1:{server.server_port}/report.html');assert q.evaluate('reviewAnnotations.getSnapshot().threads[0].messages[0].body')=='Report thread'
             tid=q.evaluate('reviewAnnotations.getSnapshot().threads[0].id');assert q.evaluate('async id=>reviewAnnotations.update({operation:"reply",thread_id:id,body:"Live reply",author:{name:"B",type:"agent"},category:"note"})',tid)
             p.evaluate('reviewAnnotations.refresh()');assert p.evaluate('reviewAnnotations.getSnapshot().threads[0].messages.at(-1).body')=='Live reply'
+        finally:server.shutdown();worker.join()
+
+
+def test_lightweight_http_export_embeds_pdf_and_preserves_annotations(live_report,chrome,tmp_path):
+    root,entry,output,source=live_report
+    assets=output/'assets';assets.mkdir()
+    pdf=b'%PDF-1.4\nportable resource\n'
+    (assets/'figure.pdf').write_bytes(pdf)
+    html=(output/'report.html').read_text().replace('</main>','<a href="assets/figure.pdf">PDF</a></main>')
+    (output/'report.html').write_text(html)
+    with create_server(output,annotation_project_root=root) as server:
+        worker=Thread(target=server.serve_forever);worker.start()
+        try:
+            p=chrome.new_page();ready(p,f'http://127.0.0.1:{server.server_port}/report.html');create(p)
+            exported=p.evaluate('reviewAnnotationDelivery.exportHTML()')
+            assert 'href="assets/figure.pdf"' not in exported
+            assert 'data:application/pdf;base64,' in exported
+            target=tmp_path/'portable.html';target.write_text(exported)
+            context=chrome.new_context();q=context.new_page();ready(q,target.as_uri())
+            assert q.evaluate('reviewAnnotations.getSnapshot().threads.length')==1
+            create(q,'Second offline question')
+            assert q.evaluate('reviewAnnotations.getSnapshot().threads.length')==2
+            context.close();p.close()
         finally:server.shutdown();worker.join()

@@ -17,7 +17,9 @@ def add_batch_commands(commands):
     batch.add_argument('--expected-revision', type=int)
     batch.add_argument('--author', help='未指定作者的项使用此智能体名称')
     batch.add_argument('--atomic', action='store_true', help='整批校验通过才提交')
-    batch.add_argument('--dry-run', action='store_true', help='只预检，不写入或消耗请求 ID')
+    batch.add_argument('--dry-run', action='store_true', help='保存预检缓存，不提交批注或消耗请求 ID')
+    batch.add_argument('--preflight-token', help='指定预检返回的令牌；默认复用相同请求 ID 的预检')
+    batch.add_argument('--quiet-progress', action='store_true', help='关闭 stderr 阶段进度')
     batch.add_argument('--snapshot', type=Path, help='复核快照文件；默认保存到项目共享存储旁')
     check = commands.add_parser('audit', help='复核保存的批量操作并报告运行期间新增批注')
     check.add_argument('snapshot', type=Path)
@@ -66,11 +68,21 @@ def prepare_batch(content, state, value, args):
     request = {'operation': 'batch', 'request_id': args.request_id or value.get('request_id'),
                'expected_revision': revision, 'atomic': args.atomic or value.get('atomic', False),
                'dry_run': args.dry_run, 'items': items}
+    if args.preflight_token:
+        request['preflight_token'] = args.preflight_token
     return request
 
 
 def run_batch(store, content, args):
-    before = store.read(content)
+    import sys
+    labels = {'read': '读取批注', 'lock': '等待存储锁', 'validate': '检查版本',
+              'preflight': '预检', 'apply': '应用', 'reuse': '复用预检', 'write': '写入',
+              'audit': '审计', 'complete': '完成'}
+    def progress(phase, completed, total):
+        if not args.quiet_progress:
+            print(f"{labels.get(phase, phase)} {completed}/{total}", file=sys.stderr, flush=True)
+    progress('read', 0, 0)
+    before = store.inventory(content)
     request = prepare_batch(content, before, _read_json(args.file), args)
     request_id = request['request_id']
     if not isinstance(request_id, str) or not request_id.strip():
@@ -94,14 +106,16 @@ def run_batch(store, content, args):
             snapshot['before'] = saved['before']
         snapshot_path.parent.mkdir(parents=True, exist_ok=True)
         _atomic_write(snapshot_path, snapshot)
-    result = store.batch(content, request)
+    result = store.batch(content, request, progress=progress)
     if not args.dry_run:
+        progress('audit', 0, len(request['items']))
         successful = {item['id'] for item in result['results'] if item['ok']}
         expected = [item for item in request['items'] if item['id'] in successful]
-        verification = audit(snapshot['before'], store.read(content), result, expected_items=expected)
+        verification = audit(snapshot['before'], store.inventory(content), result, expected_items=expected)
         snapshot.update(result=result, audit=verification)
         _atomic_write(snapshot_path, snapshot)
         result = {**result, 'audit': verification, 'snapshot_file': str(snapshot_path.resolve())}
+        progress('complete', len(request['items']), len(request['items']))
     return result
 
 
@@ -114,4 +128,4 @@ def run_audit(store, content, path):
         raise AnnotationError('快照没有成功返回的批量收据；请用相同请求 ID 核对原请求')
     successful = {item['id'] for item in result['results'] if item['ok']}
     expected = [item for item in snapshot['expected_items'] if item['id'] in successful]
-    return audit(snapshot['before'], store.read(content), result, expected_items=expected)
+    return audit(snapshot['before'], store.inventory(content), result, expected_items=expected)

@@ -1,10 +1,16 @@
 /* Portable annotation contract. IndexedDB transactions serialize same-origin windows. */
-(() => {
+(async () => {
   'use strict';
   const api=window.reviewAnnotations;
   const readJSON=id=>JSON.parse(document.getElementById(id)?.textContent||'null');
-  const content=readJSON('annotation-content'),embedded=readJSON('annotation-backup');
-  if(!api||!content||!embedded) return;
+  const embedded=readJSON('annotation-backup');
+  let content=readJSON('annotation-content');
+  if(!api)return;
+  if(!content){
+    if(location.protocol==='file:'){document.getElementById('annotation-status').textContent='请使用 latex-review-preview 打开本机报告，或使用独立导出的 HTML。';return;}
+    try{const response=await fetch('/api/annotations/content');if(!response.ok)throw Error('正文读取失败');content=await response.json();}
+    catch(e){document.getElementById('annotation-status').textContent=e.message;return;}
+  }
   const copy=value=>structuredClone(value),stable=value=>JSON.stringify(value,(_,v)=>v&&typeof v==='object'&&!Array.isArray(v)?Object.fromEntries(Object.keys(v).sort().map(k=>[k,v[k]])):v);
   const fail=message=>{throw Error(message);};
   const text=(value,label,limit=65536)=>{if(typeof value!=='string'||!value.trim()||new TextEncoder().encode(value).length>limit) fail(label+'无效');return value;};
@@ -48,7 +54,7 @@
       if(id!==t.id||t.project_id!==b.project_id||typeof t.resolved!=='boolean'||!Array.isArray(t.messages)||!t.messages.length||!Array.isArray(t.history)||!t.associations) fail('线程无效');
       check(t.original_anchor);check(t.current_anchor);if(t.created_version_id!==t.original_anchor.version_id) fail('创建版本无效');
       const ids=new Set();for(const m of t.messages) {keys(m,['id','body','author','category','created_at','updated_at','deleted_at','edits','reply_to','suggested_replacement'],['id','body','author','category','created_at','updated_at','deleted_at','edits']);if('reply_to' in m&&!ids.has(m.reply_to))fail('回复对象必须是先前消息');text(m.id,'内容 ID');if(ids.has(m.id)) fail('内容 ID 重复');ids.add(m.id);messageFields(m);if(!Array.isArray(m.edits)) fail('编辑历史无效');for(const e of m.edits){keys(e,['body','category','at']);text(e.body,'历史正文');category(e.category);text(e.at,'时间');}for(const key of ['created_at','updated_at'])text(m[key],'时间');if(m.deleted_at!=null)text(m.deleted_at,'时间');}
-      for(const [version,a] of Object.entries(t.associations)) {keys(a,['status','anchor','candidates','reason']);if(!b.versions[version]||!['exact','auto_migrated','manual','needs_relocation'].includes(a.status)||!Array.isArray(a.candidates)) fail('关联无效');if(a.anchor){check(a.anchor);if(a.anchor.version_id!==version)fail('关联版本无效');}for(const candidate of a.candidates){keys(candidate,['anchor','score','method','context_score'],['anchor','score','method']);check(candidate.anchor);if(candidate.anchor.version_id!==version||typeof candidate.score!=='number'||candidate.score<0||candidate.score>1||!['exact','fuzzy'].includes(candidate.method))fail('候选无效');}}
+      for(const [version,a] of Object.entries(t.associations)) {keys(a,['status','anchor','candidates','reason','container'],['status','anchor','candidates','reason']);if(!b.versions[version]||!['exact','auto_migrated','manual','needs_relocation'].includes(a.status)||!Array.isArray(a.candidates)) fail('关联无效');if(a.anchor){check(a.anchor);if(a.anchor.version_id!==version)fail('关联版本无效');}if(a.container){const u=b.versions[version].units.find(u=>u.id===a.container.unit_id);keys(a.container,['unit_id','kind','selector','order','source','section_path','selection_deleted','subunit','scope'],['unit_id','kind','selector','order','source','section_path','selection_deleted']);if(!u||typeof a.container.selection_deleted!=='boolean'||a.container.kind!==u.kind||('scope' in a.container&&(a.container.scope!=='table'||!['cell','header'].includes(u.subunit?.type)))||stable(a.container.source)!==stable(u.source)||stable(a.container.section_path)!==stable(u.section_path))fail('容器关联无效');}for(const candidate of a.candidates){keys(candidate,['anchor','score','method','context_score'],['anchor','score','method']);check(candidate.anchor);if(candidate.anchor.version_id!==version||typeof candidate.score!=='number'||candidate.score<0||candidate.score>1||!['exact','fuzzy'].includes(candidate.method))fail('候选无效');}}
       for(const h of t.history){keys(h,['at','method','anchor']);check(h.anchor);text(h.at,'时间');if(!['created','exact','auto_migrated','manual'].includes(h.method))fail('历史类型无效');}
       for(const key of ['created_at','updated_at'])text(t[key],'时间');if(t.deleted_at!=null)text(t.deleted_at,'时间');
     }
@@ -75,7 +81,7 @@
     return {schema_version:data.schema_version,project_id:data.project_id,version_id:content.version_id,revision:data.revision,threads:Object.values(data.threads).filter(t=>!t.deleted_at).map(t=>{
       const result=copy(t),a=copy(t.associations[content.version_id]||locate(content,t.current_anchor));
       if(!t.associations[content.version_id])a.persisted=false;
-      if(a.anchor)a.anchor=anchor(content,selection(a.anchor));a.candidates.forEach(x=>x.anchor=anchor(content,selection(x.anchor)));result.association=a;return result;
+      if(a.container){const u=content.units.find(u=>u.id===a.container.unit_id);if(u)Object.assign(a.container,{selector:u.selector,order:u.order});}if(a.anchor)a.anchor=anchor(content,selection(a.anchor));a.candidates.forEach(x=>x.anchor=anchor(content,selection(x.anchor)));result.association=a;return result;
     })};
   }
   function associate(t,a,method,now) {
@@ -121,20 +127,29 @@
   let local=false,token=null;
   async function json(url,options) {const r=await fetch(url,options);const value=await r.json();if(!r.ok)fail(value.message||value.error||'批注接口失败');return value;}
   const adapter={
-    async readStatus(){if(local)return transaction(view);const s=await json('/api/annotations/status');token=s.token;return s;},
-    async read(){if(local)return [content,await transaction(view)];const [c,s]=await Promise.all([json('/api/annotations/content'),json('/api/annotations/status')]);token=s.token;return [c,s];},
-    async update(e){return local?transaction(d=>dispatch(d,e)):json('/api/annotations/update',{method:'POST',headers:{'Content-Type':'application/json','X-LaTeX-Review-Token':token},body:JSON.stringify(e)});}
+    async readRevision(){if(local)return transaction(d=>({project_id:d.project_id,version_id:content.version_id,revision:d.revision}));return json('/api/annotations/status?view=revision');},
+    async readJobs(){return local?{jobs:[]}:json('/api/annotations/jobs');},
+    async readStatus(){if(local)return transaction(view);const s=await json('/api/annotations/status?view=page');token=s.token;return s;},
+    async read(){if(local)return [content,await transaction(view)];const [c,s]=await Promise.all([json('/api/annotations/content'),json('/api/annotations/status?view=page')]);token=s.token;return [c,s];},
+    async update(e,progress){
+      if(local)return transaction(d=>dispatch(d,e));
+      const task=await json('/api/annotations/update?async=1',{method:'POST',headers:{'Content-Type':'application/json','X-LaTeX-Review-Token':token},body:JSON.stringify(e)});
+      if(!task.task_id)return task;
+      while(true){const job=await json(task.status_url);if(job.state==='complete')return job.result;if(job.state==='failed')fail(job.message||'批注任务失败');progress?.(job);await new Promise(resolve=>setTimeout(resolve,300));}
+    }
   };
   async function backup(){return local?transaction(copy):json('/api/annotations/export');}
   function download(value,name,type){const url=URL.createObjectURL(new Blob([value],{type})),a=document.createElement('a');a.href=url;a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);}
   const controls=document.createElement('div');controls.className='annotation-portable-tools';const delivery=document.createElement('details');delivery.className='annotation-delivery';const summary=document.createElement('summary');summary.textContent='导入与导出';delivery.append(summary,controls);
   const notice=document.createElement('p');notice.setAttribute('role','status');
   const add=(label,fn)=>{const b=document.createElement('button');b.type='button';b.textContent=label;b.onclick=()=>Promise.resolve().then(fn).catch(e=>notice.textContent=e.message);controls.append(b);};
-  add('导出报告原备份',()=>download(JSON.stringify(embedded,null,2),'annotations-original.json','application/json'));
+  if(embedded)add('导出报告原备份',()=>download(JSON.stringify(embedded,null,2),'annotations-original.json','application/json'));
   add('导出批注 JSON',async()=>download(JSON.stringify(await backup(),null,2),'annotations.json','application/json'));
   const input=document.createElement('input');input.type='file';input.accept='.json,application/json';input.hidden=true;
   add('导入批注 JSON',()=>input.click());input.onchange=async()=>{try{const b=JSON.parse(await input.files[0].text());validateBundle(b);if(await api.update({operation:'import',bundle:b}))notice.textContent='批注备份已导入。';else notice.textContent=document.getElementById('annotation-status').textContent;}catch(e){notice.textContent=e.message;}finally{input.value='';}};
+  const published=document.querySelector('meta[name="latex-review-publication"]')?.content==='static';
   async function exportHTML() {
+    if(published)fail('在线报告不提供独立 HTML 导出。请使用本机报告导出。');
     const b=await backup(),clone=document.documentElement.cloneNode(true);
     clone.querySelectorAll('.annotation-overview,.annotation-editor,.annotation-toolbar,.annotation-card,.annotation-mark,.annotation-margin,.annotation-drafts').forEach(e=>e.remove());
     clone.querySelectorAll('.inline-change,.change-anchor,.translation-block,.translation-toggle').forEach(e=>e.remove());
@@ -145,9 +160,21 @@
     clone.querySelectorAll('script[src]').forEach(e=>{if(/mathjax/i.test(e.src)&&!/tex-chtml\.js/.test(e.src))e.remove();});
     clone.querySelectorAll('#live-sections option:not(:first-child),#live-results li').forEach(e=>e.remove());
     clone.querySelectorAll('[style]').forEach(e=>{for(const p of ['--change-left','--change-top','--margin-overflow'])e.style.removeProperty(p);});
-    clone.querySelector('#annotation-content').textContent=JSON.stringify(api.getContent()).replace(/</g,'\\u003c');clone.querySelector('#annotation-backup').textContent=JSON.stringify(b).replace(/</g,'\\u003c');
+    for(const [id,value] of [['annotation-content',api.getContent()],['annotation-backup',b]]){
+      let tag=clone.querySelector('#'+id);if(!tag){tag=document.createElement('script');tag.type='application/json';tag.id=id;clone.querySelector('head').append(tag);}tag.textContent=JSON.stringify(value).replace(/</g,'\\u003c');
+    }
     clone.querySelector('body').classList.remove('annotation-panel-open');
     const assets=readJSON('annotation-assets')||{};
+    if(!local){
+      const names=new Set();
+      clone.querySelectorAll('[src],[href],[data-fallback-src]').forEach(e=>{for(const attr of ['src','href','data-fallback-src']){const value=e.getAttribute(attr);if(value&&/^(assets|previews|pages)\//.test(value))names.add(value.split(/[?#]/)[0]);}});
+      let total=0;
+      for(const name of names){
+        const response=await fetch(name);if(!response.ok)fail('资源读取失败：'+name);
+        const blob=await response.blob();total+=blob.size;if(blob.size>25*1024*1024||total>100*1024*1024)fail('单文件资源超出内嵌上限');
+        assets[decodeURIComponent(name)]=await new Promise((resolve,reject)=>{const reader=new FileReader();reader.onload=()=>resolve(reader.result);reader.onerror=()=>reject(reader.error);reader.readAsDataURL(blob);});
+      }
+    }
     clone.querySelectorAll('[src],[href]').forEach(e=>{for(const attr of ['src','href']){const value=e.getAttribute(attr);if(!value||/^(data:|https?:|#)/.test(value))continue;const embeddedAsset=assets[decodeURIComponent(value.split(/[?#]/)[0])];if(embeddedAsset)e.setAttribute(attr,embeddedAsset);}});
     clone.querySelectorAll('[data-fallback-src]').forEach(e=>{const embeddedAsset=assets[e.dataset.fallbackSrc];if(embeddedAsset)e.dataset.fallbackSrc=embeddedAsset;});
     for(const image of clone.querySelectorAll('img[src]')) {
@@ -158,7 +185,7 @@
     }
     download('<!doctype html>\n'+clone.outerHTML,'report-annotated.html','text/html');return '<!doctype html>\n'+clone.outerHTML;
   }
-  add('导出最新 HTML',exportHTML);controls.append(input,notice);document.querySelector('#annotation-overview').append(delivery);
+  if(!published)add('导出最新 HTML',exportHTML);controls.append(input,notice);document.querySelector('#annotation-overview').append(delivery);
   const draftKey='latex-review-drafts:'+content.project_id+':'+location.pathname;
   let draftsLoaded=false;
   function saveDrafts(){if(!draftsLoaded)return;try{localStorage.setItem(draftKey,JSON.stringify({project_id:content.project_id,version_id:content.version_id,content:api.getContent()||content,drafts:api.getDrafts()}));}catch(e){notice.textContent='草稿存储失败：'+e.message;}}
@@ -179,7 +206,7 @@
   }
   async function start() {
     if(location.protocol==='file:')local=true;
-    else {try {const [c,s]=await adapter.read();if(c.project_id!==content.project_id||c.version_id!==content.version_id||s.project_id!==content.project_id)fail('页面与接口身份不一致');}catch(e){if(e.message.includes('身份不一致')){notice.textContent=e.message;return;}local=true;}}
+    else {try {const [c,s]=await adapter.read();if(c.project_id!==content.project_id||c.version_id!==content.version_id||s.project_id!==content.project_id)fail('页面与接口身份不一致');}catch(e){if(!embedded||e.message.includes('身份不一致')){notice.textContent=e.message;return;}local=true;}}
     let embeddedConflict='';
     if(local)await transaction(data=>{try{const result=importBundle(data,embedded);if(result.imported.length)data.revision++;}catch(e){embeddedConflict=e.message+'。浏览器记录未覆盖；可导出报告原备份。';}return null;});
     await api.setAdapter(adapter);
@@ -189,6 +216,6 @@
   }
   window.reviewAnnotationDelivery=Object.freeze({backup,exportHTML,importBundle:async b=>{validateBundle(b);return api.update({operation:'import',bundle:b});},locate,anchor,saveDrafts});
   const channel=typeof BroadcastChannel!=='undefined'?new BroadcastChannel('latex-review-annotations:'+content.project_id):null;
-  if(channel){channel.onmessage=()=>{if(local)api.refresh();};const update=adapter.update;adapter.update=async e=>{const result=await update(e);channel.postMessage('updated');return result;};}
+  if(channel){channel.onmessage=()=>{if(local)api.refresh();};const update=adapter.update;adapter.update=async (e,progress)=>{const result=await update(e,progress);channel.postMessage('updated');return result;};}
   start().catch(e=>notice.textContent=e.message+' 输入已保留。');
 })();

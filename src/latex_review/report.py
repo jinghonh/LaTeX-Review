@@ -139,6 +139,9 @@ def _write_managed(directory: Path, relative: Path, *, content: bytes | None = N
                     shutil.copyfileobj(input_file, output)
             else:
                 raise ValueError("缺少写入内容")
+        if relative.parts[0] in {"assets", "previews", "pages"}:
+            from .resource_cache import deduplicate_resource
+            deduplicate_resource(directory / relative.parent / temporary)
         try:
             os.replace(temporary, name, src_dir_fd=parent_fd, dst_dir_fd=parent_fd)
         except OSError as exc:
@@ -641,8 +644,8 @@ def write_report(old: ParsedProject, new: ParsedProject, comparison: ComparisonR
     html = _report_html(document, preview, old, new, editor_url_template, pairs,
                         rendering=rendering, statuses=statuses, translation_units=units,
                         head=content_meta(annotation_content))
-    from .delivery import embed_annotations
-    html = embed_annotations(html, annotation_content, directory)
+    from .delivery import local_report_html, publication_html
+    html = local_report_html(html)
     _write_managed(directory, Path("diff.json"), content=diff_json.encode("utf-8"))
     _write_managed(directory, Path("diagnostics.json"),
                    content=dumps(DiagnosticsDocument(diagnostics)).encode("utf-8"))
@@ -650,7 +653,7 @@ def write_report(old: ParsedProject, new: ParsedProject, comparison: ComparisonR
     _write_managed(directory, Path("translation-units.json"),
                    content=json.dumps(units, ensure_ascii=False).encode("utf-8"))
     single = (_write_managed(directory, Path("report-single.html"),
-                             content=_single_file_html(html, directory).encode("utf-8")) if single_file else None)
+                             content=_single_file_html(publication_html(directory), directory).encode("utf-8")) if single_file else None)
     return ReportResult(directory, document, single)
 
 

@@ -126,19 +126,23 @@ class _PreviewParser(HTMLParser):
         self.stack[-1].children.append(data)
 
 
+def _semantic_units(units):
+    return [{k: ([{a: b for a, b in atom.items() if a != 'selector'} for atom in v] if k == 'atoms' else v)
+             for k, v in unit.items() if k not in ('selector', 'change_ids')} for unit in units]
+
+
 def build_content(project, preview_html: str, *, project_root: Path | None = None, changes=()):
     """Extract actual preview text, including unmodified prose and degraded formulas.
 
     Call while the source snapshot exists. Content identity includes resolved source
-    text and bibliography/macro interpretation, not the report or comparison baseline.
+    text, bibliography/macro interpretation and semantic preview coordinates.
+    Selectors and comparison-specific change membership do not affect identity.
     """
     from dataclasses import asdict
     from .cache import dependency_fingerprints
     root = (project_root or project.expanded.source.worktree_origin or project.expanded.source.root).resolve()
     entry = project.expanded.source.entry
     project_id = _hash({'root': str(root), 'entry': entry})
-    version_id = _hash({'entry': entry, 'content_model': 2, 'files': dependency_fingerprints(project.expanded),
-                        'macros': {k: asdict(v) for k, v in project.macros.items()}})
     nodes = {n.review.id: n for n in project.nodes}
     parser = _PreviewParser()
     parser.feed(preview_html)
@@ -156,7 +160,16 @@ def build_content(project, preview_html: str, *, project_root: Path | None = Non
             element = element.parent
         return nodes[element.attrs['data-node-id']] if element else None
 
+    def display_only(element):
+        while element:
+            if {'asset', 'asset-card', 'asset-metadata', 'asset-fallback'} & set(element.attrs.get('class', '').split()):
+                return True
+            element = element.parent
+        return False
+
     def contents(element, atoms):
+        if display_only(element):
+            return ''
         if 'data-annotation-latex' in element.attrs:
             owner = node_owner(element)
             raw = element.attrs['data-annotation-latex']
@@ -181,6 +194,8 @@ def build_content(project, preview_html: str, *, project_root: Path | None = Non
         if 'preview-side' not in side.attrs.get('class', '').split() or side.attrs.get('data-side') != 'new':
             continue
         for element in descendants(side):
+            if display_only(element):
+                continue
             owner = node_owner(element)
             if not owner:
                 continue
@@ -199,7 +214,7 @@ def build_content(project, preview_html: str, *, project_root: Path | None = Non
                             owner.review.type not in ('equation', 'inline_math', 'math_array', 'comment', 'bibliography_change'))
             if not (is_block or is_leaf_node):
                 continue
-            if any(x.tag in block_tags or x.attrs.get('data-node-id') in nodes for x in descendants(element)
+            if any(x.tag in block_tags or x.attrs.get('data-node-id') in nodes for x in descendants(element) if not display_only(x)
                    if x.attrs.get('data-node-id') not in nodes or nodes[x.attrs['data-node-id']].review.type not in ('inline_math', 'citation', 'reference')):
                 continue
             if 'preview-unavailable' in element.attrs.get('class', '').split():
@@ -246,6 +261,11 @@ def build_content(project, preview_html: str, *, project_root: Path | None = Non
         unit['change_ids'] = [c.id for c in changes if c.new_node_id in (unit['node_id'], unit['parent_node_id'])]
     from .annotation_sources import enrich_content
     enrich_content(project, units, root)
+    # Keep legacy coordinates under their old version. Different parse/render
+    # options must never claim the same version with different semantic units.
+    version_id = _hash({'entry': entry, 'content_model': 3, 'files': dependency_fingerprints(project.expanded),
+                        'macros': {k: asdict(v) for k, v in project.macros.items()},
+                        'units': _semantic_units(units)})
     return {'schema_version': SCHEMA_VERSION, 'project_id': project_id, 'project_root': str(root),
             'entry': entry, 'version_id': version_id, 'coordinate_system': 'utf16-normalized-whitespace-with-formula-atoms',
             'units': units}
@@ -405,6 +425,8 @@ def locate(content, anchor):
     selection text is not silently replaced with an unrelated surviving substring.
     """
     candidates = []
+    paragraph_matches = []
+    paragraph_scores = {}
     for unit in content['units']:
         if unit['kind'] != anchor['kind']:
             continue
@@ -442,7 +464,12 @@ def locate(content, anchor):
             candidates.extend(exact)
             continue
         matcher = SequenceMatcher(None, anchor['unit_text'], text, autojunk=False)
+        # These are upper bounds, so pruning does not discard valid matches.
+        if matcher.real_quick_ratio() < .45 or matcher.quick_ratio() < .45:
+            paragraph_scores[unit['id']] = 0
+            continue
         similarity = matcher.ratio()
+        paragraph_scores[unit['id']] = similarity
         if similarity < .45:
             continue
         old_start = len(anchor['unit_text'].encode('utf-16-le')[:anchor['start'] * 2].decode('utf-16-le'))
@@ -457,7 +484,11 @@ def locate(content, anchor):
             finish = a + right - i if tag == 'equal' else b
             mapped_start = begin if mapped_start is None else min(mapped_start, begin)
             mapped_end = finish if mapped_end is None else max(mapped_end, finish)
-        if mapped_start == mapped_end:
+        if (similarity >= .65 and unit['source'].get('file') == anchor['source'].get('file')
+                and unit['section_path'] == anchor['section_path']
+                and unit.get('subunit') == anchor.get('subunit')):
+            paragraph_matches.append((similarity, unit, not text[mapped_start:mapped_end].strip()))
+        if not text[mapped_start:mapped_end].strip():
             continue
         if quote[0].isalnum() and (not anchor['prefix'] or not anchor['prefix'][-1].isalnum()):
             while mapped_start > 0 and text[mapped_start - 1].isalnum():
@@ -481,7 +512,12 @@ def locate(content, anchor):
         for unit in content['units']:
             if unit['kind'] != 'text':
                 continue
-            similarity = SequenceMatcher(None, anchor['unit_text'], unit['text'], autojunk=False).ratio()
+            similarity = paragraph_scores.get(unit['id'])
+            if similarity is None:
+                matcher = SequenceMatcher(None, anchor['unit_text'], unit['text'], autojunk=False)
+                if matcher.real_quick_ratio() < .45 or matcher.quick_ratio() < .45:
+                    continue
+                similarity = matcher.ratio()
             if similarity < .45:
                 continue
             words = list(re.finditer(r'\S+', unit['text']))
@@ -497,7 +533,10 @@ def locate(content, anchor):
                     if any(c['anchor']['unit_id'] == unit['id'] and c['anchor']['start'] < end
                            and start < c['anchor']['end'] for c in candidates):
                         continue
-                    score = SequenceMatcher(None, quote, unit['text'][word.start():last.end()], autojunk=False).ratio()
+                    matcher = SequenceMatcher(None, quote, unit['text'][word.start():last.end()], autojunk=False)
+                    if matcher.quick_ratio() < .85:
+                        continue
+                    score = matcher.ratio()
                     if score < .85:
                         continue
                     result = make_anchor(content, {'unit_id': unit['id'], 'start': start, 'end': end})
@@ -512,9 +551,37 @@ def locate(content, anchor):
     elif not exact and candidates and candidates[0]['score'] >= .90 and (
             len(candidates) == 1 or candidates[0]['score'] - candidates[1]['score'] >= .10):
         automatic = candidates[0]
-    return {'status': ('exact' if automatic['method'] == 'exact' else 'auto_migrated') if automatic else 'needs_relocation',
+    result = {'status': ('exact' if automatic['method'] == 'exact' else 'auto_migrated') if automatic else 'needs_relocation',
             'anchor': automatic['anchor'] if automatic else None, 'candidates': candidates,
             'reason': None if automatic else 'ambiguous' if len(candidates) > 1 else 'low_confidence' if candidates else 'missing'}
+    paragraph_matches.sort(key=lambda item: -item[0])
+    if not automatic and paragraph_matches and (len(paragraph_matches) == 1 or
+            paragraph_matches[0][0] - paragraph_matches[1][0] >= .10):
+        _, unit, deleted = paragraph_matches[0]
+        result['container'] = {'unit_id': unit['id'], 'kind': unit['kind'], 'selector': unit['selector'],
+                               'order': unit['order'], 'source': deepcopy(unit['source']),
+                               'section_path': unit['section_path'][:], 'selection_deleted': deleted}
+        if 'subunit' in unit:
+            result['container']['subunit'] = deepcopy(unit['subunit'])
+        if deleted:
+            result['reason'] = 'selection_deleted'
+    # A labelled table retains its identity even when an entire cell disappears.
+    if (not automatic and 'container' not in result and anchor.get('labels')
+            and anchor.get('subunit', {}).get('type') in ('cell', 'header')):
+        cells = [u for u in content['units'] if u.get('subunit', {}).get('type') in ('cell', 'header')
+                 and u['source'].get('file') == anchor['source'].get('file')
+                 and set(u['labels']) & set(anchor['labels'])
+                 and u['subunit'].get('table_index') == anchor['subunit'].get('table_index')]
+        if cells and len({u['node_id'] for u in cells}) == 1:
+            same_cell = next((u for u in cells if u['subunit'] == anchor['subunit']), None)
+            unit = same_cell or cells[0]
+            result['container'] = {'unit_id': unit['id'], 'kind': unit['kind'], 'scope': 'table',
+                                   'selector': unit['selector'], 'order': unit['order'],
+                                   'source': deepcopy(unit['source']), 'section_path': unit['section_path'][:],
+                                   'subunit': deepcopy(unit['subunit']), 'selection_deleted': same_cell is None}
+            if same_cell is None:
+                result['reason'] = 'selection_deleted'
+    return result
 
 
 def _atomic_write(path, data):
@@ -597,31 +664,58 @@ class AnnotationStore:
             raise AnnotationError('不能访问其他项目的批注')
         existing = data['versions'].get(content['version_id'])
         if existing:
-            def semantic(value):
-                return [{k: ([{a: b for a, b in atom.items() if a != 'selector'} for atom in v] if k == 'atoms' else v)
-                         for k, v in unit.items() if k not in ('selector', 'change_ids')} for unit in value['units']]
-            if semantic(existing) != semantic(content):
+            if _semantic_units(existing['units']) != _semantic_units(content['units']):
                 raise AnnotationConflict('同版本正文坐标不一致，请保留草稿并重新生成报告')
         # Render metadata may vary with the comparison baseline; version identity does not.
         data['versions'][content['version_id']] = deepcopy(content)
         return existing
 
-    def read(self, content):
+    def read(self, content, progress=None):
+        if progress:
+            progress('read', 0, 0)
         with self._locked() as data:
             self._content(data, content)
-            return self._view(data, content)
+            return self._view(data, content, progress=progress)
 
-    def _view(self, data, content):
+    def metadata(self, content):
+        """Read identity/revision without constructing or relocating any thread."""
+        with self._locked() as data:
+            return {'project_id': self.project_id, 'version_id': content['version_id'], 'revision': data['revision']}
+
+    def inventory(self, content):
+        """Audit inventory does not need anchors, histories or location computation."""
+        with self._locked() as data:
+            threads = [{'id': t['id'], 'messages': [{k: v for k, v in m.items() if k in
+                       ('id', 'author', 'body', 'reply_to', 'deleted_at')} for m in t['messages']]}
+                       for t in data['threads'].values() if not t.get('deleted_at')]
+            return {'project_id': self.project_id, 'version_id': content['version_id'],
+                    'revision': data['revision'], 'threads': threads}
+
+    def _view(self, data, content, progress=None):
+        from .annotation_locations import LocationCache, expand_location
         threads = []
+        cache = None
+        total = sum(not t.get('deleted_at') for t in data['threads'].values())
         for value in data['threads'].values():
             if value.get('deleted_at'):
                 continue
             thread = deepcopy(value)
             association = thread['associations'].get(content['version_id'])
             if association is None:
-                association = locate(content, thread['current_anchor'])
+                if cache is None:
+                    cache = LocationCache(self, content)
+                cached = cache.get(thread['current_anchor'])
+                if cached is None:
+                    association = locate(content, thread['current_anchor'])
+                    cache.put(thread['current_anchor'], association)
+                else:
+                    association = expand_location(content, cached)
                 association['persisted'] = False
             association = deepcopy(association)
+            if association.get('container'):
+                container = association['container']
+                unit = next(u for u in content['units'] if u['id'] == container['unit_id'])
+                container.update(selector=unit['selector'], order=unit['order'])
             if association['anchor']:
                 old = association['anchor']
                 selection = {'unit_id': old['unit_id']}
@@ -636,15 +730,19 @@ class AnnotationStore:
                 candidate['anchor'] = make_anchor(content, selection)
             thread['association'] = association
             threads.append(thread)
+            if progress:
+                progress('locate', len(threads), total)
+        if cache:
+            cache.save()
         threads.sort(key=lambda t: ((t['association'].get('anchor') or {}).get('order', 10**12),
                                     (t['association'].get('anchor') or {}).get('start') or 0, t['created_at'], t['id']))
         return {'schema_version': SCHEMA_VERSION, 'project_id': self.project_id, 'version_id': content['version_id'],
                 'revision': data['revision'], 'threads': threads}
 
-    def dispatch(self, content, request):
+    def dispatch(self, content, request, progress=None):
         """Shared structured mutation API used unchanged by CLI and local HTTP."""
         if isinstance(request, dict) and request.get('operation') == 'batch':
-            return self.batch(content, request)
+            return self.batch(content, request, progress=progress)
         if isinstance(request, dict) and request.get('operation') in ('suggestion_preview', 'suggestion_apply'):
             from .annotation_suggestions import execute
             return execute(self, content, request)
@@ -654,9 +752,14 @@ class AnnotationStore:
             if data['revision'] != revision:
                 raise AnnotationConflict('批注已被其他审阅者更新，请保留草稿并重新读取')
             self._content(data, content)
+            if progress:
+                progress('apply', 0, 1)
             result = self._apply(data, content, request)
-            self._write(data)
-            return {**self._view(data, content), 'result': result}
+            if progress:
+                progress('write', 1, 1)
+            if request['operation'] != 'reconcile' or result['reconciled']:
+                self._write(data)
+            return {**self._view(data, content, progress=progress), 'result': result}
 
     @staticmethod
     def _validate_request(request):
@@ -696,13 +799,26 @@ class AnnotationStore:
                 'history': [{'at': now, 'method': 'created', 'anchor': deepcopy(anchor)}]}
             result = {'thread_id': thread_id, 'message_id': message['id']}
         elif operation == 'reconcile':
+            from .annotation_locations import LocationCache, expand_location
+            cache, count = None, 0
             for thread in data['threads'].values():
                 if thread['deleted_at'] or content['version_id'] in thread['associations']:
                     continue
-                association = locate(content, thread['current_anchor'])
+                if cache is None:
+                    cache = LocationCache(self, content)
+                cached = cache.get(thread['current_anchor'])
+                if cached is None:
+                    association = locate(content, thread['current_anchor'])
+                    cache.put(thread['current_anchor'], association)
+                else:
+                    association = expand_location(content, cached)
                 thread['associations'][content['version_id']] = association
+                count += 1
                 if association['anchor']:
                     self._associate(thread, association['anchor'], association['status'], now)
+            if cache:
+                cache.save()
+            result = {'reconciled': count}
         elif operation == 'import':
             result = self._import(data, request['bundle'])
         else:
@@ -749,9 +865,9 @@ class AnnotationStore:
             thread['updated_at'] = now
         return result
 
-    def batch(self, content, request):
+    def batch(self, content, request, progress=None):
         from .annotation_batch import execute_batch
-        return execute_batch(self, content, request)
+        return execute_batch(self, content, request, progress=progress)
 
     @staticmethod
     def _message(request, now):
@@ -862,7 +978,7 @@ class AnnotationStore:
         if not isinstance(thread['associations'], dict):
             raise AnnotationError('导入关联须为对象')
         for version_id, association in thread['associations'].items():
-            _keys(association, ('status', 'anchor', 'candidates', 'reason'), ('status', 'anchor', 'candidates', 'reason'))
+            _keys(association, ('status', 'anchor', 'candidates', 'reason', 'container'), ('status', 'anchor', 'candidates', 'reason'))
             if version_id not in versions or association['status'] not in ('exact', 'auto_migrated', 'manual', 'needs_relocation'):
                 raise AnnotationError('导入关联状态或版本无效')
             if association['anchor']:
@@ -871,6 +987,17 @@ class AnnotationStore:
                     raise AnnotationError('导入关联版本不一致')
             if not isinstance(association['candidates'], list):
                 raise AnnotationError('导入候选须为列表')
+            if 'container' in association:
+                container = association['container']
+                _keys(container, ('unit_id', 'kind', 'selector', 'order', 'source', 'section_path', 'selection_deleted', 'subunit', 'scope'),
+                      ('unit_id', 'kind', 'selector', 'order', 'source', 'section_path', 'selection_deleted'))
+                unit = next((u for u in versions[version_id]['units'] if u['id'] == container['unit_id']), None)
+                if not unit or type(container['selection_deleted']) is not bool or any(
+                        container[k] != unit[k] for k in ('kind', 'source', 'section_path')):
+                    raise AnnotationError('导入容器关联无效')
+                if 'scope' in container and (container['scope'] != 'table' or
+                        unit.get('subunit', {}).get('type') not in ('cell', 'header')):
+                    raise AnnotationError('导入容器范围无效')
             for candidate in association['candidates']:
                 _keys(candidate, ('anchor', 'score', 'method', 'context_score'), ('anchor', 'score', 'method'))
                 check_anchor(candidate['anchor'])
@@ -885,15 +1012,17 @@ class AnnotationStore:
             check_anchor(event['anchor'])
 
 
-def execute_request(store, content, envelope):
+def execute_request(store, content, envelope, progress=None):
     _keys(envelope, ('project_id', 'version_id', 'request'), ('project_id', 'version_id', 'request'))
     if envelope['project_id'] != content['project_id'] or envelope['version_id'] != content['version_id']:
         raise AnnotationConflict('正文项目或版本已变化，请保留草稿并重新读取正文')
     request = envelope['request']
+    if isinstance(request, dict) and request.get('operation') == 'batch':
+        return store.batch(content, request, progress=progress)
     if isinstance(request, dict) and request.get('operation') == 'locate':
         _keys(request, ('operation', 'selection'), ('operation', 'selection'))
         return {'anchor': make_anchor(content, request['selection'])}
-    return store.dispatch(content, request)
+    return store.dispatch(content, request, progress=progress) if progress else store.dispatch(content, request)
 
 
 def query_threads(snapshot, *, author_type=None, category=None, resolved=None,

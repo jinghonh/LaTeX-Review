@@ -15,11 +15,15 @@ def test_batch_partial_preflight_retry_audit_and_external_changes(tmp_path, caps
     batch.write_text(json.dumps(items))
     arguments = [str(report), 'batch', str(batch), '--request-id', 'review-1', '--author', 'Codex']
     assert annotations_main([*arguments, '--dry-run']) == 4
-    preview = json.loads(capsys.readouterr().out)
+    output = capsys.readouterr()
+    preview = json.loads(output.out)
+    assert '预检 2/2' in output.err
     store = AnnotationStore.for_content(content)
     assert preview['dry_run'] and store.read(content)['revision'] == 0
     assert annotations_main(arguments) == 4
-    receipt = json.loads(capsys.readouterr().out)
+    output = capsys.readouterr()
+    receipt = json.loads(output.out)
+    assert '复用预检 2/2' in output.err and receipt['preflight_reused']
     assert receipt['committed'] and [item['ok'] for item in receipt['results']] == [True, False]
     assert receipt['audit']['ok'] and len(store.read(content)['threads']) == 1
     assert annotations_main(arguments) == 4

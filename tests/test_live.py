@@ -1,4 +1,5 @@
 from pathlib import Path
+import os
 
 from latex_review.contract import ComparisonSource
 from latex_review.live import build, fingerprint
@@ -193,7 +194,7 @@ def test_live_section_tree_restores_expansion(tmp_path):
     source = ProjectSource('new', tmp_path, 'main.tex', ComparisonSource('directory', str(tmp_path)))
     build(source, output)
     with api.sync_playwright() as p:
-        browser = p.chromium.launch()
+        browser = p.chromium.launch(executable_path=os.environ.get('LATEX_REVIEW_BROWSER'))
         page = browser.new_page(viewport={'width': 1280, 'height': 900})
         page.route('https://**', lambda route: route.abort())
         errors = []

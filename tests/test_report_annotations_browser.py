@@ -1,5 +1,6 @@
 """Real HTTP/browser acceptance for report annotation components."""
 import os
+import json
 from pathlib import Path
 from threading import Thread
 import pytest
@@ -414,3 +415,56 @@ def test_external_annotation_updates_without_reload_preserve_draft(annotated_pag
     p.locator('.annotation-editor').get_by_text('保存',exact=True).click()
     p.wait_for_function('(id)=>reviewAnnotations.getSnapshot().threads.find(t=>t.id===id).messages.length===2',arg=active)
     assert p.evaluate('id=>reviewAnnotations.getSnapshot().threads.find(t=>t.id===id).messages.at(-1).body',active)=='Unsaved draft'
+
+
+def test_background_progress_and_success_preserve_form(annotated_page):
+    p = annotated_page
+    released = False
+    def hold_progress(route):
+        if released:
+            route.continue_()
+        else:
+            route.fulfill(content_type='application/json', body=json.dumps(
+                {'state': 'running', 'phase': 'apply', 'completed': 2, 'total': 19}))
+    p.route('**/api/annotations/jobs/*', hold_progress)
+    p.evaluate('''() => {const u=reviewAnnotations.getContent().units.find(u=>u.kind==='text');
+        reviewAnnotations.openComposer('create',null,{unit_id:u.id,start:0,end:7,quote:u.text.slice(0,7)});}''')
+    p.locator('.annotation-editor > textarea').fill('Progress test')
+    p.locator('.annotation-editor').get_by_text('保存', exact=True).click()
+    p.wait_for_function('document.querySelector("#annotation-status").textContent.includes("应用 · 2/19")')
+    assert p.locator('.annotation-editor').get_by_text('保存', exact=True).is_disabled()
+    assert p.locator('.annotation-editor > textarea').input_value() == 'Progress test'
+    released = True
+    p.wait_for_function('reviewAnnotations.getSnapshot().threads.some(t=>t.messages.some(m=>m.body==="Progress test"))')
+    assert p.locator('#annotation-status').inner_text() == '批注已保存。'
+
+
+def test_unchanged_polling_reads_revision_without_full_threads(annotated_page):
+    p = annotated_page
+    assert create(p)
+    urls = []
+    p.on('request', lambda request: urls.append(request.url))
+    p.wait_for_timeout(2300)
+    assert any('status?view=revision' in url for url in urls)
+    assert not any('status?view=page' in url or url.endswith('/api/annotations/content') for url in urls)
+
+
+def test_deleted_selection_navigates_to_container_without_highlight(annotated_page, tmp_path):
+    p = annotated_page
+    assert p.evaluate('''async () => {const api=reviewAnnotations,u=api.getContent().units.find(u=>u.kind==='text'&&u.text.startsWith('Stable'));
+        const start=u.text.indexOf('words ');return api.update({operation:'create',selection:{unit_id:u.id,start,end:start+6,quote:'words '},body:'Container test',author:{name:'Tester',type:'user'},category:'note'});}''')
+    root = tmp_path / 'new'
+    entry = root / 'main.tex'
+    entry.write_text(entry.read_text().replace('words ', ''))
+    from latex_review.live import build
+    from latex_review.contract import ComparisonSource
+    from latex_review.sources import ProjectSource
+    build(ProjectSource('new', root, 'main.tex', ComparisonSource('directory', str(root))), tmp_path / 'report')
+    p.reload()
+    p.wait_for_function('reviewAnnotations.getSnapshot().threads[0]?.association.container?.selection_deleted === true')
+    p.locator('#annotation-overview').evaluate('(e)=>e.open=true')
+    p.locator('.annotation-card > summary').click()
+    assert '原选区已删除' in p.locator('.annotation-card').inner_text()
+    p.locator('.annotation-card').get_by_text('定位所属段落或表格', exact=True).click()
+    assert p.locator('.annotation-mark').count() == 1
+    assert p.evaluate('CSS.highlights.get("annotation-active").size') == 0

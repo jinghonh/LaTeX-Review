@@ -124,7 +124,7 @@
   async function refresh() {
     const generation=++readGeneration; ready=false;
     try {
-      const [c,s]=adapter?await adapter.read():await Promise.all([json('/api/annotations/content'),json('/api/annotations/status')]);
+      const [c,s]=adapter?await adapter.read():await Promise.all([json('/api/annotations/content'),json('/api/annotations/status?view=page')]);
       if(generation!==readGeneration) return;
       check(c,s); document.querySelectorAll('.annotation-card,.annotation-mark').forEach(e=>e.remove()); content=c; roots=new Map(c.units.map(u=>[u.id,document.querySelector(u.selector)])); snapshot=s; token=s.token||token; ready=true; render(); status.textContent=`${s.threads.length} 条批注`;
     } catch(e) {if(generation!==readGeneration) return; status.textContent=window.location.protocol==='file:'?'批注需要本机预览接口。请使用 latex-review-preview 打开报告。':e.message;}
@@ -134,10 +134,14 @@
     if(polling||busy||!ready||!content||document.hidden)return;
     polling=true;const generation=readGeneration;
     try {
-      const s=adapter?.readStatus?await adapter.readStatus():adapter?(await adapter.read())[1]:await json('/api/annotations/status');
+      let s=adapter?.readRevision?await adapter.readRevision():adapter?.readStatus?await adapter.readStatus():adapter?(await adapter.read())[1]:await json('/api/annotations/status?view=revision');
       if(generation!==readGeneration||busy)return;
       check(content,s);
       if(s.revision===snapshot.revision)return;
+      if(adapter?.readRevision)s=adapter.readStatus?await adapter.readStatus():(await adapter.read())[1];
+      else if(!adapter)s=await json('/api/annotations/status?view=page');
+      if(generation!==readGeneration||busy)return;
+      check(content,s);
       remember(false);
       const scroll=unlocated.scrollTop;
       snapshot=s;token=s.token||token;render();unlocated.scrollTop=scroll;
@@ -148,13 +152,37 @@
   }
   setInterval(pollUpdates,2000);
   document.addEventListener('visibilitychange',()=>{if(!document.hidden)pollUpdates();});
+  const phases={queued:'排队',read:'读取批注',lock:'等待存储锁',validate:'检查版本',locate:'定位批注',preflight:'预检',apply:'应用',reuse:'复用预检',write:'写入',rebuild:'更新报告',complete:'完成'};
+  function showProgress(job) {status.textContent=`${phases[job.phase]||job.phase} · ${job.total?`${job.completed}/${job.total}`:'处理中'}`;}
+  let jobsPolling=false,externalJob=false;
+  async function pollJobs() {
+    if((adapter&&!adapter.readJobs)||busy||jobsPolling||document.hidden||!ready)return;
+    jobsPolling=true;
+    try {const data=adapter?await adapter.readJobs():await json('/api/annotations/jobs');if(busy)return;if(data.jobs.length){externalJob=true;showProgress(data.jobs.at(-1));}else if(externalJob){externalJob=false;status.textContent='批注任务已结束。';pollUpdates();}}
+    catch(e) {} finally {jobsPolling=false;}
+  }
+  setInterval(pollJobs,1000);
+  async function submit(envelope) {
+    if(adapter)return adapter.update(envelope,showProgress);
+    let response=await json('/api/annotations/update?async=1',{method:'POST',headers:{'Content-Type':'application/json','X-LaTeX-Review-Token':token},body:JSON.stringify(envelope)});
+    if(!response.task_id)return response;
+    const url=response.status_url;
+    while(true){
+      response=await json(url);
+      if(response.state==='complete')return response.result;
+      if(response.state==='failed')throw Error(response.message||'批注任务失败');
+      showProgress(response);
+      await new Promise(resolve=>setTimeout(resolve,300));
+    }
+  }
   async function update(request) {
     if(!ready||busy) {status.textContent='批注接口或版本不可用。输入已保留。'; return false;}
     remember(); busy=true; save.disabled=true;
+    status.textContent='正在提交批注。';
     try {
       check(content,snapshot); ++readGeneration;
       const envelope={project_id:content.project_id,version_id:content.version_id,request:{...request,expected_revision:snapshot.revision}};
-      const s=adapter?await adapter.update(envelope):await json('/api/annotations/update',{method:'POST',headers:{'Content-Type':'application/json','X-LaTeX-Review-Token':token},body:JSON.stringify(envelope)});
+      const s=await submit(envelope);
       check(content,s); snapshot=s;if(request.operation==='create'){scope=null;if(editing)active=s.threads.at(-1)?.id;} render(); if(s.result?.source_changed&&s.result?.rebuild?.status==='updated')setTimeout(()=>window.location.reload(),800); status.textContent=s.result?.source_changed?'源码已修改。'+(s.result?.rebuild?.message||'报告更新状态请检查服务反馈。'):'批注已保存。'; return true;
     } catch(e) { await refresh(); recheck.hidden=false;status.textContent=e.message+' 输入已保留。请检查后重新保存。'; return false; }
     finally {busy=false;save.disabled=false;}
@@ -181,8 +209,8 @@
   }
   function focus(t) {
     remember();active=t.id;panel.open=true;render();
-    const a=t.association.status==='needs_relocation'?null:t.association.anchor;
-    if(a)rootFor(a)?.scrollIntoView({block:'center'});
+    const a=t.association.status==='needs_relocation'?t.association.container:t.association.anchor;
+    if(a){const root=rootFor(a);(a.scope==='table'?root?.closest('table')||root:root)?.scrollIntoView({block:'center'});}
     else status.textContent='待重新定位。请选择当前正文进行手动关联。';
     document.querySelector(`[data-annotation-thread="${CSS.escape(t.id)}"]`)?.scrollIntoView({block:'nearest'});
     paintActive();
@@ -254,7 +282,8 @@
     if(replies.length)title.append(el('span',`${replies.length} 条回复`,'annotation-card-reply-count'));
     d.append(title);
     if(t.association.status==='needs_relocation') {
-      d.append(el('p','待重新定位'));
+      d.append(el('p',t.association.container?.selection_deleted?'原选区已删除。批注仍关联到所属段落或表格。':t.association.container?'已定位所属段落或表格；选区待重新定位。':'待重新定位'));
+      if(t.association.container)d.append(button('定位所属段落或表格',()=>focus(t)));
       d.append(button('手动重新关联',()=>{relocation=t;status.textContent='请选择当前段落内文字或完整公式。';}));
     }
     if(t.association.status==='auto_migrated') d.append(el('p','自动迁移'));
@@ -310,17 +339,18 @@
     }
     if(!visible.length) unlocated.append(el('p',scope?'此处没有符合条件的批注。':'没有符合条件的批注。','annotation-empty'));
     for(const t of snapshot.threads.filter(t=>!t.resolved||resolved.value!=='false')) {
-      const a=t.association.anchor;if(!a||t.association.status==='needs_relocation')continue;
+      const a=t.association.status==='needs_relocation'?t.association.container:t.association.anchor;if(!a)continue;
       const root=rootFor(a);if(!root)continue;
       const prose=content.units.find(u=>u.kind==='text'&&rootFor(u)?.contains(root));
-      const attachment=prose?rootFor(prose):(a.kind==='formula'?root.parentElement:root);
+      const attachment=a.scope==='table'?root.closest('table')||root:prose?rootFor(prose):(a.kind==='formula'?root.parentElement:root);
       const group=groups.get(attachment)||[];group.push(t);groups.set(attachment,group);
       if(a.kind==='text'){const map=coordinates(root);if(map.text===a.unit_text&&a.start>=0&&a.end>a.start&&a.end<=map.entries.length)highlights.push(map.range(a.start,a.end));}
       if(a.kind==='formula')root.classList.add('annotation-located-formula');
     }
     for(const [attachment,threads] of groups) {
       const mark=button(String(threads.length),()=>{scope=null;focus(threads[0]);});
-      mark.className='annotation-mark';mark.dataset.unit=threads[0].association.anchor.unit_id;
+      const association=threads[0].association;
+      mark.className='annotation-mark';mark.dataset.unit=(association.status==='needs_relocation'?association.container:association.anchor).unit_id;
       mark.setAttribute('aria-label',`查看此处 ${threads.length} 条批注`);mark.title=`${threads.length} 条批注`;attachment.append(mark);
     }
     if(window.CSS?.highlights&&window.Highlight)CSS.highlights.set('annotations',new Highlight(...highlights));
@@ -369,6 +399,6 @@
   [sort,identity,category,resolved,location,search].forEach(e=>e.addEventListener('input',()=>{scope=null;render();}));
   window.reviewAnnotations=Object.freeze({coordinates,selection,refresh,update,openComposer,focus,
     getDrafts(){remember(false);return structuredClone(drafts);},restoreDrafts(value){Object.assign(drafts,value);const tray=el('div',null,'annotation-drafts');tray.append(el('p','保留的编辑草稿'));Object.entries(value).forEach(([key,d])=>tray.append(button(d.body.slice(0,60)||'空草稿',()=>window.reviewAnnotations.resumeDraft(key))));panel.append(tray);},resumeDraft(key){const d=drafts[key];if(d){openComposer(d.operation,d.thread,d.selection,d.message);editing={...d,key};body.value=d.body;name.value=d.name;author.value=d.author;type.value=d.category;original.value=d.original||'';replacement.value=d.replacement||'';if(d.warning)status.textContent=d.warning;}},
-    setAdapter(value){adapter=value;return refresh();},getContent(){return content;},getSnapshot(){return snapshot;}});
+    setAdapter(value){adapter=value;return refresh();},isBusy(){return busy||externalJob;},getContent(){return content;},getSnapshot(){return snapshot;}});
   if(!document.getElementById('annotation-content')&&window.location.protocol!=='file:') refresh();
 })();

@@ -53,6 +53,34 @@ def test_default_head_worktree_and_no_tex_engine(tmp_path):
     assert not marker.exists()
 
 
+def test_report_matches_live_title_coordinates_with_cached_parse(tmp_path):
+    from latex_review.annotations import AnnotationStore, load_content, make_anchor
+    from latex_review.contract import ComparisonSource
+    from latex_review.live import build
+    from latex_review.sources import ProjectSource
+    project(tmp_path)
+    path = tmp_path / 'main.tex'
+    path.write_text(r'\documentclass{article}\title{Shared title}\begin{document}'
+                    'New text.' + r'\end{document}')
+    live = tmp_path / '.latex-review' / 'live'
+    live.mkdir(parents=True)
+    build(ProjectSource('new', tmp_path, 'main.tex', ComparisonSource('worktree', 'working-tree')), live)
+    content = load_content(live)
+    title = next(unit for unit in content['units'] if unit['text'] == 'Shared title')
+    store = AnnotationStore.for_content(content)
+    store.dispatch(content, {'operation': 'create', 'expected_revision': 0,
+                            'selection': {'unit_id': title['id'], 'start': 0, 'end': 12},
+                            'body': 'Keep this title.', 'author': {'name': 'Reviewer', 'type': 'user'}, 'category': 'note'})
+    before = store.path.read_bytes()
+    for _ in range(2):
+        result = run_cli(tmp_path, 'main.tex')
+        assert result.returncode == 0, result.stderr
+        report_content = load_content(tmp_path / '.latex-review' / 'latest')
+        assert report_content['version_id'] == content['version_id']
+        assert make_anchor(report_content, {'unit_id': title['id'], 'start': 0, 'end': 12})['quote'] == 'Shared title'
+        assert store.path.read_bytes() == before
+
+
 def test_config_precedence_and_output_exclusion(tmp_path):
     project(tmp_path)
     (tmp_path / "main.tex").write_text("\\section{A}\nNew text.\n% review comment\n", encoding="utf-8")

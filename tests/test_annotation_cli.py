@@ -119,7 +119,8 @@ def test_conflict_not_retried(report, capsys, monkeypatch):
 
 
 def test_legacy_modes_preserved_and_cannot_mix(report, capsys):
-    assert call(report, capsys, '--content')[1] == report[1]
+    full = call(report, capsys, '--content', '--full')[1]
+    assert full['units'] == report[1]['units']
     assert call(report, capsys)[1]['revision'] == 0
     assert call(report, capsys, '--export')[0] == 0
     code, value = call(report, capsys, '--content', 'add', '--quote', 'Other Alpha beta.',

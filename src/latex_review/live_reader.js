@@ -82,7 +82,7 @@
       const status = document.getElementById('live-status');
       status.textContent = state.message;
       status.hidden = state.message.startsWith('持续预览已启动') || state.message.startsWith('已更新当前论文');
-      if (state.revision !== revision) { remember(); location.reload(); }
+      if (state.revision !== revision && !window.reviewAnnotations?.isBusy()) { remember(); location.reload(); }
     } catch (_) {
       const status = document.getElementById('live-status');
       status.textContent = '预览服务连接中断。'; status.hidden = false;

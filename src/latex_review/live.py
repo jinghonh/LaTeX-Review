@@ -90,8 +90,8 @@ def build(source: ProjectSource, output: Path, revision: int = 1) -> list[str]:
         head=content_meta(annotation_content), body_class='reading-view live-view',
         before_main=header + reading.section_toggle + reading.section_directory, after_main=supplement,
         scripts_after_math=reading.scripts)
-    from .delivery import embed_annotations
-    html = embed_annotations(html, annotation_content, output)
+    from .delivery import local_report_html
+    html = local_report_html(html)
     _write(output / 'report.html', html)
     from .report_rebuild import save_live_recipe
     save_live_recipe(output, source)

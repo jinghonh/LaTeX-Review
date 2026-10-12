@@ -13,7 +13,7 @@ import signal
 from socketserver import TCPServer
 import sys
 import webbrowser
-from urllib.parse import urlsplit
+from urllib.parse import parse_qs, urlsplit
 
 from .translation import TranslationConfig, TranslationError
 from .translation_session import TranslationSession
@@ -123,11 +123,31 @@ class ReportHandler(SimpleHTTPRequestHandler):
         if not self._local_request():
             return
         try:
+            if path == '/api/annotations/jobs':
+                return self._json(self.server.annotation_jobs.active())
+            if path.startswith('/api/annotations/jobs/'):
+                return self._json(self.server.annotation_jobs.snapshot(path.rsplit('/', 1)[-1]))
             content, store = self._annotation_context()
             if path == "/api/annotations/content":
                 self._json(content)
             elif path == "/api/annotations/status":
-                self._json({**store.read(content), "token": self.server.annotation_token})
+                from .annotation_output import page_projection, thread_summary
+                view = parse_qs(urlsplit(self.path).query).get('view', ['summary'])[0]
+                if view == 'revision':
+                    value = store.metadata(content)
+                else:
+                    value = store.read(content)
+                    if view == 'page':
+                        value = page_projection(value)
+                    elif view != 'full':
+                        value['threads'] = [thread_summary(t) for t in value['threads']]
+                self._json({**value, "token": self.server.annotation_token})
+            elif path == '/api/annotations/history':
+                thread_id = parse_qs(urlsplit(self.path).query).get('thread_id', [''])[0]
+                thread = store.export()['threads'].get(thread_id)
+                if not thread:
+                    return self._json({'message': '批注不存在'}, 404)
+                self._json({'thread_id': thread_id, 'history': thread['history']})
             elif path == "/api/annotations/export":
                 self._json(store.export())
             else:
@@ -136,7 +156,7 @@ class ReportHandler(SimpleHTTPRequestHandler):
             self._json({"message": str(exc)}, 400)
 
     def _annotation_post(self):
-        from .annotations import AnnotationConflict, execute_request
+        from .annotations import AnnotationConflict
         if not self._local_request():
             return
         if (not hmac.compare_digest(self.headers.get("X-LaTeX-Review-Token", "").encode(),
@@ -150,20 +170,41 @@ class ReportHandler(SimpleHTTPRequestHandler):
             if not 0 < size <= 8 * 1024 * 1024:
                 raise ValueError("请求大小无效")
             envelope = json.loads(self.rfile.read(size))
-            content, store = self._annotation_context()
-            value = execute_request(store, content, envelope)
-            if (value.get('result') or {}).get('source_changed'):
-                from .report_rebuild import rebuild_report
-                value['result']['rebuild'] = rebuild_report(self.directory)
-                if value['result']['rebuild']['status'] == 'updated' and self.server.translation:
-                    warning = self.server.translation.refresh()
-                    if warning:
-                        value['result']['rebuild']['translation_warning'] = warning
+            if parse_qs(urlsplit(self.path).query).get('async') == ['1']:
+                jobs = self.server.annotation_jobs
+                directory = self.directory
+                server = self.server
+                # Resolve content inside the worker so queued tasks cannot use a stale manifest.
+                def run(progress):
+                    return self._execute_annotation(envelope, progress, directory, server)
+                return self._json(jobs.submit(run), 202)
+            value = self._execute_annotation(envelope, None, self.directory, self.server)
             self._json(value)
         except AnnotationConflict as exc:
             self._json({"message": str(exc), "error": "conflict"}, 409)
         except (OSError, ValueError, TypeError, KeyError, UnicodeError) as exc:
             self._json({"message": str(exc), "error": "invalid_request"}, 400)
+
+    @staticmethod
+    def _execute_annotation(envelope, progress, directory, server):
+        from .annotations import AnnotationStore, execute_request, load_content
+        from .annotation_output import page_projection
+        content = load_content(directory)
+        store = AnnotationStore.for_content(content, server.annotation_project_root)
+        if progress:
+            progress('validate', 0, 0)
+        value = (execute_request(store, content, envelope, progress=progress) if progress
+                 else execute_request(store, content, envelope))
+        if (value.get('result') or {}).get('source_changed'):
+            from .report_rebuild import rebuild_report
+            if progress:
+                progress('rebuild', 0, 0)
+            value['result']['rebuild'] = rebuild_report(directory)
+            if value['result']['rebuild']['status'] == 'updated' and server.translation:
+                warning = server.translation.refresh()
+                if warning:
+                    value['result']['rebuild']['translation_warning'] = warning
+        return page_projection(value) if 'threads' in value else value
 
     def send_head(self):
         root = Path(self.directory).resolve()
@@ -191,10 +232,13 @@ class ReportServer(ThreadingHTTPServer):
     annotation_project_root: Path | None = None
 
     def __init__(self, *args, **kwargs):
+        from .annotation_jobs import AnnotationJobs
+        self.annotation_jobs = AnnotationJobs()
         self.annotation_token = secrets.token_urlsafe(32)
         super().__init__(*args, **kwargs)
 
     def server_close(self):
+        self.annotation_jobs.close()
         if self.translation:
             self.translation.close()
         super().server_close()

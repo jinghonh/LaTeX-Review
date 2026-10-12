@@ -118,7 +118,9 @@ latex-review-annotations REPORT_DIR add --formula --unit-id UNIT_ID --body '公�
 命令不自动重试并发冲突。调用者需保留输入，重新读取并检查对象后再决定是否提交。
 `--project-root` 等顶层选项放在子命令之前；子命令不能与旧读取或 JSON 请求模式混用。
 
-读取使用 `--summary`、`--fields`、`--limit`、`--offset`。分页返回 `total_matched`，不截断 JSON 或定位原文。
+默认读取返回最多 50 条摘要。摘要包含作者、消息预览、定位状态和源码位置，不携带完整锚点或历史。
+使用 `--full` 展开完整数据；使用 `--history` 按需展开历史。`--content` 也默认摘要，定位坐标使用 `--content --full`。
+读取支持 `--summary`、`--fields`、`--limit`、`--offset`。分页返回 `total_matched`；`--author` 默认忽略大小写。
 过滤参数为 `--thread-id`、`--unit-id`、`--status`、`--author`、`--kind`。
 
 ```sh
@@ -150,8 +152,12 @@ latex-review-annotations REPORT_DIR batch batch.json --request-id OTHER-ID --aut
 latex-review-annotations REPORT_DIR audit SNAPSHOT_FILE
 ```
 
-默认提交成功项。任何项失败退出码为 4，不能假定整批未写入。`--atomic` 要求全部成功；`--dry-run` 不写入或消耗请求 ID。
-每次批量操作只加载一次正文、取得一次存储锁并持久化一次。响应提供全部 `results`、`committed` 和修订号。
+默认提交成功项。任何项失败退出码为 4，不能假定整批未写入。`--atomic` 要求全部成功；`--dry-run` 不提交批注或消耗请求 ID。
+预检保存 15 分钟的执行计划。提交自动复用相同请求 ID 的有效预检，也可传 `--preflight-token TOKEN`。
+预检绑定正文版本、批注修订号、请求载荷及原子模式。任一值变化或缓存过期时，提交拒绝旧预检；重新预检后再提交。
+CLI 将阶段及完成条数写到 stderr。stdout 保持单个 JSON；`--quiet-progress` 关闭进度。
+响应包含 `preflight_token`、`preflight_expires_at` 和 `preflight_reused`。已提交请求仍返回原始幂等回执。
+批量执行只复制受影响线程，不逐项复制所有正文版本。审计读取不执行锚点定位。响应提供全部 `results`、`committed` 和修订号。
 相同请求 ID 和内容重试返回原收据；修订号不属于幂等载荷。不同内容使用相同 ID 返回冲突。
 提交前保存线程快照，默认位于项目 `.latex-review/annotation-batches/`，响应返回 `snapshot_file`。
 自动 `audit` 核对消息、作者、父消息及重复回复；外部新增线程和消息单独列出。再次复核快照可以发现后续新增批注。
@@ -183,7 +189,7 @@ flowchart LR
 正文坐标来自报告清单，不能使用 MathJax 内部文字。
 
 ```sh
-latex-review-annotations /path/to/report --content
+latex-review-annotations /path/to/report --content --full
 latex-review-annotations /path/to/report --export > annotations.json
 latex-review-annotations /path/to/report --request request.json
 ```
@@ -207,6 +213,12 @@ latex-review-annotations /path/to/report --request request.json
 
 本机 HTTP 使用 `GET /api/annotations/content`、`GET /api/annotations/status` 和
 `POST /api/annotations/update`。POST 需要状态接口返回的 token，放入 `X-LaTeX-Review-Token`。
+状态接口默认摘要。`?view=page` 返回页面消息及当前关联，省略历史正文；`?view=full` 显式展开完整视图。
+`?view=revision` 只返回项目、正文版本和批注修订号，不执行定位。
+使用 `POST /api/annotations/update?async=1` 启动后台任务，立即返回 HTTP 202、`task_id`、`status_url`。
+轮询 `status_url` 获取阶段、`completed`、`total`。`state=complete` 时读取 `result`；`state=failed` 时读取 `error` 和 `message`。
+`GET /api/annotations/jobs` 返回当前任务进度。进度查询不取得批注存储锁，报告页面会显示后台任务进度。
+`GET /api/annotations/history?thread_id=ID` 按需展开指定批注的完整关联历史。
 回复使用 `operation=reply`、`thread_id`、正文、作者和分类。
 编辑使用 `operation=edit`、`thread_id`、`message_id`、正文和分类。
 换版迁移使用 `operation=reconcile`。手动关联使用 `operation=associate` 和新版本选区。

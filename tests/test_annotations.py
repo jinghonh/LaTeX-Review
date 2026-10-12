@@ -416,6 +416,57 @@ def test_report_and_live_share_coordinates_and_disk_store(tmp_path):
     mutate(store, live_content, 'import', bundle=store.export())
 
 
+@pytest.mark.parametrize('caption', ['', r'\caption{Unique caption with $x$.}'])
+def test_figure_display_resources_do_not_change_annotation_coordinates(tmp_path, caption):
+    content_at(tmp_path, r'\begin{figure}\includegraphics{missing.pdf}' + caption + r'\end{figure}')
+    source = ProjectSource('new', tmp_path, 'main.tex', ComparisonSource('directory', str(tmp_path)))
+    project = parse_project(source.expand())
+    plain = build_content(project, render_preview(None, project).html)
+    figure = next(node for node in project.nodes if node.review.type == 'figure')
+    assets = {('new', figure.review.id): '<div class="asset-card"><p class="asset-fallback">Unavailable</p>'
+              '<p class="asset-metadata">File: missing.pdf</p><p class="asset-metadata">Size: unknown</p></div>'}
+    decorated = build_content(project, render_preview(None, project, figure_assets=assets).html)
+    assert plain['version_id'] == decorated['version_id']
+    store = AnnotationStore.for_content(plain)
+    store._content({'versions': {plain['version_id']: plain}}, decorated)
+    assert not any('missing.pdf' in unit['text'] or 'unknown' in unit['text'] for unit in decorated['units'])
+    if caption:
+        assert next(unit for unit in decorated['units'] if unit.get('subunit') == {'type': 'caption'})['id'].endswith(':block:0')
+
+
+def test_title_parse_options_cannot_share_different_annotation_coordinates(tmp_path):
+    content_at(tmp_path, 'Unique body.')
+    path = tmp_path / 'main.tex'
+    path.write_text(path.read_text().replace(r'\begin{document}', r'\title{Unique title}\begin{document}'))
+    source = ProjectSource('new', tmp_path, 'main.tex', ComparisonSource('directory', str(tmp_path)))
+    contents = []
+    for include_title in (False, True):
+        project = parse_project(source.expand(), include_title=include_title)
+        contents.append(build_content(project, render_preview(None, project).html))
+    assert contents[0]['project_id'] == contents[1]['project_id']
+    assert contents[0]['version_id'] != contents[1]['version_id']
+
+
+def test_new_coordinates_preserve_legacy_version_and_relocate_caption(tmp_path):
+    content, _ = content_at(tmp_path, r'\begin{figure}\caption{Unique legacy caption.}\end{figure}')
+    legacy = deepcopy(content)
+    legacy['version_id'] = 'a' * 64
+    caption = next(unit for unit in legacy['units'] if unit.get('subunit') == {'type': 'caption'})
+    caption['id'] = caption['node_id'] + ':block:3'
+    store = AnnotationStore.for_content(legacy)
+    result = create(store, legacy, 'Unique legacy caption.')
+    before = store.path.read_bytes()
+    state = store.read(content)
+    assert store.path.read_bytes() == before
+    assert state['threads'][0]['association']['status'] == 'exact'
+    assert state['threads'][0]['association']['anchor']['unit_id'].endswith(':block:0')
+    store.dispatch(content, {'operation': 'reconcile', 'expected_revision': state['revision']})
+    backup = store.export()
+    assert backup['versions'][legacy['version_id']] == legacy
+    assert content['version_id'] in backup['versions']
+    assert backup['threads'][result['result']['thread_id']]['original_anchor']['version_id'] == legacy['version_id']
+
+
 def test_report_output_cannot_remove_shared_annotation_storage(tmp_path):
     from latex_review.cli import ConfigurationError, _check_output_separate
     content, _ = content_at(tmp_path, 'Retain annotations.')

@@ -363,7 +363,8 @@ def main(argv: list[str] | None = None, *, configuration: dict | None = None,
             output.mkdir(parents=True, exist_ok=True)
         cache = ParseCache(cache_dir, enabled=not args.no_cache,
                            config={"config": {key: value for key, value in config.items() if key != "translation"}, "math": args.math or "mathjax",
-                                   "comments": args.comments if args.comments is not None else config.get("diff", {}).get("comments", False)})
+                                   "comments": args.comments if args.comments is not None else config.get("diff", {}).get("comments", False),
+                                   "include_title": True})
         _progress("正在读取比较来源")
         with resolve_sources(**options, excluded_paths=(output, cache_dir, output.parent / "translation-cache",
                                                            *source_exclusions,
@@ -380,7 +381,7 @@ def main(argv: list[str] | None = None, *, configuration: dict | None = None,
             for expanded in (old_expanded, new_expanded):
                 _progress("正在解析" + ("旧稿" if expanded.source.side == "old" else "新稿"))
                 try:
-                    parsed.append(cache.parse(expanded, parser=lambda source: parse_project(source, macros=macros)))
+                    parsed.append(cache.parse(expanded, parser=lambda source: parse_project(source, macros=macros, include_title=True)))
                 except SourceError:
                     raise
                 except Exception as exc:

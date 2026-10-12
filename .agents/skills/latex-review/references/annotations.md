@@ -19,7 +19,7 @@ flowchart LR
 ```
 
 ~~~sh
-latex-review-annotations REPORT_DIR --content
+latex-review-annotations REPORT_DIR --content --full --unit-id UNIT_ID
 latex-review-annotations REPORT_DIR --summary --limit 20
 latex-review-annotations REPORT_DIR --thread-id THREAD_ID --fields id,messages,association
 latex-review-annotations REPORT_DIR add --quote '目标原文' --body '修改建议' --author Codex
@@ -38,4 +38,43 @@ latex-review-annotations REPORT_DIR audit SNAPSHOT_FILE
 删除必须符合用户授权范围，并显式传 `--yes`。无 `--message-id` 时删除整条批注及其回复；删除记录保留，界面没有恢复入口。`resolve` 将整条批注标记为已解决。
 本机 CLI 写入论文项目共享存储；离线新增记录要先导出并导入，不能把磁盘结果当作离线数据。
 高层写入默认返回 ID、修订号和成功状态；`--full` 返回完整结果。读取选项放在子命令之前。批量默认提交成功项；任何失败退出码为 4，仍须检查已经成功的项。`--atomic` 要求全部成功，`--dry-run` 只预检。
-批量 JSON 格式及读取参数见 [智能体接口](../../../../Docs/agent-tools.md#批注读取与修改)。结构化替换见 [源码建议](suggestions.md)。现有 `--request` 接口继续用于导入、重新关联和重新打开。
+批量 JSON 格式及读取参数见下文。结构化替换见 [源码建议](suggestions.md)。现有 `--request` 接口继续用于导入、重新关联和重新打开。
+
+
+## 摘要与历史
+
+默认读取返回最多 50 条摘要，包含作者、消息预览、定位状态和源码位置。
+使用 `--limit`、`--offset` 分页。`total_matched` 表示筛选后的总数。
+`--author` 默认忽略大小写。
+使用 `--thread-id ID --full` 展开目标线程；`--history` 展开历史。
+正文坐标需要 `--content --full --unit-id ID`。保持完整原文，使用 UTF-16 坐标。
+原选区删除后，批注可能保留所属段落或表格。容器导航不代表选区已经重新关联。
+
+## 批量载荷与预检
+
+批量文件接受项数组，或包含 `items`、`request_id`、`expected_revision`、`atomic` 的对象。
+每项必须提供唯一 `id`。新增项示例：
+
+```json
+{"id":"review-1","operation":"add","quote":"目标原文","body":"判断、依据、剩余问题"}
+```
+
+回复项使用 `operation=reply`、`thread_id`、`body`，可用 `parent_message_id` 指定父消息。
+作者可在每项提供，或使用命令的 `--author`。
+预检保存 15 分钟的缓存，不提交批注，也不消耗请求 ID。
+提交默认复用相同请求 ID 的缓存，也可传 `--preflight-token TOKEN`。
+正文版本、批注修订号或载荷变化后，重新预检。提交拒绝过期缓存。
+CLI 进度写入 stderr；stdout 保持单个 JSON。使用 `--quiet-progress` 关闭进度。
+提交返回 `results`、`revision`、`preflight_reused`、`audit`、`snapshot_file`。
+
+## HTTP 后台任务
+
+读取 `/api/annotations/status` 获取摘要及会话令牌。
+页面数据使用 `?view=page`；完整数据使用 `?view=full`；修订检查使用 `?view=revision`。
+将版本检查信封提交到 `/api/annotations/update?async=1`。
+POST 需要 JSON 和 `X-LaTeX-Review-Token` 请求头。
+响应为 HTTP 202，包含 `task_id` 和 `status_url`。
+轮询 `status_url`，读取 `phase`、`completed`、`total` 和 `state`。
+完成状态为 `complete`，结果保存在 `result`。失败状态为 `failed`，保留错误原因。
+批量预检与提交沿用 `operation=batch`、`expected_revision`、`request_id`、`items`。
+预检增加 `dry_run=true`；提交可以提供返回的 `preflight_token`。

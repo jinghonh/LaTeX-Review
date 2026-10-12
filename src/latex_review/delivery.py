@@ -3,6 +3,9 @@ from __future__ import annotations
 
 import base64
 from datetime import datetime, timezone
+from dataclasses import dataclass
+from hashlib import sha256
+from importlib.resources import files
 import io
 import tarfile
 from uuid import uuid4
@@ -64,7 +67,7 @@ def _embed_results(html: str, results: dict) -> str:
                   lambda m: m[1] + payload + m[2], html, flags=re.S)
 
 
-def embed_annotations(html: str, content: dict, directory: Path | None = None) -> str:
+def embed_annotations(html: str, content: dict, directory: Path | None = None, *, include_assets: bool = True) -> str:
     """Embed a portable manifest and existing backup without creating project paths."""
     from .annotations import AnnotationStore, SCHEMA_VERSION, validate_content
     validate_content(content)
@@ -85,7 +88,7 @@ def embed_annotations(html: str, content: dict, directory: Path | None = None) -
             bundle = store.export()
     AnnotationStore(root or Path.cwd(), content['project_id'])._content(bundle, content)
     assets = {}
-    if directory is not None:
+    if directory is not None and include_assets:
         total = 0
         resources = _Resources()
         resources.feed(html)
@@ -112,8 +115,14 @@ def embed_annotations(html: str, content: dict, directory: Path | None = None) -
     return html
 
 
+def local_report_html(html: str) -> str:
+    """本机报告从服务读取批注；仅独立交付携带备份和资源。"""
+    return re.sub(r'<script type="application/json" id="annotation-(?:content|backup|assets)">.*?</script>',
+                  '', html, flags=re.S)
+
+
 def publication_html(directory: Path, translation_config: dict | None = None, *, results: dict | None = None,
-                     warnings: tuple[str, ...] = ()) -> str:
+                     warnings: tuple[str, ...] = (), include_assets: bool = True) -> str:
     """有配置时使用其有效缓存；无配置时保留已有译文。"""
     entry = directory / "report.html"
     if any(p.is_symlink() for p in (entry, *entry.parents)):
@@ -123,7 +132,7 @@ def publication_html(directory: Path, translation_config: dict | None = None, *,
     if manifest.is_file():
         if manifest.is_symlink():
             raise DeliveryError("批注清单不可为符号链接")
-        html = embed_annotations(html, json.loads(manifest.read_text(encoding="utf-8")), directory)
+        html = embed_annotations(html, json.loads(manifest.read_text(encoding="utf-8")), directory, include_assets=include_assets)
     warnings = list(warnings)
     if translation_config is not None:
         from .translation import RULE_VERSION, TranslationConfig, cache_key, read_cached_translations, rendered_result
@@ -179,37 +188,67 @@ def _comparison(source: dict) -> str:
     return {"worktree": "工作区", "directory": "目录版本", "file": "文件版本"}.get(kind, "未知版本")
 
 
-def build_archive(directory: Path, slug: str, stream, translation_config: dict | None = None) -> str:
+@dataclass(frozen=True)
+class PreparedPublication:
+    metadata: dict
+    html: bytes
+    resources: dict[str, bytes]
+    manifest: dict
+
+
+def prepare_publication(directory: Path, slug: str, translation_config: dict | None = None) -> PreparedPublication:
+    """Freeze a publication before negotiating missing resources."""
     directory = directory.resolve()
-    try:
-        html = publication_html(directory, translation_config)
-        resources = report_resources(html, directory)
-    except (OSError, ValueError) as exc:
-        raise DeliveryError(str(exc)) from exc
-    release = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ-") + uuid4().hex[:12]
-    diff = json.loads((directory / "diff.json").read_text(encoding="utf-8"))
-    metadata = {"slug": slug, "release": release,
-                "published_at": datetime.now(timezone.utc).isoformat(),
-                "comparison": f'{_comparison(diff.get("old", {}))} → {_comparison(diff.get("new", {}))}'}
-    blobs = {"report.html": html.encode("utf-8"),
-             "release.json": json.dumps(metadata, ensure_ascii=False).encode("utf-8")}
-    total = sum(map(len, blobs.values()))
-    with tarfile.open(fileobj=stream, mode="w") as archive:
+    html = publication_html(directory, translation_config, include_assets=False)
+    resources = report_resources(html, directory)
+    html = re.sub(r'<script type="application/json" id="annotation-assets">.*?</script>', '', html, flags=re.S)
+    script = files('latex_review').joinpath('annotation_delivery.js').read_text(encoding='utf-8')
+    html = re.sub(r'<script>/\* Portable annotation contract.*?</script>',
+                  lambda _: '<script>' + script + '</script>', html, flags=re.S)
+    html = html.replace('</head>', '<meta name="latex-review-publication" content="static"><style>#translation-export{display:none!important}</style></head>', 1)
+    content = html.encode('utf-8')
+    blobs = {name: path.read_bytes() for name, path in resources.items()}
+    manifest = {'protocol': 1, 'slug': slug, 'report_size': len(content),
+                'resources': {name: {'sha256': sha256(blob).hexdigest(), 'size': len(blob)}
+                              for name, blob in blobs.items()}}
+    diff = json.loads((directory / 'diff.json').read_text(encoding='utf-8'))
+    metadata = {'slug': slug, 'release': datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ-') + uuid4().hex[:12],
+                'published_at': datetime.now(timezone.utc).isoformat(),
+                'comparison': f'{_comparison(diff.get("old", {}))} → {_comparison(diff.get("new", {}))}'}
+    if len(blobs) + 2 > 4096 or len(content) + sum(map(len, blobs.values())) + len(json.dumps(metadata).encode()) > MAX_BYTES:
+        raise DeliveryError('发布资源超过 200 MiB 或 4096 个文件上限')
+    return PreparedPublication(metadata, content, blobs, manifest)
+
+
+def manifest_id(manifest: dict) -> str:
+    return sha256(json.dumps(manifest, sort_keys=True, separators=(',', ':'), ensure_ascii=False).encode()).hexdigest()
+
+
+def write_archive(prepared: PreparedPublication, stream, *, missing: set[str] | None = None) -> dict:
+    """Full archives remain compatible; incremental archives include the complete manifest."""
+    metadata = dict(prepared.metadata)
+    if missing is not None:
+        metadata.update(protocol=1, manifest=prepared.manifest, manifest_id=manifest_id(prepared.manifest))
+    blobs = {'report.html': prepared.html, 'release.json': json.dumps(metadata, ensure_ascii=False).encode()}
+    sent = set()
+    for name, blob in prepared.resources.items():
+        digest = prepared.manifest['resources'][name]['sha256']
+        if missing is not None and (digest not in missing or digest in sent):
+            continue
+        blobs[name] = blob
+        sent.add(digest)
+    if len(prepared.html) + sum(map(len, prepared.resources.values())) + len(blobs['release.json']) > MAX_BYTES:
+        raise DeliveryError('发布资源超过 200 MiB 上限')
+    with tarfile.open(fileobj=stream, mode='w') as archive:
         for name, blob in blobs.items():
             info = tarfile.TarInfo(name)
             info.size, info.mode = len(blob), 0o644
             archive.addfile(info, io.BytesIO(blob))
-        for name in sorted(resources):
-            path = directory / name
-            size = path.stat().st_size
-            total += size
-            if total > MAX_BYTES:
-                raise DeliveryError("发布资源超过 200 MiB 上限")
-            info = tarfile.TarInfo(name)
-            info.size, info.mode = size, 0o644
-            with path.open("rb") as asset:
-                archive.addfile(info, asset)
-    if total > MAX_BYTES:
-        raise DeliveryError("发布资源超过 200 MiB 上限")
-    return release
+    return {'resource_files_sent': len(blobs) - 2,
+            'resource_bytes_sent': sum(len(blob) for name, blob in blobs.items() if name not in {'report.html', 'release.json'})}
 
+
+def build_archive(directory: Path, slug: str, stream, translation_config: dict | None = None) -> str:
+    prepared = prepare_publication(directory, slug, translation_config)
+    write_archive(prepared, stream)
+    return prepared.metadata['release']

@@ -112,6 +112,11 @@ Git 比较使用原始仓库根目录，不使用临时快照目录。实时预�
 ## 定位与关联
 
 `locate(content, anchor)` 返回 `status`、`anchor`、`candidates` 和 `reason`。
+选区消失或不可靠时，可额外返回独立的 `container`。它保存所属段落或表格单元的 ID、选择器、源码位置和顺序。
+`container.selection_deleted=true` 表示字符映射只剩空白或空区间，`reason=selection_deleted`。
+容器匹配须同源文件、同章节、同表格子单元，段落相似度至少 0.65，且领先第二候选至少 0.10。
+整格删除后，可通过唯一表格标签保留 `container.scope=table` 的表格导航。没有唯一标签时保留定位不确定性。
+容器关联只用于导航，不生成替代选区，也不能作为源码替换的可靠锚点。
 候选保存完整锚点、分数和 `exact`/`fuzzy` 方法；精确文字候选还提供上下文分数。
 分数是匹配启发式，不是概率。
 
@@ -133,6 +138,7 @@ Git 比较使用原始仓库根目录，不使用临时快照目录。实时预�
 `AnnotationStore.read(content)` 提供指定版本的线程视图。
 已有持久化关联保持版本隔离。选择器和主变更 ID 按当前报告更新。
 未关联版本返回计算视图，并标记 `association.persisted=false`；读取不会写入历史。
+计算视图保存在独立的派生定位缓存中，不增加批注修订号。正文指纹或当前锚点变化时重新计算。
 阶段 3 在确认新内容版本后调用 `reconcile`，持久化匹配结果与历史。
 读取旧报告不会自动把当前锚点迁回旧版本。
 
@@ -191,7 +197,7 @@ Python 公开入口：
 `create`、`reply` 可携带 `suggested_replacement={original_chunk,replacement_chunk}`。
 批量每项包含唯一 `id` 及单条操作字段，不携带独立修订号。默认提交成功项，并逐条返回结果。
 批量锁覆盖全部校验及一次原子存储写入。原子模式失败只记录幂等收据，线程和修订号保持不变；预检不记录收据。
-CLI 的精简输出及批量快照见 [智能体接口](agent-tools.md#批量与复核)。底层 JSON/HTTP 返回继续兼容完整线程视图。
+CLI 的精简输出、预检缓存及批量快照见 [智能体接口](agent-tools.md#批量与复核)。底层 CLI JSON 请求仍返回完整视图。
 
 完整请求信封：
 
@@ -225,9 +231,13 @@ CLI 参数、返回值、退出码和示例见[智能体接口](agent-tools.md#�
 | --- | --- |
 | `GET /api/report` | 本机报告目录、地址与可用项目身份，不返回 token |
 | `GET /api/annotations/content` | 当前正文清单 |
-| `GET /api/annotations/status` | 当前版本线程视图及请求 token |
+| `GET /api/annotations/status` | 默认线程摘要及请求 token；`view=page/full/revision` 分别读取页面视图、完整视图和修订号 |
+| `GET /api/annotations/history?thread_id=ID` | 指定线程完整关联历史 |
+| `GET /api/annotations/jobs` | 当前后台任务进度，不访问批注存储锁 |
+| `GET /api/annotations/jobs/ID` | 单个任务的进度、错误或最终结果 |
 | `GET /api/annotations/export` | 完整备份 |
-| `POST /api/annotations/update` | 执行完整请求信封 |
+| `POST /api/annotations/update` | 同步执行请求信封，线程结果使用页面投影 |
+| `POST /api/annotations/update?async=1` | HTTP 202 启动后台任务，返回 `task_id`、`status_url` |
 
 POST 使用 `Content-Type: application/json` 和 `X-LaTeX-Review-Token`。
 本机接口复用现有 Host、Origin 与 token 验证。请求上限为 8 MiB。

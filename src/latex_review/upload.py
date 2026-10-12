@@ -6,10 +6,11 @@ import os
 from pathlib import Path
 import re
 import subprocess
+import sys
 import tempfile
 import tomllib
 
-from .delivery import DeliveryError as UploadError, build_archive
+from .delivery import DeliveryError as UploadError, build_archive, prepare_publication, write_archive, manifest_id
 
 
 def upload_config_path() -> Path:
@@ -41,23 +42,67 @@ def load_upload_config(entry: Path) -> tuple[str, str, str]:
     return host, base, matches[0]["slug"]
 
 
+def _ssh(host: str, command: str, **kwargs):
+    return subprocess.run(['ssh', '-C', '-o', 'BatchMode=yes', '-o', 'ConnectTimeout=15',
+                           '-o', 'ServerAliveInterval=15', '-o', 'ServerAliveCountMax=3',
+                           host, command], capture_output=True, timeout=300, **kwargs)
+
+
+def _missing_receipt(value: dict, prepared) -> set[str]:
+    if (not isinstance(value, dict) or type(value.get('protocol')) is not int or value['protocol'] != 1
+            or value.get('slug') != prepared.metadata['slug']
+            or value.get('manifest_id') != manifest_id(prepared.manifest)
+            or not isinstance(value.get('missing'), list)
+            or any(not isinstance(item, str) for item in value['missing'])):
+        raise UploadError('服务器资源查询回执无效')
+    missing = set(value['missing'])
+    known = {item['sha256'] for item in prepared.manifest['resources'].values()}
+    if not missing <= known or len(missing) != len(value['missing']):
+        raise UploadError('服务器请求了清单外资源或重复资源')
+    return missing
+
+
 def upload_report(directory: Path, entry: Path, translation_config: dict | None = None) -> str:
     host, base, slug = load_upload_config(entry)
     try:
-        with tempfile.TemporaryFile() as archive:
-            release = build_archive(directory, slug, archive, translation_config)
-            archive.seek(0)
-            result = subprocess.run(["ssh", "-o", "BatchMode=yes", "-o", "ConnectTimeout=15",
-                                     "-o", "ServerAliveInterval=15", "-o", "ServerAliveCountMax=3",
-                                     host, "publish"], stdin=archive, capture_output=True, timeout=300)
-        if result.returncode:
-            message = result.stderr.decode("utf-8", errors="replace").strip()
-            raise UploadError(f"SSH 发布失败：{message or result.returncode}")
-        receipt = json.loads(result.stdout)
-        if receipt.get("release") != release or receipt.get("slug") != slug:
-            raise UploadError("服务器发布回执与本次报告不一致")
+        prepared = prepare_publication(directory, slug, translation_config)
+        query = _ssh(host, 'resource-query-v1', input=json.dumps(prepared.manifest, ensure_ascii=False).encode())
+        if query.returncode:
+            message = query.stderr.decode('utf-8', errors='replace').strip()
+            # This exact refusal is emitted by the legacy forced-command receiver.
+            if query.returncode == 1 and message == '此账号仅允许发布报告':
+                missing = None
+            else:
+                raise UploadError(f'SSH 资源查询失败：{message or query.returncode}')
+        else:
+            missing = _missing_receipt(json.loads(query.stdout), prepared)
+        total_files = total_bytes = 0
+        for attempt in range(3):
+            with tempfile.TemporaryFile() as archive:
+                stats = write_archive(prepared, archive, missing=missing)
+                total_files += stats['resource_files_sent']
+                total_bytes += stats['resource_bytes_sent']
+                archive.seek(0)
+                result = _ssh(host, 'publish' if missing is None else 'publish-incremental-v1', stdin=archive)
+            if result.returncode == 2 and missing is not None:
+                receipt = json.loads(result.stdout)
+                if not isinstance(receipt, dict) or receipt.get('error') != 'missing_resources':
+                    raise UploadError('服务器增量发布错误回执无效')
+                missing = _missing_receipt(receipt, prepared)
+                if not missing or attempt == 2:
+                    raise UploadError('服务器资源在发布前持续缺失，请重试')
+                continue
+            if result.returncode:
+                message = result.stderr.decode('utf-8', errors='replace').strip()
+                raise UploadError(f'SSH 发布失败：{message or result.returncode}')
+            receipt = json.loads(result.stdout)
+            if not isinstance(receipt, dict) or receipt.get('release') != prepared.metadata['release'] or receipt.get('slug') != slug:
+                raise UploadError('服务器发布回执与本次报告不一致')
+            print(f'上传资源：{total_files} 个文件，{total_bytes} 字节；'
+                  + ('完整上传兼容模式。' if missing is None else '增量上传。'), file=sys.stderr)
+            break
     except (OSError, ValueError, subprocess.SubprocessError) as exc:
         if isinstance(exc, UploadError):
             raise
         raise UploadError(str(exc)) from exc
-    return f"{base}/{slug}/latest/report.html"
+    return f'{base}/{slug}/latest/report.html'
