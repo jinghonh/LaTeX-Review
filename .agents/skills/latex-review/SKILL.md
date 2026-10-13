@@ -9,6 +9,8 @@ description: 使用 LaTeX Review 审查当前论文全文、生成修改差异�
 
 只读取当前任务对应的参考文件。
 
+- 用户要求贯穿查看、改稿、回复与解决批注的闭环：先读取 [改稿闭环](references/workflow.md)，再按需读取专项参考。
+
 - 用户要求审查当前全文的语言、结构、论证或一致性，并新增审查意见：读取 [全文审查](references/editorial.md)。此分支优先于持续预览和差异审阅。
 - 用户要求核对已有批注是否落实：读取 [批注](references/annotations.md) 的“复核已有批注”流程。
 - 用户要求审阅论文修改或生成差异报告：读取 [审阅](references/review.md)。

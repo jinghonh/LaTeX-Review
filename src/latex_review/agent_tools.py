@@ -157,7 +157,7 @@ def acceptance_main(argv: list[str] | None = None) -> int:
 def annotations_main(argv: list[str] | None = None) -> int:
     """Read annotations or execute a high-level/version-checked JSON request."""
     from .annotations import AnnotationStore, execute_request, load_content
-    from .annotation_cli import SelectionError, add_commands, build_request
+    from .annotation_cli import SelectionError, add_commands, build_request, read_text_inputs
     from .annotation_output import add_read_options, read_projection, write_summary, report_context
     from .annotation_batch_cli import add_batch_commands, run_batch, run_audit
     import sys
@@ -173,9 +173,12 @@ def annotations_main(argv: list[str] | None = None) -> int:
     args = p.parse_args(argv)
     if args.offset < 0 or (args.limit is not None and args.limit < 1):
         p.error('limit 必须大于零，offset 不得小于零')
+    if args.command in ('add', 'reply') and not args.author:
+        p.error('新增或回复需要 --author；可放在子命令前或后')
     try:
         if args.command and (args.content or args.export or args.request):
             raise ValueError('子命令不能与 --content、--export 或 --request 同时使用')
+        read_text_inputs(args)
         content = load_content(args.report)
         store = AnnotationStore.for_content(content, args.project_root)
         context = report_context(args.report, content)
@@ -185,6 +188,17 @@ def annotations_main(argv: list[str] | None = None) -> int:
             return 0 if all(item['ok'] for item in value['results']) and not value.get('review_record_error') else 4
         elif args.command == 'audit':
             value = run_audit(store, content, args.snapshot)
+        elif args.command in ('show', 'get'):
+            if args.summary or args.full or args.fields or args.history:
+                raise ValueError('show/get 固定返回详情；请移除 --summary、--full、--fields 和 --history')
+            snapshot = store.read(content)
+            thread = next((t for t in snapshot['threads'] if t['id'] == args.thread_id), None)
+            if thread is None:
+                raise ValueError('批注线程不存在或已删除')
+            from .annotation_output import thread_detail
+            value = {'project_id': snapshot['project_id'], 'version_id': snapshot['version_id'],
+                     'revision': snapshot['revision'],
+                     'thread': thread_detail(thread, {u['id']: u for u in content['units']})}
         elif args.command:
             value = execute_request(store, content, build_request(content, store.read(content), args))
             if (value.get('result') or {}).get('source_changed'):

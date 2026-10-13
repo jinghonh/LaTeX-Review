@@ -804,7 +804,7 @@ class AnnotationStore:
     @staticmethod
     def _validate_request(request):
         _keys(request, ('operation', 'expected_revision', 'thread_id', 'message_id', 'selection', 'body',
-                        'author', 'category', 'bundle', 'reply_to', 'suggested_replacement', 'title', 'tags'), ('operation', 'expected_revision'))
+                        'author', 'category', 'bundle', 'reply_to', 'suggested_replacement', 'title', 'tags', 'resolve'), ('operation', 'expected_revision'))
         revision = _integer(request['expected_revision'], 'expected_revision')
         operation = request['operation']
         fields = {
@@ -817,8 +817,10 @@ class AnnotationStore:
         }
         if not isinstance(operation, str) or operation not in fields:
             raise AnnotationError('未知批注操作')
-        _keys(request, fields[operation] | {'operation', 'expected_revision'} | ({'reply_to'} if operation == 'reply' else set()) | ({'suggested_replacement'} if operation in ('create', 'reply') else set()) | ({'title', 'tags'} if operation in ('create', 'update_metadata') else set()),
+        _keys(request, fields[operation] | {'operation', 'expected_revision'} | ({'reply_to', 'resolve'} if operation == 'reply' else set()) | ({'suggested_replacement'} if operation in ('create', 'reply') else set()) | ({'title', 'tags'} if operation in ('create', 'update_metadata') else set()),
               fields[operation] | {'operation', 'expected_revision'})
+        if 'resolve' in request and type(request['resolve']) is not bool:
+            raise AnnotationError('resolve 须为布尔值')
         if operation in ('create', 'update_metadata'):
             thread_metadata(request)
         if operation == 'update_metadata' and not {'title', 'tags'}.intersection(request):
@@ -886,6 +888,8 @@ class AnnotationStore:
                     message['suggested_replacement'] = prepare(content, anchor, request['suggested_replacement'])
                 message['reply_to'] = parent_id
                 thread['messages'].append(message)
+                if request.get('resolve'):
+                    thread['resolved'] = True
                 result = {'message_id': message['id']}
             elif operation in ('edit', 'delete_message'):
                 message = next((m for m in thread['messages'] if m['id'] == request['message_id']), None)

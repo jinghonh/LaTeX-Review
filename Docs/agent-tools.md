@@ -354,3 +354,16 @@ CLI 查询与 `/api/report` 提供 `report_context`，包含报告目录、`kind
 每个显示版本独立计算定位。共享批注线程不代表共享正文坐标。
 两份报告的显示版本可以相同，也可以不同；换版后须重新读取当前位置。
 全文审查使用当前全文预览；修改对比使用差异报告。目录名称或批注数量不能证明报告类型。
+
+
+## 单条查看与安全文本输入
+
+`latex-review-annotations REPORT_DIR show THREAD_ID` 返回单个 `thread` 的完整消息、原文和当前位置。`get` 是同义命令。不存在或已删除的批注返回错误。
+
+`add/reply --author` 可以放在子命令前或后；两处同时指定时，子命令后的作者优先。其他读取参数放在子命令之前。
+
+`add/reply/edit --body-file FILE` 和 `add --quote-file FILE` 读取 UTF-8 文本。路径 `-` 表示标准输入；一次调用仅允许一个标准输入来源。对应文本参数互斥，正文保留公式和换行。
+
+`reply THREAD_ID --body-file evidence.txt --author Codex --resolve` 在同一事务中回复并解决，只增加一次 revision。失败均不写入。普通回复保持原解决状态。
+
+完整操作流程见 [批注改稿闭环](../.agents/skills/latex-review/references/workflow.md)。

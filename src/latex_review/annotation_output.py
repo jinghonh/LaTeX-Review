@@ -55,6 +55,8 @@ def read_projection(value, args, content=None):
     if args.summary and fields is None:
         fields = ['id', 'kind', 'source', 'section_path'] if key == 'units' else None
     detail = getattr(args, 'detail', False)
+    if detail and key != 'threads':
+        raise ValueError('--detail 用于批注详情，--content 用于正文；请移除 --content 或使用 show THREAD_ID')
     if detail and (key != 'threads' or args.full or args.summary or fields or args.history):
         raise ValueError('--detail 只用于批注读取，不能与 --full、--summary、--fields 或 --history 混用')
     compact = not args.full and fields is None

@@ -1,5 +1,9 @@
 # 报告批注
 
+跨查看、改稿、回复和解决的任务先读 [改稿闭环](workflow.md)。
+
+`add/reply/edit` 支持 `--body-file`；`add` 支持 `--quote-file`。UTF-8 文件保留公式和换行，`-` 读取标准输入。对应文本参数互斥；一次调用只允许一个标准输入来源。
+
 使用 `latex-review-annotations` 操作已有报告。命令缺失时用 `python -m latex_review.annotation_cli`，参数保持相同。批注写入不等于论文修改。
 
 1. 确认本地报告目录。只有端口时，读取 `http://127.0.0.1:PORT/api/report` 的 `report_directory`。旧服务没有接口时查找启动记录，确认目录后再操作。
@@ -35,9 +39,9 @@ latex-review-annotations REPORT_DIR audit SNAPSHOT_FILE
 ~~~
 
 `add` 和 `reply` 分类默认为 `note`，可用 `--category question|suggestion|note` 指定。`edit` 保留作者，未指定分类时保留原分类。`reply` 默认回复初始批注；指定父消息时必须属于同一线程且未删除。
-删除必须符合用户授权范围，并显式传 `--yes`。无 `--message-id` 时删除整条批注及其回复；删除记录保留，界面没有恢复入口。`resolve` 将整条批注标记为已解决。
+删除必须符合用户授权范围，并显式传 `--yes`。无 `--message-id` 时删除整条批注及其回复；删除记录保留，界面没有恢复入口。`resolve` 将整条批注标记为已解决。`reply --resolve` 原子提交回复和解决状态，只增加一次 revision；失败均不写入。
 本机 CLI 写入论文项目共享存储；离线新增记录要先导出并导入，不能把磁盘结果当作离线数据。
-高层写入默认返回 ID、修订号和成功状态；`--full` 返回完整结果。读取选项放在子命令之前。批量默认提交成功项；任何失败退出码为 4，仍须检查已经成功的项。`--atomic` 要求全部成功，`--dry-run` 只预检。
+高层写入默认返回 ID、修订号和成功状态；`--full` 返回完整结果。读取选项放在子命令之前。`add/reply --author` 可放在子命令前或后，后者优先。批量默认提交成功项；任何失败退出码为 4，仍须检查已经成功的项。`--atomic` 要求全部成功，`--dry-run` 只预检。
 批量 JSON 格式及读取参数见下文。结构化替换见 [源码建议](suggestions.md)。现有 `--request` 接口继续用于导入、重新关联和重新打开。
 
 
@@ -46,7 +50,7 @@ latex-review-annotations REPORT_DIR audit SNAPSHOT_FILE
 默认读取返回最多 50 条摘要，包含作者、消息预览、定位状态和源码位置。
 使用 `--limit`、`--offset` 分页。`total_matched` 表示筛选后的总数。
 `--author` 默认忽略大小写。
-使用 `--thread-id ID --detail` 读取完整消息、目标原文和当前位置。
+使用 `show ID`（或 `get ID`）读取完整消息、目标原文和当前位置。原有 `--thread-id ID --detail` 继续可用。
 `--full` 用于诊断完整锚点；`--history` 用于关联历史。
 正文坐标需要 `--content --full --unit-id ID`。保持完整原文，使用 UTF-16 坐标。
 原选区删除后，批注可能保留所属段落或表格。容器导航不代表选区已经重新关联。

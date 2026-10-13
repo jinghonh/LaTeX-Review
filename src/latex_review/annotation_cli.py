@@ -1,6 +1,8 @@
 """High-level annotation requests using the shared version-checked store."""
 from __future__ import annotations
 
+import argparse
+
 
 from .annotations import AnnotationError
 from .quote_matching import normalize_quote, normalize_formula, quote_atoms, matches, nearest
@@ -98,6 +100,8 @@ def build_request(content, state, args):
             request['suggested_replacement'] = {'original_chunk': original, 'replacement_chunk': replacement}
         request.update(body=args.body, author={'name': args.author, 'type': 'agent'},
                        category=args.category)
+        if args.command == 'reply' and args.resolve:
+            request['resolve'] = True
         if args.command == 'reply' and args.parent_message_id:
             request['reply_to'] = args.parent_message_id
     elif args.command == 'edit':
@@ -118,6 +122,8 @@ def build_request(content, state, args):
 
 def add_commands(parser):
     commands = parser.add_subparsers(dest='command')
+    show = commands.add_parser('show', aliases=['get'], help='查看单条批注的完整消息、原文和当前位置')
+    show.add_argument('thread_id')
     for name, help_text in (('add', '按原文或完整公式添加批注'), ('reply', '回复批注或指定消息'),
                             ('edit', '编辑指定消息，保留原作者'), ('delete', '删除线程或指定消息'),
                             ('resolve', '将批注标记为已解决'), ('metadata', '更新线程标题或标签'), ('preview', '预览替换建议差异'), ('apply', '显式应用替换建议')):
@@ -126,7 +132,9 @@ def add_commands(parser):
         if name != 'add':
             command.add_argument('thread_id')
         if name in ('add', 'reply', 'edit'):
-            command.add_argument('--body', required=True, help='批注正文，按纯文本保存')
+            body = command.add_mutually_exclusive_group(required=True)
+            body.add_argument('--body', help='批注正文，按纯文本保存')
+            body.add_argument('--body-file', help='UTF-8 正文文件；- 表示标准输入')
             command.add_argument('--category', choices=['question', 'suggestion', 'note'],
                                  default=None if name == 'edit' else 'note')
         if name in ('preview', 'apply'):
@@ -134,7 +142,7 @@ def add_commands(parser):
         if name in ('add', 'reply'):
             command.add_argument('--original-chunk', help='建议替换的原始 LaTeX 块')
             command.add_argument('--replacement-chunk', help='替换 LaTeX 块，可为空字符串')
-            command.add_argument('--author', required=True, help='作者名称；身份固定为 agent')
+            command.add_argument('--author', default=argparse.SUPPRESS, help='作者名称；也可放在子命令前，子命令后的值优先')
         if name in ('add', 'metadata'):
             command.add_argument('--title', help='线程标题；空字符串恢复自动标题')
             labels = command.add_mutually_exclusive_group()
@@ -144,11 +152,14 @@ def add_commands(parser):
         if name == 'add':
             command.add_argument('--file', help='项目内源码文件，使用相对 POSIX 路径')
             command.add_argument('--line', type=int, help='显示版本的源码行号，从 1 开始；需要 --file')
-            command.add_argument('--quote', help='原文；公式模式须包含完整 LaTeX 包装')
+            quote = command.add_mutually_exclusive_group()
+            quote.add_argument('--quote', help='原文；公式模式须包含完整 LaTeX 包装')
+            quote.add_argument('--quote-file', help='UTF-8 原文文件；- 表示标准输入')
             command.add_argument('--unit-id', help='只搜索指定正文单元')
             command.add_argument('--occurrence', type=int, help='在当前候选中选择第几个位置，从 1 开始')
             command.add_argument('--formula', action='store_true', help='选择完整公式')
         elif name == 'reply':
+            command.add_argument('--resolve', action='store_true', help='原子提交回复与解决状态，只增加一次修订号')
             command.add_argument('--parent-message-id', help='回复的父消息；默认初始批注')
         elif name == 'edit':
             command.add_argument('message_id')
@@ -156,6 +167,20 @@ def add_commands(parser):
             command.add_argument('--message-id', help='只删除指定消息；默认删除整条批注及回复')
             command.add_argument('--yes', action='store_true', help='确认删除')
     return commands
+
+
+def read_text_inputs(args):
+    """Load literal text before any store access; stdin has one owner."""
+    from pathlib import Path
+    import sys
+    sources = [(field, getattr(args, field + '_file', None))
+               for field in ('body', 'quote')]
+    if sum(path == '-' for _, path in sources) > 1:
+        raise AnnotationError('同一次调用只允许一个参数读取标准输入')
+    for field, path in sources:
+        if path is not None:
+            raw = sys.stdin.read() if path == '-' else Path(path).read_text(encoding='utf-8')
+            setattr(args, field, raw)
 
 
 if __name__ == '__main__':

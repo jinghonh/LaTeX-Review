@@ -336,3 +336,74 @@ def test_report_context_distinguishes_shared_paper_versions(report, capsys):
         assert value['report_context']['display_version_id'] == report[1]['version_id']
     # Export remains an unchanged, importable contract.
     assert 'report_context' not in call(report, capsys, '--export')[1]
+
+
+@pytest.mark.parametrize('command', ['show', 'get'])
+def test_show_literal_inputs_and_atomic_reply(report, capsys, tmp_path, command):
+    quote = tmp_path / 'quote.txt'
+    body = tmp_path / 'body.txt'
+    quote.write_text(r'Other Alpha beta. Formula $x+1$ end.', encoding='utf-8')
+    literal = r'Evidence: $h(\omega)$ and \hat{r}.' + '\nSecond line.'
+    body.write_text(literal, encoding='utf-8')
+    code, value = call(report, capsys, '--author', 'Global', 'add', '--quote-file', str(quote),
+                       '--body-file', str(body), '--author', 'Local')
+    assert code == 0
+    tid = value['thread_id']
+    code, value = call(report, capsys, command, tid)
+    assert code == 0 and value['thread']['messages'][0]['body'] == literal
+    assert value['thread']['messages'][0]['author']['name'] == 'Local'
+    revision = value['revision']
+    code, value = call(report, capsys, '--author', 'Global', 'reply', tid,
+                       '--body-file', str(body), '--resolve')
+    assert code == 0 and value['revision'] == revision + 1
+    state = report[2].read(report[1])
+    assert state['threads'][0]['resolved']
+    assert state['threads'][0]['messages'][-1]['author']['name'] == 'Global'
+    before = report[2].path.read_bytes()
+    code, value = call(report, capsys, 'reply', tid, '--body', 'Failed', '--author', 'Agent',
+                       '--resolve', '--parent-message-id', 'missing')
+    assert code == 4 and report[2].path.read_bytes() == before
+    code, value = call(report, capsys, command, 'missing')
+    assert code == 4 and '不存在' in value['error']
+
+
+def test_stdin_and_input_errors_do_not_write(report, capsys, monkeypatch, tmp_path):
+    import io
+    literal = r'$h(\omega)$ and \hat{r}'
+    monkeypatch.setattr('sys.stdin', io.StringIO(literal))
+    code, value = call(report, capsys, 'add', '--quote', 'Other Alpha beta.',
+                       '--body-file', '-', '--author', 'Agent')
+    assert code == 0 and value['threads'][0]['messages'][0]['body'] == literal
+    before = report[2].path.read_bytes()
+    code, value = call(report, capsys, 'add', '--quote-file', '-', '--body-file', '-', '--author', 'Agent')
+    assert code == 4 and '标准输入' in value['error']
+    code, _ = call(report, capsys, 'add', '--quote', 'Other Alpha beta.',
+                   '--body-file', str(tmp_path / 'missing'), '--author', 'Agent')
+    assert code == 4 and report[2].path.read_bytes() == before
+    with pytest.raises(SystemExit):
+        call(report, capsys, 'add', '--quote', 'Other Alpha beta.',
+             '--body', 'text', '--body-file', '-', '--author', 'Agent')
+    capsys.readouterr()
+
+
+def test_reply_resolve_validation_and_revision_conflict(report, capsys):
+    from latex_review.annotations import AnnotationError, AnnotationConflict
+    code, value = call(report, capsys, 'add', '--quote', 'Other Alpha beta.',
+                       '--body', 'Initial', '--author', 'Agent')
+    assert code == 0
+    tid = value['result']['thread_id']
+    request = {'operation': 'reply', 'thread_id': tid, 'body': 'Evidence',
+               'author': {'name': 'Agent', 'type': 'agent'}, 'category': 'note',
+               'resolve': True, 'expected_revision': value['revision'] - 1}
+    before = report[2].path.read_bytes()
+    with pytest.raises(AnnotationConflict):
+        report[2].dispatch(report[1], request)
+    request.update(expected_revision=value['revision'], resolve='true')
+    with pytest.raises(AnnotationError):
+        report[2].dispatch(report[1], request)
+    assert report[2].path.read_bytes() == before
+    code, value = call(report, capsys, 'reply', tid, '--body', 'Pending', '--author', 'Agent')
+    assert code == 0 and not value['threads'][0]['resolved']
+    call(report, capsys, 'resolve', tid)
+    code, value = call(report, capsys, 'reply', tid, '--body', 'Follow-up', '--author', 'Agent')
+    assert code == 0 and value['threads'][0]['resolved']
