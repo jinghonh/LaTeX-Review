@@ -18,7 +18,7 @@ from .contract import ComparisonSource
 from .source_map import SourceMap, SourceSegment
 
 
-@dataclass(frozen=True)
+@dataclass
 class SourceError(Exception):
     code: str
     side: str | None

@@ -1,4 +1,6 @@
 import errno
+import base64
+import gzip
 import json
 import re
 from pathlib import Path
@@ -54,3 +56,45 @@ def test_cache_symlink_is_not_followed(tmp_path):
     path.write_bytes(b'original')
     assert not deduplicate_resource(path)
     assert list(outside.iterdir()) == []
+
+
+def test_shared_publication_keeps_exact_backup_and_current_content(live_report):
+    from latex_review.delivery import prepare_publication
+    _, _, output, _ = live_report
+    (output / 'diff.json').write_text('{}')
+    original = publication_html(output, include_assets=False)
+    extract = lambda html, name: json.loads(re.search(rf'id="annotation-{name}">(.*?)</script>', html, re.S)[1])
+    backup = extract(original, 'backup')
+    current = extract(original, 'content')
+    compact = prepare_publication(output, 'paper').html.decode()
+    envelope = extract(compact, 'backup-gzip')
+    decoded = gzip.decompress(base64.b64decode(envelope['data']))
+    assert len(decoded) == envelope['size']
+    from latex_review.delivery import decode_annotation_backup
+    assert decode_annotation_backup(envelope) == backup
+    assert decode_annotation_backup(envelope)['versions'][extract(compact, 'current-version')] == current
+    assert len(compact.encode()) < len(original.encode())
+
+
+def test_compressed_backup_codec_rejects_damage():
+    import pytest
+    from latex_review.delivery import encode_annotation_backup, decode_annotation_backup, DeliveryError
+    original = {'versions': {'historic': {'units': [{'text': '完整历史中文'}]}}, 'threads': {}}
+    encoded = encode_annotation_backup(original)
+    assert decode_annotation_backup(encoded) == original
+    for damaged in (dict(encoded, size=encoded['size']-1), dict(encoded, data='broken'), dict(encoded, encoding='unknown')):
+        with pytest.raises(DeliveryError, match='备份读取失败'):
+            decode_annotation_backup(damaged)
+
+
+def test_carried_compressed_backup_survives_reembedding(live_report):
+    from latex_review.delivery import embed_annotations, prepare_publication
+    _, _, output, _ = live_report
+    (output / 'diff.json').write_text('{}')
+    original = publication_html(output, include_assets=False)
+    extract = lambda html, name: json.loads(re.search(rf'id="annotation-{name}">(.*?)</script>', html, re.S)[1])
+    content = extract(original, 'content')
+    packed = prepare_publication(output, 'paper').html.decode()
+    restored = embed_annotations(packed, content, include_assets=False)
+    assert extract(restored, 'backup') == extract(original, 'backup')
+    assert 'id="annotation-backup-gzip"' not in restored

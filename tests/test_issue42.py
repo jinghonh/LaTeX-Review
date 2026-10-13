@@ -86,16 +86,16 @@ def test_math_page_marks_each_formula_result(tmp_path):
     script = re.search(r"<script>\n(.*?)\n</script>", html, re.S).group(1)
     harness = r"""
 const vm=require('vm');
-function node(value){return {textContent:value,dataset:{display:'false'},style:{},classList:{add(){}},replaceChildren(value){this.child=value;},querySelector(){return null;}};}
+function node(value){return {isConnected:true,textContent:value,dataset:{display:'false'},style:{},classList:{add(){},remove(){}},replaceChildren(value){this.child=value;},querySelector(){return null;}};}
 const nodes=[node('good'),node('bad')];
 const status={textContent:'',dataset:{}};
-const context={window:{},document:{getElementById:()=>status,querySelectorAll:()=>nodes,createElement:()=>({})},setTimeout:()=>1,clearTimeout:()=>{}};
+const context={window:{dispatchEvent:()=>{},addEventListener:()=>{},print:()=>{}},document:{body:{},addEventListener:()=>{},getElementById:()=>status,querySelectorAll:()=>nodes,createElement:()=>({})},MutationObserver:class {observe(){}},Event:class {},performance:{now:()=>0},WeakMap,setTimeout:(fn,ms)=>ms===0?setTimeout(fn,0):1,clearTimeout:()=>{}};
 vm.runInNewContext(%s,context);
 context.MathJax=context.window.MathJax;
 context.MathJax.startup.promise=Promise.resolve();
 context.MathJax.tex2chtmlPromise=async (value)=>({querySelector:()=>value==='bad'?{}:null});
 context.window.mathDependencyReady();
-setTimeout(()=>{if(status.dataset.state!=='partial'||nodes[0].style.visibility!=='visible'||nodes[1].textContent!=='此处暂无法预览')process.exit(1);},0);
+setTimeout(()=>{if(status.dataset.state!=='partial'||nodes[0].style.visibility!=='visible'||nodes[1].textContent!=='bad'||!nodes[1].dataset.renderError)process.exit(1);},30);
 """ % json.dumps(script)
     subprocess.run(["node", "-e", harness], check=True)
 
@@ -127,14 +127,19 @@ def test_pdf_converter_uses_next_tool_and_reports_failure(tmp_path):
     # 这些脚本只使用标准库；真实解释器路径避免虚拟环境路径中的空格拆开 shebang。
     bad.write_text(f"#!{Path(sys.executable).resolve()}\nimport sys\nsys.exit(7)\n")
     good = tmp_path / "good"
-    good.write_text(f"#!{Path(sys.executable).resolve()}\nimport pathlib,sys\npathlib.Path(sys.argv[-1]+'.png').write_bytes(b'PNG')\n")
+    from latex_review.visual import _png
+    png = _png(1, 1, b'\xff')
+    good.write_text(f"#!{Path(sys.executable).resolve()}\nimport pathlib,sys\n"
+                    "if '--version' in sys.argv: print('fixture converter 1')\n"
+                    f"else: pathlib.Path(sys.argv[-1]+'.png').write_bytes({png!r})\n")
     bad.chmod(0o755)
     good.chmod(0o755)
     output = tmp_path / "out"
     output.mkdir()
+    # This checks fallback, not startup speed; leave headroom under a full browser suite.
     image, reason = _pdf_preview(pdf, output, Path("previews/ok.png"),
-                                 (("pdftoppm", str(bad)), ("pdftoppm", str(good))), 2, 1)
-    assert image is not None and reason == ""
+                                 (("pdftoppm", str(bad)), ("pdftoppm", str(good))), 5, 1)
+    assert image is not None and reason == "", reason
     image, reason = _pdf_preview(pdf, output, Path("previews/fail.png"), (("pdftoppm", str(bad)),), 2, 1)
     assert image is None and "退出状态 7" in reason
 

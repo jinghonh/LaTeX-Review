@@ -22,6 +22,8 @@ from test_annotation_delivery_browser import live_report, chrome, ready
 def test_offline_suggestion_backup_and_no_source_write(live_report, chrome):
     root, entry, output, source = live_report
     original = entry.read_bytes()
+    from latex_review.delivery import publication_html
+    (output/'report.html').write_text(publication_html(output))
     page=chrome.new_page();ready(page,(output/'report.html').as_uri())
     assert page.evaluate('''async()=>{const api=reviewAnnotations,u=api.getContent().units.find(u=>u.text.startsWith('Stable'));return api.update({operation:'create',selection:{unit_id:u.id,start:0,end:6,quote:'Stable'},body:'Offline suggestion',author:{name:'Tester',type:'user'},category:'suggestion',suggested_replacement:{original_chunk:'Stable',replacement_chunk:'<script>Updated</script>'}});}''')
     bundle=page.evaluate('reviewAnnotationDelivery.backup()')

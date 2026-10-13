@@ -170,14 +170,18 @@ def test_live_uses_available_pdf_converter(tmp_path, monkeypatch):
     # A real subprocess exercises the converter call without requiring Poppler.
     import sys
     converter = tmp_path / 'pdftoppm'
+    from latex_review.visual import _png
+    png = _png(1, 1, b'\xff')
     converter.write_text(f'#!{Path(sys.executable).resolve()}\n'
-                         "import pathlib,sys\npathlib.Path(sys.argv[-1]+'.png').write_bytes(b'PNG')\n")
+                         "import pathlib,sys\n"
+                         "if sys.argv[1:] == ['-v']: print('fixture converter 1')\n"
+                         f"else: pathlib.Path(sys.argv[-1]+'.png').write_bytes({png!r})\n")
     converter.chmod(0o755)
     monkeypatch.setattr(compilation, '_program', lambda name, path, forbidden: str(converter) if name == 'pdftoppm' else None)
     source = ProjectSource('new', project, 'main.tex', ComparisonSource('directory', str(project)))
     messages = build(source, output)
     assert not any('PDF 图预览不可用' in message for message in messages)
-    assert (output / 'previews/new/figure.pdf.page-1.png').read_bytes() == b'PNG'
+    assert (output / 'previews/new/figure.pdf.page-1.png').read_bytes() == png
     assert 'alt="PDF 图 figure.pdf 的第 1 页预览"' in (output / 'report.html').read_text()
     monkeypatch.setattr(compilation, '_program', lambda *args: None)
     messages = build(source, output, 2)

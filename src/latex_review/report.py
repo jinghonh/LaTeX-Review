@@ -215,7 +215,7 @@ def _pdf_converters(sources: ProjectSource | tuple[ProjectSource, ...],
                  if (found := _program(name, safe_path, forbidden)))
 
 
-def _pdf_preview(source: Path, directory: Path, relative: Path,
+def _pdf_preview_uncached(source: Path, directory: Path, relative: Path,
                  converters: tuple[tuple[str, str], ...], timeout: float, page: int) -> tuple[Path | None, str]:
     if not converters:
         return None, "缺少可用的 PDF 转换工具"
@@ -254,6 +254,32 @@ def _pdf_preview(source: Path, directory: Path, relative: Path,
                 return _write_managed(directory, relative, source=output), ""
             stderr = result.stderr[:500].decode("utf-8", "replace").strip()
             reasons.append(f"{kind} 退出状态 {result.returncode}" + (f"：{stderr}" if stderr else ""))
+    return None, "；".join(reasons)
+
+
+def _pdf_preview(source: Path, directory: Path, relative: Path,
+                 converters: tuple[tuple[str, str], ...], timeout: float, page: int) -> tuple[Path | None, str]:
+    from .pdf_cache import converted, valid_png
+    if not converters:
+        return None, "缺少可用的 PDF 转换工具"
+    reasons = []
+    for kind, converter in converters:
+        def produce(snapshot: Path) -> bytes:
+            with tempfile.TemporaryDirectory(prefix="latex-review-preview-") as temporary:
+                result, reason = _pdf_preview_uncached(snapshot, Path(temporary), Path("preview.png"),
+                                                      ((kind, converter),), timeout, page)
+                if result is None:
+                    raise ValueError(reason)
+                return result.read_bytes()
+        try:
+            data = converted(source, directory, converter,
+                             {"kind": kind, "page": page, "format": "png",
+                              "scale": 1200 if kind == "pdftoppm" else None,
+                              "dpi": 120 if kind == "gs" else None}, produce, valid_png, version_timeout=min(timeout, 4))
+        except (OSError, ValueError) as exc:
+            reasons.append(str(exc))
+            continue
+        return _write_managed(directory, relative, content=data), ""
     return None, "；".join(reasons)
 
 

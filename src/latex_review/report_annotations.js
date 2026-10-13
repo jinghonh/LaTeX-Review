@@ -400,5 +400,5 @@
   window.reviewAnnotations=Object.freeze({coordinates,selection,refresh,update,openComposer,focus,
     getDrafts(){remember(false);return structuredClone(drafts);},restoreDrafts(value){Object.assign(drafts,value);const tray=el('div',null,'annotation-drafts');tray.append(el('p','保留的编辑草稿'));Object.entries(value).forEach(([key,d])=>tray.append(button(d.body.slice(0,60)||'空草稿',()=>window.reviewAnnotations.resumeDraft(key))));panel.append(tray);},resumeDraft(key){const d=drafts[key];if(d){openComposer(d.operation,d.thread,d.selection,d.message);editing={...d,key};body.value=d.body;name.value=d.name;author.value=d.author;type.value=d.category;original.value=d.original||'';replacement.value=d.replacement||'';if(d.warning)status.textContent=d.warning;}},
     setAdapter(value){adapter=value;return refresh();},isBusy(){return busy||externalJob;},getContent(){return content;},getSnapshot(){return snapshot;}});
-  if(!document.getElementById('annotation-content')&&window.location.protocol!=='file:') refresh();
+  if(!document.querySelector('#annotation-content,#annotation-current-version,#annotation-backup-gzip')&&window.location.protocol!=='file:') refresh();
 })();

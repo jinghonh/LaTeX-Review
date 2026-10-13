@@ -774,50 +774,16 @@ figcaption,.table-caption{{font-style:italic}}.asset,.fallback-label{{color:#755
 .node-table{{overflow-x:auto}}.table-preview{{border-collapse:collapse;margin:.6rem 0;width:max-content;max-width:none}}
 .table-preview td{{border:1px solid #ddd8cb;padding:.25rem .6rem;white-space:nowrap}}
 .compiled-fragment{{max-width:100%;height:auto}}
-.math-tex{{font-family:serif;white-space:pre-wrap;overflow-wrap:anywhere;visibility:hidden}}.math-tex.preview-unavailable{{visibility:visible}}.node-equation{{overflow-x:auto;text-align:center;margin:1rem 0}}
+.math-tex{{font-family:serif;white-space:pre-wrap;overflow-wrap:anywhere;visibility:visible}}.math-tex.preview-unavailable{{visibility:visible}}.node-equation{{overflow-x:auto;text-align:center;margin:1rem 0}}
 .preview-unavailable{{color:#6b3e27;background:#fff1e8;padding:.35rem .55rem}}
 .citation,.cross-ref{{color:#315c86}}.unresolved-ref{{color:#9b3c26}}
 .macro-placeholder{{background:#edf4ed;border-bottom:1px dotted #48734b}}
 @media(max-width:800px){{main{{grid-template-columns:1fr}}.preview-side{{max-height:none}}}}
 '''
     content = f'''{_side(old, "old", "修改前", diagnostics, figure_assets, extra.get("old", ()), sentence_highlights) if old else ""}{_side(new, "new", "修改后" if old else "当前论文", diagnostics, figure_assets, extra.get("new", ()), sentence_highlights)}'''
-    math_scripts = f'''<script>
-(function(){{
- window.MathJax={{loader:{{load:['[tex]/boldsymbol']}},startup:{{typeset:false}},tex:{{packages:{{'[+]':['ams','newcommand','boldsymbol']}}}}}};
- const status=document.getElementById('math-status');
- let settled=false;
- const formulas=Array.from(document.querySelectorAll('.math-tex'));
- window.reviewRenderDiagnostics=[];
- function unavailable(node, reason){{
-   if(node.dataset.fallbackSrc){{const image=document.createElement('img');image.src=node.dataset.fallbackSrc;image.alt='公式预览';image.className='compiled-fragment';node.replaceChildren(image);}}
-   else{{node.textContent='此处暂无法预览';node.classList.add('preview-unavailable');}}
-   node.style.visibility='visible';node.dataset.renderError=String(reason);window.reviewRenderDiagnostics.push({{kind:'math',reason:String(reason)}});
- }}
- function failed(){{if(settled)return;settled=true;clearTimeout(timer);status.textContent='在线公式排版不可用。';status.dataset.state='failed';formulas.forEach(function(node){{unavailable(node,'公式引擎不可用');}});}}
- const timer=setTimeout(failed,10000);
- window.mathDependencyFailed=failed;
- window.mathDependencyReady=function(){{
-   if(!window.MathJax || !MathJax.startup || !MathJax.startup.promise){{failed();return;}}
-   MathJax.startup.promise.then(async function(){{
-     if(settled)return;
-     if(!MathJax.tex2chtmlPromise){{failed();return;}}
-     clearTimeout(timer);
-     let errors=0;
-     for(const node of formulas){{
-       try{{
-         const rendered=await MathJax.tex2chtmlPromise(node.textContent,{{display:node.dataset.display==='true'}});
-         if(rendered.querySelector('mjx-merror,[data-mjx-error],mtext[mathcolor="red"],mjx-mtext[style*="color: red"]'))throw new Error('公式语法或命令不受支持');
-         node.replaceChildren(rendered);node.style.visibility='visible';
-       }}catch(error){{errors++;unavailable(node,error && error.message || error);}}
-     }}
-     settled=true;
-     status.textContent=errors ? '部分公式暂无法预览。' : '公式排版完成。';
-     status.dataset.state=errors ? 'partial' : 'ready';
-     if(window.dispatchEvent)window.dispatchEvent(new Event('review-math-ready'));
-   }},failed);
- }};
-}})();
-</script>
-<script async src="{_MATHJAX_URL}" onload="mathDependencyReady()" onerror="mathDependencyFailed()"></script>'''
+    from importlib.resources import files
+    math_script = files("latex_review").joinpath("math_render.js").read_text(encoding="utf-8")
+    math_scripts = ('<script>\n' + math_script + '\n</script>\n'
+                    + f'<script async src="{_MATHJAX_URL}" onload="mathDependencyReady()" onerror="mathDependencyFailed()"></script>')
     result = PreviewResult("", tuple(diagnostics), style, content, math_scripts)
     return replace(result, html=result.compose())

@@ -152,7 +152,8 @@ def test_published_html_keeps_annotations_without_embedded_assets(live_report):
     (output / 'diff.json').write_text('{}')
     publication = delivery.prepare_publication(output, 'test-paper')
     html = publication.html.decode()
-    assert 'id="annotation-content"' in html and 'id="annotation-backup"' in html
+    assert 'id="annotation-content"' not in html and 'id="annotation-backup-gzip"' in html
+    assert 'id="annotation-current-version"' in html
     assert 'id="annotation-assets"' not in html
     assert 'name="latex-review-publication" content="static"' in html
     assert '#translation-export{display:none!important}' in html

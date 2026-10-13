@@ -1,5 +1,6 @@
 from copy import deepcopy
 import pytest
+from latex_review.version_storage import unpack_storage
 from latex_review.annotations import AnnotationConflict, AnnotationError, AnnotationStore
 from latex_review.annotation_audit import audit
 from test_annotations import content_at, select, AUTHOR
@@ -41,6 +42,7 @@ def test_atomic_and_dry_run(tmp_path):
     request['items'].append({**request['items'][0], 'id': 'bad', 'body': ''})
     response = store.batch(content, request)
     assert not response['committed'] and all(not r['ok'] for r in response['results'])
+    assert __import__('json').loads(store.path.read_text())['storage_encoding'] == 'shared-units-v1'
     assert store.read(content)['revision'] == 0 and not store.read(content)['threads']
     assert store.batch(content, request) == response
     request['request_id'] = 'preflight'
@@ -49,7 +51,7 @@ def test_atomic_and_dry_run(tmp_path):
     response = store.batch(content, request)
     assert response['results'][0]['ok'] and not response['committed']
     assert 'message_id' not in response['results'][0]
-    assert 'preflight' not in __import__('json').loads(store.path.read_text())['requests']
+    assert 'preflight' not in unpack_storage(__import__('json').loads(store.path.read_text()))['requests']
     request['dry_run'] = False
     assert store.batch(content, request)['committed']
 

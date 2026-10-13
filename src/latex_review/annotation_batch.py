@@ -1,7 +1,7 @@
 """Locked batch mutations with persistent request idempotency."""
 from copy import deepcopy
 
-from .annotations import AnnotationConflict, AnnotationError, _atomic_write, _hash, _integer, _keys, _text
+from .annotations import AnnotationConflict, AnnotationError, _hash, _integer, _keys, _text
 
 OPERATIONS = {'create', 'reply', 'edit', 'delete_message', 'delete_thread', 'resolve', 'reopen', 'associate'}
 
@@ -123,7 +123,7 @@ def execute_batch(store, content, request, progress=None):
                 store._write(working)
             else:
                 # An atomic rejection records only its receipt, without advancing annotation revision.
-                _atomic_write(store.path, working)
+                store._persist(working)
             if plan:
                 annotation_preflight.path_for(store, request_id).unlink(missing_ok=True)
         report('complete', len(items))

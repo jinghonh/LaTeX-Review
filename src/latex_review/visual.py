@@ -69,9 +69,18 @@ def _run(command: list[str], timeout: float = 10) -> bytes:
     return result.stdout
 
 
-def _render_page(pdf: Path, page: int, converter: str, scale: int) -> tuple[int, int, bytes]:
-    return _pgm(_run([converter, "-f", str(page), "-l", str(page), "-singlefile",
-                      "-scale-to", str(scale), "-gray", str(pdf)]))
+def _render_page(pdf: Path, page: int, converter: str, scale: int, cache_directory: Path | None = None) -> tuple[int, int, bytes]:
+    from .pdf_cache import converted
+    def produce(snapshot: Path) -> bytes:
+        return _run([converter, "-f", str(page), "-l", str(page), "-singlefile",
+                     "-scale-to", str(scale), "-gray", str(snapshot)])
+    def validate(data: bytes) -> bool:
+        _pgm(data)
+        return True
+    data = (converted(pdf, cache_directory, converter,
+                      {"page": page, "scale": scale, "format": "pgm", "gray": True}, produce, validate)
+            if cache_directory is not None else produce(pdf))
+    return _pgm(data)
 
 
 def _pages(pdf: Path, output: Path, side: str, converter: str, info: str) -> tuple[list[tuple[int, int, bytes]], list[str]]:
@@ -82,8 +91,8 @@ def _pages(pdf: Path, output: Path, side: str, converter: str, info: str) -> tup
     low = []
     images = []
     for page in range(1, int(match.group(1)) + 1):
-        small = _render_page(pdf, page, converter, 96)
-        large = _render_page(pdf, page, converter, 900)
+        small = _render_page(pdf, page, converter, 96, output)
+        large = _render_page(pdf, page, converter, 900, output)
         relative = f"pages/{side}/{page:04d}.png"
         _write_managed(output, Path(relative), content=_png(*large))
         low.append(small)
@@ -175,8 +184,8 @@ def build_visual(old: CompileStatus, new: CompileStatus, output: Path, document:
                 image = None
                 if pair.old and pair.new and pair.kind == "changed":
                     try:
-                        a = _render_page(output / old.pdf, pair.old, converter, 900)
-                        b = _render_page(output / new.pdf, pair.new, converter, 900)
+                        a = _render_page(output / old.pdf, pair.old, converter, 900, output)
+                        b = _render_page(output / new.pdf, pair.new, converter, 900, output)
                         if a[:2] == b[:2]:
                             rgb = bytes(channel for x, y in zip(a[2], b[2])
                                         for channel in (255, max(0, 255 - abs(x - y) * 3),

@@ -149,7 +149,7 @@ const status = {dataset:{}};
 let resolveStartup;
 const math = {startup:{promise:new Promise(resolve=>resolveStartup=resolve)}};
 const context = {document:{getElementById:()=>status,querySelectorAll:()=>[]},
-    window:{},setTimeout:()=>1,clearTimeout:()=>{}};
+    window:{dispatchEvent:()=>{},addEventListener:()=>{},print:()=>{}},document: {body:{},getElementById:()=>status,querySelectorAll:()=>[],addEventListener:()=>{}},MutationObserver:class {observe(){}},Event:class {},performance:{now:()=>0},WeakMap,setTimeout:()=>1,clearTimeout:()=>{}};
 vm.runInNewContext(SCRIPT, context);
 context.MathJax = context.window.MathJax = math;
 context.window.mathDependencyReady();

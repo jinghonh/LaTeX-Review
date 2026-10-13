@@ -19,6 +19,8 @@ from pathlib import Path
 import tempfile
 import uuid
 
+from .version_storage import pack_storage, unpack_storage
+
 SCHEMA_VERSION = '1.0'
 MANIFEST = 'annotation-content.json'
 MAX_BODY = 64 * 1024
@@ -584,11 +586,12 @@ def locate(content, anchor):
     return result
 
 
-def _atomic_write(path, data):
+def _atomic_write(path, data, *, compact=False):
     fd, temporary = tempfile.mkstemp(prefix='.annotations-', suffix='.tmp', dir=path.parent)
     try:
         with os.fdopen(fd, 'w', encoding='utf-8') as stream:
-            json.dump(data, stream, ensure_ascii=False, sort_keys=True, indent=2)
+            json.dump(data, stream, ensure_ascii=False, sort_keys=True, indent=None if compact else 2,
+                      separators=(',', ':') if compact else None)
             stream.write('\n')
             stream.flush()
             os.fsync(stream.fileno())
@@ -628,7 +631,7 @@ class AnnotationStore:
         return cls(root, content['project_id'])
 
     @contextmanager
-    def _locked(self):
+    def _locked(self, *, restore_versions=True):
         if any(p.is_symlink() for p in (self.directory, self.directory.parent, self.path, self.lock_path)):
             raise AnnotationError('批注存储路径不可为符号链接')
         self.directory.mkdir(parents=True, exist_ok=True)
@@ -636,7 +639,16 @@ class AnnotationStore:
         try:
             fcntl.flock(fd, fcntl.LOCK_EX)
             if self.path.exists():
-                data = json.loads(self.path.read_text(encoding='utf-8'))
+                try:
+                    data = unpack_storage(json.loads(self.path.read_text(encoding='utf-8')),
+                                          restore_versions=restore_versions)
+                except (ValueError, TypeError, KeyError) as error:
+                    raise AnnotationError('批注存储读取失败') from error
+                if restore_versions:
+                    for version_id, version in data.get('versions', {}).items():
+                        validate_content(version)
+                        if version_id != version['version_id'] or version['project_id'] != self.project_id:
+                            raise AnnotationError('批注存储正文版本身份无效')
                 _keys(data, ('schema_version', 'project_id', 'revision', 'threads', 'versions', 'requests'),
                       ('schema_version', 'project_id', 'revision', 'threads', 'versions'))
                 _integer(data['revision'], 'revision')
@@ -656,7 +668,10 @@ class AnnotationStore:
 
     def _write(self, data):
         data['revision'] += 1
-        _atomic_write(self.path, data)
+        self._persist(data)
+
+    def _persist(self, data):
+        _atomic_write(self.path, pack_storage(data), compact=True)
 
     def _content(self, data, content):
         validate_content(content)
@@ -679,12 +694,12 @@ class AnnotationStore:
 
     def metadata(self, content):
         """Read identity/revision without constructing or relocating any thread."""
-        with self._locked() as data:
+        with self._locked(restore_versions=False) as data:
             return {'project_id': self.project_id, 'version_id': content['version_id'], 'revision': data['revision']}
 
     def inventory(self, content):
         """Audit inventory does not need anchors, histories or location computation."""
-        with self._locked() as data:
+        with self._locked(restore_versions=False) as data:
             threads = [{'id': t['id'], 'messages': [{k: v for k, v in m.items() if k in
                        ('id', 'author', 'body', 'reply_to', 'deleted_at')} for m in t['messages']]}
                        for t in data['threads'].values() if not t.get('deleted_at')]
@@ -890,6 +905,13 @@ class AnnotationStore:
     def export(self):
         with self._locked() as data:
             return {key: deepcopy(value) for key, value in data.items() if key != 'requests'}
+
+    def compact(self):
+        """Validate and atomically rewrite storage without changing its revision."""
+        with self._locked() as data:
+            bundle = {key: value for key, value in data.items() if key != 'requests'}
+            self._import({'versions': {}, 'threads': {}}, bundle)
+            self._persist(data)
 
     def _import(self, data, bundle):
         """Atomic deduplication. Divergent same-ID records return conflicts, never overwrite."""

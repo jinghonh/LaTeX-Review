@@ -3,8 +3,63 @@
   'use strict';
   const api=window.reviewAnnotations;
   const readJSON=id=>JSON.parse(document.getElementById(id)?.textContent||'null');
-  const embedded=readJSON('annotation-backup');
-  let content=readJSON('annotation-content');
+  if(!api)return;
+  function unpackVersions(value){
+    if(!value||!('encoding' in value)){
+      // Structured-clone storage can share identical units without changing the legacy shape.
+      const seen=new WeakSet();
+      if(value?.versions&&typeof value.versions==='object'&&!Array.isArray(value.versions))for(const c of Object.values(value.versions))if(Array.isArray(c?.units))c.units=c.units.map(u=>{if(u&&typeof u==='object'){if(seen.has(u))return structuredClone(u);seen.add(u);}return u;});
+      return value;
+    }
+    if(value.encoding!=='shared-units-v1'||Object.keys(value).sort().join(',')!=='bundle,encoding,units'||!Array.isArray(value.units)||value.units.some(u=>!u||typeof u!=='object'||Array.isArray(u))||!value.bundle?.versions||typeof value.bundle.versions!=='object'||Array.isArray(value.bundle.versions))throw Error('正文共享表示无效');
+    const result=structuredClone(value.bundle),encoder=new TextEncoder();
+    const sizes=value.units.map(u=>encoder.encode(JSON.stringify(u)).length);let expanded=encoder.encode(JSON.stringify(value.bundle)).length;
+    for(const c of Object.values(result.versions)){
+      if(!Array.isArray(c.units)||c.units.some(i=>!Number.isInteger(i)||i<0||i>=value.units.length))throw Error('正文单元引用无效');
+      expanded+=c.units.reduce((n,i)=>n+sizes[i],0);if(expanded>200*1024*1024)throw Error('恢复正文超过 200 MiB 上限');
+      c.units=c.units.map(i=>structuredClone(value.units[i]));
+    }
+    return result;
+  }
+  function packVersions(value){
+    const bundle={...value,versions:{}},indices=new Map(),encoder=new TextEncoder();let expanded=0;
+    for(const [id,c] of Object.entries(value.versions)){
+      const units=c.units.map(u=>{const key=stable(u);expanded+=encoder.encode(key).length;if(expanded>200*1024*1024)throw Error('恢复正文超过 200 MiB 上限');if(!indices.has(key))indices.set(key,u);return indices.get(key);});
+      expanded+=Math.max(0,units.length-1);bundle.versions[id]={...c,units};
+    }
+    const metadata={...bundle,versions:Object.fromEntries(Object.entries(bundle.versions).map(([id,c])=>[id,{...c,units:[]}]))};
+    expanded+=encoder.encode(JSON.stringify(metadata)).length;if(expanded>200*1024*1024)throw Error('恢复正文超过 200 MiB 上限');
+    return bundle;
+  }
+  const packed=document.getElementById('annotation-backup-gzip');
+  let embedded;
+  if(packed){
+    document.getElementById('annotation-status').textContent='批注正在等待加载。';
+    // Let the document paint before decoding history. Interaction requests it sooner.
+    await new Promise(resolve=>{
+      let done=false,id;
+      const events=['toggle','pointerup','keydown'];
+      const load=e=>{if(e?.type==='toggle'&&(e.target.id!=='annotation-overview'||!e.target.open))return;if(done)return;done=true;events.forEach(e=>document.removeEventListener(e,load,true));if(id)cancelIdleCallback(id);resolve();};
+      events.forEach(e=>document.addEventListener(e,load,true));
+      requestAnimationFrame(()=>requestAnimationFrame(()=>{if(done)return;if(window.requestIdleCallback)id=requestIdleCallback(load,{timeout:1500});else setTimeout(load,0);}));
+    });
+    performance.mark('annotation-decode-start');
+    try{
+      const envelope=JSON.parse(packed.textContent);
+      if(!['gzip-base64-v1','gzip-shared-units-v1'].includes(envelope.encoding)||!Number.isInteger(envelope.size)||envelope.size<0||envelope.size>200*1024*1024)throw Error('压缩备份格式无效');
+      if(typeof DecompressionStream==='undefined')throw Error('浏览器不支持 gzip 批注，请使用新版 Chrome');
+      const bytes=Uint8Array.from(atob(envelope.data),c=>c.charCodeAt(0));
+      const reader=new Blob([bytes]).stream().pipeThrough(new DecompressionStream('gzip')).getReader();
+      const chunks=[];let size=0;
+      while(true){const {value,done}=await reader.read();if(done)break;size+=value.length;if(size>envelope.size){await reader.cancel();throw Error('压缩备份大小不一致');}chunks.push(value);}
+      if(size!==envelope.size)throw Error('压缩备份大小不一致');
+      embedded=unpackVersions(JSON.parse(await new Blob(chunks).text()));
+      if(!embedded||typeof embedded!=='object'||Array.isArray(embedded)||!embedded.versions||!embedded.threads)throw Error('压缩备份契约无效');
+      performance.mark('annotation-decode-end');performance.measure('annotation-decode','annotation-decode-start','annotation-decode-end');
+    }catch(e){document.getElementById('annotation-status').textContent='批注备份读取失败：'+e.message+'。浏览器记录未覆盖。';window.reviewAnnotationDeliveryError=e.message;return;}
+  }else embedded=readJSON('annotation-backup');
+  const currentVersion=readJSON('annotation-current-version');
+  let content=readJSON('annotation-content')||(currentVersion&&embedded?.versions?.[currentVersion]);
   if(!api)return;
   if(!content){
     if(location.protocol==='file:'){document.getElementById('annotation-status').textContent='请使用 latex-review-preview 打开本机报告，或使用独立导出的 HTML。';return;}
@@ -46,7 +101,7 @@
   }
   function validateBundle(b) {
     keys(b,['schema_version','project_id','revision','versions','threads']);
-    if(b?.schema_version!==content.schema_version||b.project_id!==content.project_id||!Number.isInteger(b.revision)||b.revision<0||!b.versions||!b.threads||Array.isArray(b.threads)) fail('备份项目或契约无效');
+    if(b?.schema_version!==content.schema_version||b.project_id!==content.project_id||!Number.isInteger(b.revision)||b.revision<0||!b.versions||!b.threads||Array.isArray(b.versions)||Array.isArray(b.threads)) fail('备份项目或契约无效');
     for(const [id,c] of Object.entries(b.versions)) {validateContent(c);if(id!==c.version_id) fail('版本身份不一致');}
     const check=a=>{const c=b.versions[a?.version_id];if(!c||semantic(anchor(c,selection(a)))!==semantic(a)) fail('备份锚点与正文不一致');};
     for(const [id,t] of Object.entries(b.threads)) {
@@ -116,11 +171,11 @@
     data.revision++;return {...view(data),result};
   }
   const dbPromise=new Promise((resolve,reject)=>{const r=indexedDB.open('latex-review-annotations',1);r.onupgradeneeded=()=>r.result.createObjectStore('projects');r.onsuccess=()=>resolve(r.result);r.onerror=()=>reject(r.error);});
-  async function transaction(fn) {
+  async function transaction(fn,write=false) {
     const db=await dbPromise;
     return new Promise((resolve,reject)=>{
-      const tx=db.transaction('projects','readwrite'),store=tx.objectStore('projects'),r=store.get(content.project_id);let result,error;
-      r.onsuccess=()=>{try {const data=r.result||copy(embedded);validateBundle(data);validateContent(content);const existing=data.versions[content.version_id];if(existing&&stable(existing.units.map(unitSemantic))!==stable(content.units.map(unitSemantic)))fail('同版本正文坐标不一致');data.versions[content.version_id]=copy(content);result=fn(data);store.put(data,content.project_id);}catch(e){error=e;tx.abort();}};
+      const tx=db.transaction('projects',write?'readwrite':'readonly'),store=tx.objectStore('projects'),r=store.get(content.project_id);let result,error;
+      r.onsuccess=()=>{try {const data=unpackVersions(r.result)||copy(embedded);validateBundle(data);validateContent(content);const existing=data.versions[content.version_id];if(existing&&stable(existing.units.map(unitSemantic))!==stable(content.units.map(unitSemantic)))fail('同版本正文坐标不一致');data.versions[content.version_id]=copy(content);result=fn(data,Boolean(r.result));if(write)store.put(packVersions(data),content.project_id);}catch(e){error=e;tx.abort();}};
       tx.oncomplete=()=>resolve(result);tx.onabort=tx.onerror=()=>reject(error||tx.error);
     });
   }
@@ -132,7 +187,7 @@
     async readStatus(){if(local)return transaction(view);const s=await json('/api/annotations/status?view=page');token=s.token;return s;},
     async read(){if(local)return [content,await transaction(view)];const [c,s]=await Promise.all([json('/api/annotations/content'),json('/api/annotations/status?view=page')]);token=s.token;return [c,s];},
     async update(e,progress){
-      if(local)return transaction(d=>dispatch(d,e));
+      if(local)return transaction(d=>dispatch(d,e),true);
       const task=await json('/api/annotations/update?async=1',{method:'POST',headers:{'Content-Type':'application/json','X-LaTeX-Review-Token':token},body:JSON.stringify(e)});
       if(!task.task_id)return task;
       while(true){const job=await json(task.status_url);if(job.state==='complete')return job.result;if(job.state==='failed')fail(job.message||'批注任务失败');progress?.(job);await new Promise(resolve=>setTimeout(resolve,300));}
@@ -150,12 +205,15 @@
   const published=document.querySelector('meta[name="latex-review-publication"]')?.content==='static';
   async function exportHTML() {
     if(published)fail('在线报告不提供独立 HTML 导出。请使用本机报告导出。');
+    await window.reviewMath?.complete();
     const b=await backup(),clone=document.documentElement.cloneNode(true);
-    clone.querySelectorAll('.annotation-overview,.annotation-editor,.annotation-toolbar,.annotation-card,.annotation-mark,.annotation-margin,.annotation-drafts').forEach(e=>e.remove());
+    clone.querySelector('#annotation-current-version')?.remove();
+    clone.querySelector('#annotation-backup-gzip')?.remove();
+    clone.querySelectorAll('.review-print-warning,.annotation-overview,.annotation-editor,.annotation-toolbar,.annotation-card,.annotation-mark,.annotation-margin,.annotation-drafts').forEach(e=>e.remove());
     clone.querySelectorAll('.inline-change,.change-anchor,.translation-block,.translation-toggle').forEach(e=>e.remove());
     clone.querySelectorAll('.change-trigger').forEach(e=>{e.classList.remove('change-trigger');for(const a of ['role','tabindex','aria-controls','aria-label','title'])e.removeAttribute(a);});
     clone.querySelectorAll('.annotation-active-formula,.annotation-located-formula').forEach(e=>e.classList.remove('annotation-active-formula','annotation-located-formula'));
-    clone.querySelectorAll('.math-tex[data-annotation-latex]').forEach(e=>{e.replaceChildren(document.createTextNode(e.dataset.annotationMathSource||e.dataset.annotationLatex));e.classList.remove('preview-unavailable');delete e.dataset.renderError;e.style.visibility='';});
+    clone.querySelectorAll('.math-tex[data-annotation-latex],.math-tex[data-review-math-source]').forEach(e=>{e.replaceChildren(document.createTextNode(e.dataset.annotationMathSource||e.dataset.annotationLatex||e.dataset.reviewMathSource));e.classList.remove('preview-unavailable');delete e.dataset.renderError;e.style.visibility='';});
     clone.querySelectorAll('mjx-container,mjx-assistive-mml,style[id^=MJX]').forEach(e=>e.remove());
     clone.querySelectorAll('script[src]').forEach(e=>{if(/mathjax/i.test(e.src)&&!/tex-chtml\.js/.test(e.src))e.remove();});
     clone.querySelectorAll('#live-sections option:not(:first-child),#live-results li').forEach(e=>e.remove());
@@ -205,10 +263,10 @@
     const keys=Object.keys(drafts);if(keys.length){api.resumeDraft(keys.at(-1));notice.textContent='编辑草稿已恢复。';}
   }
   async function start() {
-    if(location.protocol==='file:')local=true;
-    else {try {const [c,s]=await adapter.read();if(c.project_id!==content.project_id||c.version_id!==content.version_id||s.project_id!==content.project_id)fail('页面与接口身份不一致');}catch(e){if(!embedded||e.message.includes('身份不一致')){notice.textContent=e.message;return;}local=true;}}
+    if(published||location.protocol==='file:')local=true;
+    else {try {const s=await adapter.readStatus();if(s.project_id!==content.project_id||s.version_id!==content.version_id)fail('页面与接口身份不一致');}catch(e){if(!embedded||e.message.includes('身份不一致')){notice.textContent=e.message;return;}local=true;}}
     let embeddedConflict='';
-    if(local)await transaction(data=>{try{const result=importBundle(data,embedded);if(result.imported.length)data.revision++;}catch(e){embeddedConflict=e.message+'。浏览器记录未覆盖；可导出报告原备份。';}return null;});
+    if(local)await transaction((data,existing)=>{try{const result=existing?importBundle(data,embedded):{imported:[]};if(result.imported.length)data.revision++;}catch(e){embeddedConflict=e.message+'。浏览器记录未覆盖；可导出报告原备份。';}return null;},true);
     await api.setAdapter(adapter);
     // Only the current live page commits migrations. Opening historical reports is read-only.
     if(!local&&document.body.classList.contains('live-view')&&api.getContent())await api.update({operation:'reconcile'});

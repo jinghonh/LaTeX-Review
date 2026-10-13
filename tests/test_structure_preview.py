@@ -109,16 +109,16 @@ def test_two_side_preview_math_failure_and_anchor_isolation(tmp_path):
         assert re.search(rf'href="#{side}-section-[^"]+"', html)
         assert re.search(rf'href="#{side}-bibliography_entry-[^"]+"', html)
     assert "onerror=\"mathDependencyFailed()\"" in html
-    assert "在线公式排版不可用。" in html
+    assert "在线公式排版不可用；保留公式原文。" in html
     if shutil.which("node"):
         script = re.search(r"<script>\n(.*?)\n</script>", html, re.S).group(1)
         harness = """
 const vm = require('vm');
 const status = {textContent:'',dataset:{}};
-    const context = {document:{getElementById:()=>status,querySelectorAll:()=>[]},window:{},setTimeout:()=>1,clearTimeout:()=>{}};
+    const context = {document:{body:{},addEventListener:()=>{},getElementById:()=>status,querySelectorAll:()=>[]},window:{dispatchEvent:()=>{},addEventListener:()=>{},print:()=>{}},MutationObserver:class {observe(){}},Event:class {},performance:{now:()=>0},WeakMap,setTimeout:()=>1,clearTimeout:()=>{}};
 vm.runInNewContext(%s, context);
 context.window.mathDependencyFailed();
-    if(status.dataset.state !== 'failed' || !status.textContent.includes('不可用')) process.exit(1);
+    setImmediate(()=>{if(status.dataset.state !== 'failed' || !status.textContent.includes('不可用')) process.exit(1);});
 """ % json.dumps(script)
         subprocess.run(["node", "-e", harness], check=True)
 

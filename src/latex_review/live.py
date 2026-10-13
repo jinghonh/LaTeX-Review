@@ -10,7 +10,6 @@ import os
 from pathlib import Path
 import sys
 from threading import Thread
-import time
 import webbrowser
 
 from .contract import ComparisonSource
@@ -110,6 +109,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument('--root', type=Path, help='论文项目根目录，默认入口文件所在目录')
     parser.add_argument('--output', type=Path, help='预览目录，默认项目内 .latex-review/live')
     parser.add_argument('--open-browser', action='store_true')
+    parser.add_argument('--poll-files', action='store_true', help='使用元数据轮询，适用于不支持原生事件的文件系统')
     parser.add_argument('--config', type=Path, help='项目配置文件，默认当前目录 .latex-review.toml')
     parser.add_argument('--translation-cache-dir', type=Path, help='独立翻译缓存目录')
     args = parser.parse_args(argv)
@@ -129,15 +129,20 @@ def main(argv: list[str] | None = None) -> int:
         parser.error('翻译缓存目录不能包含论文项目根目录')
     if cache_directory == storage or cache_directory in storage.parents or storage in cache_directory.parents:
         parser.error('翻译缓存目录不能覆盖项目共享批注存储')
+    from .file_events import ProjectEvents
+    events = ProjectEvents(root, output, cache_directory, force_polling=args.poll_files,
+                           extra_files=((args.config or Path('.latex-review.toml')).absolute(),))
+    events.__enter__()
     try:
         from .cli import _config
         config = _config(args.config or Path('.latex-review.toml'), bool(args.config))
         translation = TranslationConfig.from_mapping(config['translation']) if 'translation' in config else None
-        initial = fingerprint(root, output, cache_directory=cache_directory)
+        initial = events.generation
         messages = build(source, output)
         server = create_server(output, translation_config=translation, cache_directory=cache_directory,
                                annotation_project_root=root)
     except (OSError, ValueError, RuntimeError, SourceError) as exc:
+        events.__exit__()
         print(f'预览启动失败：{exc}', file=sys.stderr)
         return 4
     _write(output / 'live-status.json', json.dumps({'revision': 1, 'message': f'持续预览已启动。预览诊断：{len(messages)} 项。'}, ensure_ascii=False))
@@ -150,30 +155,33 @@ def main(argv: list[str] | None = None) -> int:
         if args.open_browser:
             webbrowser.open(url)
         print(f'持续预览：{url}\n按 Ctrl+C 停止。', flush=True)
+        warning = ''
         while True:
             try:
-                current = fingerprint(root, output, cache_directory=cache_directory)
+                current = events.wait(previous)
+                if events.warning != warning:
+                    warning = events.warning
+                    print(warning, file=sys.stderr, flush=True)
+                    _write(output / 'live-status.json', json.dumps({'revision': revision, 'message': warning}, ensure_ascii=False))
                 if current != previous:
-                    # 合并连续保存；解析期间的后续保存将在下一轮处理。
-                    time.sleep(0.3)
-                    current = fingerprint(root, output, cache_directory=cache_directory)
+                    # Consume only events seen before building; later saves remain pending.
                     previous = current
                     from .report_rebuild import rebuild_lock
                     with rebuild_lock(output):
                         messages = build(source, output, revision + 1)
                         refresh_translation(server, output)
                     revision += 1
-                    message = f'已更新当前论文。预览诊断：{len(messages)} 项。'
+                    message = events.warning + f'已更新当前论文。预览诊断：{len(messages)} 项。'
                     print(message, flush=True)
                     _write(output / 'live-status.json', json.dumps({'revision': revision, 'message': message}, ensure_ascii=False))
             except (OSError, ValueError, SourceError) as exc:
                 message = f'更新失败，保留上次预览：{exc}'
                 print(message, file=sys.stderr, flush=True)
                 _write(output / 'live-status.json', json.dumps({'revision': revision, 'message': message}, ensure_ascii=False))
-            time.sleep(0.7)
     except KeyboardInterrupt:
         return 0
     finally:
+        events.__exit__()
         server.shutdown()
         server.server_close()
         thread.join()

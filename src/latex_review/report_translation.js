@@ -14,7 +14,8 @@
   let states = {...blockedStates}, token = '', active = false, polling = false, available = true;
   const installed = new Set();
   const live = document.body.classList.contains('live-view');
-  const localService = location.protocol === 'http:' && location.hostname === '127.0.0.1';
+  const published = document.querySelector('meta[name="latex-review-publication"]')?.content === 'static';
+  const localService = !published && location.protocol === 'http:' && location.hostname === '127.0.0.1';
   const labels = {pending: '等待翻译', running: '正在翻译', ready: '译文已完成', failed: '翻译失败，可重试', cancelled: '已停止，可重试', blocked: '此段无法翻译'};
   let pinnedSentence = '', hoveredSentence = '';
   const liveCells = new Map();
@@ -143,18 +144,7 @@
   }
 
   function renderTranslatedMath() {
-    if (window.MathJax && window.MathJax.tex2chtmlPromise) {
-      document.querySelectorAll('.translation-block .math-tex:not([data-translation-math])').forEach(math => {
-        math.dataset.translationMath = 'true';
-        if (math.querySelector('mjx-container') || math.dataset.renderError) return;
-        Promise.resolve(window.MathJax.startup && window.MathJax.startup.promise)
-          .then(() => window.MathJax.tex2chtmlPromise(math.textContent, {display: math.dataset.display === 'true'}))
-          .then(rendered => {
-            if (rendered.querySelector('mjx-merror,[data-mjx-error]')) throw new Error('公式无法排版');
-            math.replaceChildren(rendered); window.dispatchEvent(new Event('resize'));
-          }).catch(() => { math.textContent = '此处暂无法预览'; math.classList.add('preview-unavailable'); });
-      });
-    }
+    window.reviewMath?.enqueue();
   }
   window.addEventListener('review-math-ready', renderTranslatedMath);
 
