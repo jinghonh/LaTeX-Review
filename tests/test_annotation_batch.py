@@ -15,20 +15,20 @@ def setup(tmp_path):
     return store, content, request
 
 
-def test_partial_once_and_idempotency(tmp_path, monkeypatch):
+def test_partial_once_and_idempotency(tmp_path):
     store, content, request = setup(tmp_path)
     request['items'].append({**request['items'][0], 'id': 'bad', 'body': ''})
-    calls = []
-    write = store._write
-    monkeypatch.setattr(store, '_write', lambda data: (calls.append(1), write(data)))
     response = store.batch(content, request)
     assert [r['ok'] for r in response['results']] == [True, False]
-    assert calls == [1]
+    persisted = store.path.read_bytes()
+    assert store.read(content)['revision'] == 1
+    assert len(store.read(content)['threads']) == 1
     assert store.batch(content, request) == response
-    assert calls == [1]
+    assert store.path.read_bytes() == persisted
     retry = deepcopy(request)
     retry['expected_revision'] = 999
     assert store.batch(content, retry) == response
+    assert store.path.read_bytes() == persisted
     retry['items'][0]['body'] = 'Changed'
     with pytest.raises(AnnotationConflict, match='ID'):
         store.batch(content, retry)

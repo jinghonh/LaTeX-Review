@@ -52,9 +52,20 @@ def test_source_changed_during_preparation_is_not_overwritten(tmp_path, monkeypa
 def test_stale_and_record_failure_preserve_source(tmp_path, monkeypatch):
     content, store, path, request = setup(tmp_path)
     raw = path.read_bytes()
-    monkeypatch.setattr(store, '_write', lambda data: (_ for _ in ()).throw(OSError('disk full')))
-    with pytest.raises(OSError): mutate(store, content, 'suggestion_apply', **request)
+    import os
+    persisted = store.path.read_bytes()
+    real_replace = os.replace
+    def fail_storage_replace(source, target):
+        if target == store.path:
+            raise OSError('disk full')
+        return real_replace(source, target)
+    monkeypatch.setattr(os, 'replace', fail_storage_replace)
+    with pytest.raises(OSError, match='disk full'):
+        mutate(store, content, 'suggestion_apply', **request)
     assert path.read_bytes() == raw
+    assert store.path.read_bytes() == persisted
+    reopened = AnnotationStore.for_content(content).read(content)
+    assert reopened['threads'][0]['messages'][0]['suggested_replacement']['status'] == 'pending'
     path.write_bytes(raw+b'\n')
     with pytest.raises(AnnotationError, match='过期'): mutate(store, content, 'suggestion_preview', **request)
 

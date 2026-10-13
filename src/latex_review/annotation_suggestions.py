@@ -100,38 +100,3 @@ def replace(path, raw, *, expected=None):
     finally:
         if os.path.exists(temporary):
             os.unlink(temporary)
-
-
-def execute(store, content, request):
-    from .annotations import AnnotationConflict, _now, _keys, _integer
-    _keys(request, ('operation', 'expected_revision', 'thread_id', 'message_id'),
-          ('operation', 'expected_revision', 'thread_id', 'message_id'))
-    _integer(request['expected_revision'], 'expected_revision')
-    with store._locked() as data:
-        if data['revision'] != request['expected_revision']:
-            raise AnnotationConflict('批注版本已变化，请重新读取')
-        thread = data['threads'].get(request['thread_id'])
-        message = next((m for m in thread['messages'] if m['id'] == request['message_id'] and not m['deleted_at']), None) if thread and not thread['deleted_at'] else None
-        if not message or not message.get('suggested_replacement'):
-            error('替换建议不存在')
-        suggestion = message['suggested_replacement']
-        unit = next((u for u in content['units'] if u['id'] == suggestion.get('unit_id')), None)
-        owner = unit.get('source_span', {}) if unit else {}
-        span = suggestion.get('source_span') or {}
-        if suggestion.get('version_id') != content['version_id'] or not owner.get('reliable') or not owner.get('writable') or span.get('file') != owner.get('file') or span.get('sha256') != owner.get('sha256') or not owner['start'] <= span.get('start', -1) < span.get('end', -1) <= owner['end']:
-            error(suggestion.get('reason') or '建议源码区间与当前正文不一致，拒绝应用')
-        path, original, updated, diff = inspect(store.root, suggestion)
-        result = {'thread_id': thread['id'], 'message_id': message['id'], 'diff': diff, 'source_changed': False}
-        if request['operation'] == 'suggestion_apply':
-            replace(path, updated, expected=original)
-            suggestion.update(status='applied', applied_at=_now(), applied_sha256=hashlib.sha256(updated).hexdigest())
-            message['updated_at'] = thread['updated_at'] = _now()
-            try:
-                store._write(data)
-            except Exception:
-                # Restore the original source if recording the applied state fails.
-                if path.read_bytes() == updated:
-                    replace(path, original)
-                raise
-            result.update(source_changed=True, source_file=str(path))
-        return {**store._view(data, content), 'result': result}

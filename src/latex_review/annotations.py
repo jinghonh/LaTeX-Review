@@ -630,6 +630,9 @@ def _atomic_write(path, data, *, compact=False):
 class AnnotationStore:
     """One disk file per project entry, with interprocess locks and revision checks.
 
+    Owns mutation locking, revision checks, batch receipts, preflight lifecycle
+    and source rollback. Batch validation and source inspection stay internal.
+
     Report manifests contain only identity/location metadata. HTTP callers cannot
     choose paths or submit a new content manifest. CLI users explicitly choose roots.
     """
@@ -780,8 +783,7 @@ class AnnotationStore:
         if isinstance(request, dict) and request.get('operation') == 'batch':
             return self.batch(content, request, progress=progress)
         if isinstance(request, dict) and request.get('operation') in ('suggestion_preview', 'suggestion_apply'):
-            from .annotation_suggestions import execute
-            return execute(self, content, request)
+            return self._suggestion(content, request)
         self._validate_request(request)
         revision = request['expected_revision']
         with self._locked() as data:
@@ -912,8 +914,145 @@ class AnnotationStore:
         return result
 
     def batch(self, content, request, progress=None):
-        from .annotation_batch import execute_batch
-        return execute_batch(self, content, request, progress=progress)
+        """Own batch locking, preflight reuse, receipts and revision advancement."""
+        from .annotation_batch import OPERATIONS, validate_request
+        revision, request_id, atomic, dry_run, items, fingerprint = validate_request(content, request)
+        from . import annotation_preflight
+        def report(phase, completed=0):
+            if progress:
+                progress(phase, completed, len(items))
+        report('lock')
+        with self._locked() as data:
+            previous = data.get('requests', {}).get(request_id)
+            if previous:
+                if previous['fingerprint'] != fingerprint:
+                    raise AnnotationConflict('请求 ID 已用于不同载荷')
+                if not dry_run:
+                    return deepcopy(previous['response'])
+            plan = None if dry_run else annotation_preflight.load(self, content, request, fingerprint, data['revision'])
+            if revision != data['revision']:
+                raise AnnotationConflict('批注已被其他审阅者更新，请保留草稿并重新读取',
+                        {'code': 'revision_conflict', 'reasons': ['annotation_revision_changed'],
+                         'expected_revision': revision, 'actual_revision': data['revision']})
+            report('validate')
+            # Copy only containers and affected threads, never all stored versions per item.
+            working = {**data, 'threads': dict(data['threads']), 'versions': dict(data['versions']),
+                       'requests': dict(data.get('requests', {}))}
+            self._content(working, content)
+            results = deepcopy(plan['results']) if plan else []
+            changed = {}
+            if plan:
+                working['threads'].update(deepcopy(plan['threads']))
+                report('reuse', len(items))
+            for index, item in enumerate([] if plan else items):
+                candidate = {**working, 'threads': dict(working['threads'])}
+                target = item.get('thread_id')
+                if isinstance(target, str) and target in candidate['threads']:
+                    candidate['threads'][target] = deepcopy(candidate['threads'][target])
+                try:
+                    if 'error' in item:
+                        _keys(item, ('id', 'operation', 'error'), ('id', 'operation', 'error'))
+                        if not isinstance(item['operation'], str) or item['operation'] not in OPERATIONS:
+                            raise AnnotationError('未知批量批注操作')
+                        _keys(item['error'], ('code', 'message', 'candidates'), ('code', 'message'))
+                        _text(item['error']['code'], 'error code', 256)
+                        _text(item['error']['message'], 'error message')
+                        if 'candidates' in item['error'] and not isinstance(item['error']['candidates'], list):
+                            raise AnnotationError('error candidates 须为列表')
+                        results.append({'id': item['id'], 'operation': item['operation'], 'ok': False,
+                                        'error': deepcopy(item['error'])})
+                        continue
+                    mutation = {key: value for key, value in item.items() if key != 'id'}
+                    if not isinstance(mutation.get('operation'), str) or mutation['operation'] not in OPERATIONS:
+                        raise AnnotationError('未知批量批注操作')
+                    mutation['expected_revision'] = revision
+                    self._validate_request(mutation)
+                    result = self._apply(candidate, content, mutation) or {}
+                    if item['operation'] == 'edit':
+                        result['message_id'] = item['message_id']
+                    working = candidate
+                    thread_id = result.get('thread_id', item.get('thread_id'))
+                    if thread_id:
+                        changed[thread_id] = working['threads'][thread_id]
+                    results.append({'id': item['id'], 'operation': item['operation'], 'ok': True,
+                                    'thread_id': result.get('thread_id', item.get('thread_id')),
+                                    **result})
+                except AnnotationError as exc:
+                    results.append({'id': item['id'], 'operation': item.get('operation'), 'ok': False,
+                                    'error': {'code': 'conflict' if isinstance(exc, AnnotationConflict) else 'validation',
+                                              'message': str(exc)}})
+                finally:
+                    report('preflight' if dry_run else 'apply', index + 1)
+            failed = any(not result['ok'] for result in results)
+            committed = not dry_run and any(result['ok'] for result in results) and not (atomic and failed)
+            if atomic and failed:
+                for result in results:
+                    if result['ok']:
+                        result.update(ok=False, error={'code': 'atomic_rollback', 'message': '整批校验失败，未提交'})
+                        result.pop('thread_id', None)
+                        result.pop('message_id', None)
+                working = {**data, 'requests': dict(data.get('requests', {}))}
+                changed = {}
+            if dry_run:
+                plan = annotation_preflight.save(self, content, request, fingerprint, revision, changed, results)
+                results = deepcopy(results)
+                for result in results:
+                    result.pop('thread_id', None) if result['operation'] == 'create' else None
+                    result.pop('message_id', None)
+            response = {'request_id': request_id, 'atomic': atomic, 'dry_run': dry_run, 'committed': committed,
+                        'version_id': content['version_id'], 'revision': data['revision'] + int(committed),
+                        'start_revision': data['revision'], 'start_thread_ids': [t['id'] for t in data['threads'].values() if not t.get('deleted_at')],
+                        'results': results, 'preflight_reused': bool(plan and not dry_run)}
+            if plan:
+                response.update(preflight_token=plan['token'], preflight_expires_at=plan['expires_at'])
+            if not dry_run:
+                report('write', len(items))
+                working.setdefault('requests', {})[request_id] = {'fingerprint': fingerprint, 'response': deepcopy(response)}
+                if committed:
+                    self._write(working)
+                else:
+                    # An atomic rejection records only its receipt, without advancing annotation revision.
+                    self._persist(working)
+                if plan:
+                    annotation_preflight.path_for(self, request_id).unlink(missing_ok=True)
+            report('complete', len(items))
+            return response
+
+    def _suggestion(self, content, request):
+        """Commit a source suggestion, restoring source if storage fails."""
+        from .annotation_suggestions import error, inspect, replace
+        import hashlib
+        _keys(request, ('operation', 'expected_revision', 'thread_id', 'message_id'),
+              ('operation', 'expected_revision', 'thread_id', 'message_id'))
+        _integer(request['expected_revision'], 'expected_revision')
+        with self._locked() as data:
+            if data['revision'] != request['expected_revision']:
+                raise AnnotationConflict('批注版本已变化，请重新读取')
+            thread = data['threads'].get(request['thread_id'])
+            message = next((m for m in thread['messages'] if m['id'] == request['message_id'] and not m['deleted_at']), None) if thread and not thread['deleted_at'] else None
+            if not message or not message.get('suggested_replacement'):
+                error('替换建议不存在')
+            suggestion = message['suggested_replacement']
+            unit = next((u for u in content['units'] if u['id'] == suggestion.get('unit_id')), None)
+            owner = unit.get('source_span', {}) if unit else {}
+            span = suggestion.get('source_span') or {}
+            if suggestion.get('version_id') != content['version_id'] or not owner.get('reliable') or not owner.get('writable') or span.get('file') != owner.get('file') or span.get('sha256') != owner.get('sha256') or not owner['start'] <= span.get('start', -1) < span.get('end', -1) <= owner['end']:
+                error(suggestion.get('reason') or '建议源码区间与当前正文不一致，拒绝应用')
+            path, original, updated, diff = inspect(self.root, suggestion)
+            result = {'thread_id': thread['id'], 'message_id': message['id'], 'diff': diff, 'source_changed': False}
+            if request['operation'] == 'suggestion_apply':
+                replace(path, updated, expected=original)
+                suggestion.update(status='applied', applied_at=_now(), applied_sha256=hashlib.sha256(updated).hexdigest())
+                message['updated_at'] = thread['updated_at'] = _now()
+                try:
+                    self._write(data)
+                except Exception:
+                    # Restore the original source if recording the applied state fails.
+                    if path.read_bytes() == updated:
+                        replace(path, original)
+                    raise
+                result.update(source_changed=True, source_file=str(path))
+            return {**self._view(data, content), 'result': result}
 
     @staticmethod
     def _message(request, now):
