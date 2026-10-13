@@ -3,7 +3,7 @@ from copy import deepcopy
 
 from .annotations import AnnotationConflict, AnnotationError, _hash, _integer, _keys, _text
 
-OPERATIONS = {'create', 'reply', 'edit', 'delete_message', 'delete_thread', 'resolve', 'reopen', 'associate'}
+OPERATIONS = {'create', 'reply', 'edit', 'delete_message', 'delete_thread', 'resolve', 'reopen', 'associate', 'update_metadata'}
 
 
 def execute_batch(store, content, request, progress=None):
@@ -44,7 +44,9 @@ def execute_batch(store, content, request, progress=None):
                 return deepcopy(previous['response'])
         plan = None if dry_run else annotation_preflight.load(store, content, request, fingerprint, data['revision'])
         if revision != data['revision']:
-            raise AnnotationConflict('批注已被其他审阅者更新，请保留草稿并重新读取')
+            raise AnnotationConflict('批注已被其他审阅者更新，请保留草稿并重新读取',
+                    {'code': 'revision_conflict', 'reasons': ['annotation_revision_changed'],
+                     'expected_revision': revision, 'actual_revision': data['revision']})
         report('validate')
         # Copy only containers and affected threads, never all stored versions per item.
         working = {**data, 'threads': dict(data['threads']), 'versions': dict(data['versions']),

@@ -105,7 +105,7 @@
     for(const [id,c] of Object.entries(b.versions)) {validateContent(c);if(id!==c.version_id) fail('版本身份不一致');}
     const check=a=>{const c=b.versions[a?.version_id];if(!c||semantic(anchor(c,selection(a)))!==semantic(a)) fail('备份锚点与正文不一致');};
     for(const [id,t] of Object.entries(b.threads)) {
-      keys(t,['id','project_id','created_version_id','created_at','updated_at','resolved','deleted_at','messages','original_anchor','current_anchor','associations','history']);
+      keys(t,['id','project_id','created_version_id','created_at','updated_at','resolved','deleted_at','messages','original_anchor','current_anchor','associations','history','title','tags'],['id','project_id','created_version_id','created_at','updated_at','resolved','deleted_at','messages','original_anchor','current_anchor','associations','history']);metadata(t);
       if(id!==t.id||t.project_id!==b.project_id||typeof t.resolved!=='boolean'||!Array.isArray(t.messages)||!t.messages.length||!Array.isArray(t.history)||!t.associations) fail('线程无效');
       check(t.original_anchor);check(t.current_anchor);if(t.created_version_id!==t.original_anchor.version_id) fail('创建版本无效');
       const ids=new Set();for(const m of t.messages) {keys(m,['id','body','author','category','created_at','updated_at','deleted_at','edits','reply_to','suggested_replacement'],['id','body','author','category','created_at','updated_at','deleted_at','edits']);if('reply_to' in m&&!ids.has(m.reply_to))fail('回复对象必须是先前消息');text(m.id,'内容 ID');if(ids.has(m.id)) fail('内容 ID 重复');ids.add(m.id);messageFields(m);if(!Array.isArray(m.edits)) fail('编辑历史无效');for(const e of m.edits){keys(e,['body','category','at']);text(e.body,'历史正文');category(e.category);text(e.at,'时间');}for(const key of ['created_at','updated_at'])text(m[key],'时间');if(m.deleted_at!=null)text(m.deleted_at,'时间');}
@@ -113,6 +113,12 @@
       for(const h of t.history){keys(h,['at','method','anchor']);check(h.anchor);text(h.at,'时间');if(!['created','exact','auto_migrated','manual'].includes(h.method))fail('历史类型无效');}
       for(const key of ['created_at','updated_at'])text(t[key],'时间');if(t.deleted_at!=null)text(t.deleted_at,'时间');
     }
+  }
+  function metadata(v){
+    const result={};
+    if('title' in v){if(typeof v.title!=='string'||new TextEncoder().encode(v.title).length>512)fail('title 须为不超过 512 字节的文字');result.title=v.title.trim();}
+    if('tags' in v){if(!Array.isArray(v.tags)||v.tags.length>32)fail('tags 须为最多 32 个标签的列表');result.tags=v.tags.map(t=>{text(t,'tag',128);return t.trim();});if(new Set(result.tags).size!==result.tags.length)fail('tags 不得包含重复标签');}
+    return result;
   }
   function category(v){if(!['question','suggestion','note'].includes(v))fail('分类无效');return v;}
   function messageFields(r){keys(r.author,['name','type']);text(r.body,'批注正文');category(r.category);text(r.author?.name,'作者',256);if(!['user','agent'].includes(r.author.type))fail('作者身份无效');}
@@ -146,15 +152,16 @@
   }
   function dispatch(data,e) {
     keys(e,['project_id','version_id','request']);
-    const r=e.request;if(['suggestion_preview','suggestion_apply'].includes(r.operation))fail('当前报告没有本机源码服务。建议已保留，无法回写源码。');const fields={create:['selection','body','author','category'],reply:['thread_id','body','author','category'],edit:['thread_id','message_id','body','category'],delete_message:['thread_id','message_id'],delete_thread:['thread_id'],resolve:['thread_id'],reopen:['thread_id'],associate:['thread_id','selection'],reconcile:[],import:['bundle']};
-    if(!Object.hasOwn(fields,r.operation))fail('未知批注操作');keys(r,['operation','expected_revision',...fields[r.operation],...(r.operation==='reply'?['reply_to']:[]),...(['create','reply'].includes(r.operation)?['suggested_replacement']:[])],['operation','expected_revision',...fields[r.operation]]);
+    const r=e.request;if(['suggestion_preview','suggestion_apply'].includes(r.operation))fail('当前报告没有本机源码服务。建议已保留，无法回写源码。');const fields={create:['selection','body','author','category'],reply:['thread_id','body','author','category'],edit:['thread_id','message_id','body','category'],delete_message:['thread_id','message_id'],delete_thread:['thread_id'],resolve:['thread_id'],reopen:['thread_id'],update_metadata:['thread_id'],associate:['thread_id','selection'],reconcile:[],import:['bundle']};
+    if(!Object.hasOwn(fields,r.operation))fail('未知批注操作');keys(r,['operation','expected_revision',...fields[r.operation],...(r.operation==='reply'?['reply_to']:[]),...(['create','reply'].includes(r.operation)?['suggested_replacement']:[]),...(['create','update_metadata'].includes(r.operation)?['title','tags']:[])],['operation','expected_revision',...fields[r.operation]]);
     if(e.project_id!==content.project_id||e.version_id!==content.version_id)fail('请求项目或版本不一致');
     if(r.expected_revision!==data.revision)fail('批注已被其他窗口更新。输入已保留。');
+    if(r.operation==='update_metadata'&&!('title' in r)&&!('tags' in r))fail('更新元数据需要 title 或 tags');
     const now=new Date().toISOString();let result=null;
     const message=()=>{messageFields(r);if(r.suggested_replacement&&(typeof r.suggested_replacement.original_chunk!=='string'||!r.suggested_replacement.original_chunk||typeof r.suggested_replacement.replacement_chunk!=='string'))fail('建议需要原始及替换 LaTeX 块');return {...(r.suggested_replacement?{suggested_replacement:{original_chunk:r.suggested_replacement.original_chunk,replacement_chunk:r.suggested_replacement.replacement_chunk,status:'pending',source_span:null,reason:'离线建议需要本机重新定位源码'}}:{}),id:uuid(),body:r.body,author:copy(r.author),category:r.category,created_at:now,updated_at:now,deleted_at:null,edits:[]};};
     if(r.operation==='create') {
       const a=anchor(content,r.selection),m=message(),id=uuid();
-      data.threads[id]={id,project_id:data.project_id,created_version_id:content.version_id,created_at:now,updated_at:now,resolved:false,deleted_at:null,messages:[m],original_anchor:copy(a),current_anchor:copy(a),associations:{[content.version_id]:{status:'exact',anchor:a,candidates:[],reason:null}},history:[{at:now,method:'created',anchor:copy(a)}]};result={thread_id:id,message_id:m.id};
+      data.threads[id]={id,project_id:data.project_id,created_version_id:content.version_id,created_at:now,updated_at:now,resolved:false,deleted_at:null,messages:[m],original_anchor:copy(a),current_anchor:copy(a),associations:{[content.version_id]:{status:'exact',anchor:a,candidates:[],reason:null}},history:[{at:now,method:'created',anchor:copy(a)}],...metadata(r)};result={thread_id:id,message_id:m.id};
     } else if(r.operation==='import')result=importBundle(data,r.bundle);
     else if(r.operation==='reconcile') {for(const t of Object.values(data.threads))if(!t.deleted_at&&!t.associations[content.version_id]){const a=locate(content,t.current_anchor);t.associations[content.version_id]=a;if(a.anchor)associate(t,a.anchor,a.status,now);}}
     else {
@@ -163,7 +170,8 @@
       else if(r.operation==='edit'||r.operation==='delete_message') {
         const m=t.messages.find(m=>m.id===r.message_id);if(!m||m.deleted_at)fail('内容已删除；输入已保留');
         if(r.operation==='edit'){text(r.body,'批注正文');category(r.category);m.edits.push({body:m.body,category:m.category,at:now});m.body=r.body;m.category=r.category;m.updated_at=now;}else m.deleted_at=now;
-      } else if(r.operation==='delete_thread')t.deleted_at=now;
+      } else if(r.operation==='update_metadata'){Object.assign(t,metadata(r));result={thread_id:t.id};}
+      else if(r.operation==='delete_thread')t.deleted_at=now;
       else if(r.operation==='resolve'||r.operation==='reopen')t.resolved=r.operation==='resolve';
       else if(r.operation==='associate'){const a=anchor(content,r.selection);t.associations[content.version_id]={status:'manual',anchor:a,candidates:[],reason:null};associate(t,a,'manual',now);}
       else fail('未知批注操作');t.updated_at=now;

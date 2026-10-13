@@ -11,7 +11,7 @@ from .annotations import AnnotationError, _atomic_write, _keys
 
 
 def add_batch_commands(commands):
-    batch = commands.add_parser('batch', help='一次执行批量添加或回复，默认提交成功项')
+    batch = commands.add_parser('batch', help='批量添加、回复、解决、重新打开或更新元数据；默认提交成功项')
     batch.add_argument('file', help='JSON 文件；- 表示标准输入')
     batch.add_argument('--request-id', help='唯一请求 ID；也可在 JSON 对象中提供')
     batch.add_argument('--expected-revision', type=int)

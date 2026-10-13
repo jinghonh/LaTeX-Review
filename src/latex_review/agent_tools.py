@@ -47,7 +47,7 @@ def parser(prog: str) -> argparse.ArgumentParser:
 
 
 def error(exc: Exception) -> int:
-    emit({'error': str(exc)})
+    emit({'error': str(exc), **getattr(exc, 'details', {})})
     return 4
 
 

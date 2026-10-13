@@ -43,7 +43,7 @@ class AnnotationJobs:
         except Exception as exc:
             with self.lock:
                 self.jobs[task_id].update(state='failed', error='conflict' if isinstance(exc, AnnotationConflict) else 'invalid_request',
-                                          message=str(exc), updated_at=time.time())
+                                          message=str(exc), updated_at=time.time(), **getattr(exc, 'details', {}))
 
     def snapshot(self, task_id):
         with self.lock:

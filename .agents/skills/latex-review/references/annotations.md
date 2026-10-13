@@ -1,6 +1,6 @@
 # 报告批注
 
-使用 `latex-review-annotations` 操作已有报告。批注写入不等于论文修改。
+使用 `latex-review-annotations` 操作已有报告。命令缺失时用 `python -m latex_review.annotation_cli`，参数保持相同。批注写入不等于论文修改。
 
 1. 确认本地报告目录。只有端口时，读取 `http://127.0.0.1:PORT/api/report` 的 `report_directory`。旧服务没有接口时查找启动记录，确认目录后再操作。
 2. 查看 `--help`。先用摘要、字段、筛选和分页读取必要信息，再展开目标线程或正文。过滤 JSON 后展示结果。定位时保留完整原文；分页不是全文复核完成的证据。
@@ -78,3 +78,86 @@ POST 需要 JSON 和 `X-LaTeX-Review-Token` 请求头。
 完成状态为 `complete`，结果保存在 `result`。失败状态为 `failed`，保留错误原因。
 批量预检与提交沿用 `operation=batch`、`expected_revision`、`request_id`、`items`。
 预检增加 `dry_run=true`；提交可以提供返回的 `preflight_token`。
+
+## 标题、标签与轻量筛选
+
+`--summary` 返回 `id`、`title`、`author`、`resolved`、`updated_at` 和 `tags`，不展开消息或锚点。
+`author` 是初始消息作者。未设置标题时，使用初始消息首个非空行；列表标题最多 120 个字符。
+`--fields id,title,author,resolved,tags` 可以进一步选字段。
+`--tag` 精确匹配标签；重复指定时，线程必须包含全部标签。
+`metadata --tag` 替换整组标签；未指定的字段保持原值。
+标题最多 512 字节；最多 32 个标签，每个标签最多 128 字节，不能重复。
+空标题恢复自动标题；`--clear-tags` 清空标签。
+
+```sh
+latex-review-annotations REPORT_DIR add --quote '目标原文' --body '修改建议' --author Codex --title '引言修改' --tag '非实验部分详细修改'
+latex-review-annotations REPORT_DIR metadata THREAD_ID --title '引言修改' --tag '非实验部分详细修改' --tag '待复核'
+latex-review-annotations REPORT_DIR metadata THREAD_ID --clear-tags
+latex-review-annotations REPORT_DIR --summary --status unresolved --tag '非实验部分详细修改' --limit 20 --offset 0
+latex-review-annotations REPORT_DIR --summary --status unresolved --author Codex --limit 20
+latex-review-annotations REPORT_DIR --thread-id THREAD_ID --full
+```
+
+标题和标签先由 CLI/API 管理，网页不提供编辑控件。
+旧线程无需迁移。旧版离线报告可能拒绝含标题或标签的备份；重新生成报告后导入。
+
+## 按主题批量解决
+
+1. 用标签和状态筛选轻量列表，检查 `total_matched`，读取全部分页。
+2. 核对每条目标的证据，将确认的编号写入 `resolve.json`，冻结目标清单。
+3. 保存查询返回的修订号，设置 `expected_revision`，使用 `--atomic --dry-run` 预检。
+4. 核对逐项 `results`，使用同一请求 ID 和相同文件提交。
+5. 检查 `committed`、逐项结果和自动 `audit`；再次读取目标确认解决状态。
+
+```mermaid
+flowchart LR
+ A[标签筛选与分页] --> B[核对证据并冻结编号]
+ B --> C[修订号绑定与原子预检]
+ C --> D[提交同一批次]
+ D --> E[核对收据和解决状态]
+```
+
+以下 `17` 是示例修订号，执行时替换为查询返回的 `revision`。
+
+```json
+{
+  "expected_revision": 17,
+  "items": [
+    {"id": "resolve-01", "operation": "resolve", "thread_id": "THREAD_1"},
+    {"id": "resolve-02", "operation": "resolve", "thread_id": "THREAD_2"}
+  ]
+}
+```
+
+```sh
+latex-review-annotations REPORT_DIR batch resolve.json --request-id resolve-topic-01 --atomic --dry-run
+latex-review-annotations REPORT_DIR batch resolve.json --request-id resolve-topic-01 --atomic
+latex-review-annotations REPORT_DIR audit SNAPSHOT_FILE
+```
+
+`batch` 还支持 `reopen` 和 `update_metadata`。更新标签项示例：
+
+```json
+{"id":"tag-01","operation":"update_metadata","thread_id":"THREAD_1","tags":["非实验部分详细修改"]}
+```
+
+## 预检失效后的固定重试
+
+错误保留文字说明，并提供 `code`、`reasons`、`expected_revision` 和 `actual_revision`。
+预检的 `expected_revision` 是缓存修订号；`request_expected_revision` 是本次请求修订号。
+`reasons` 列出实际变化项：`annotation_revision_changed`、`content_changed`、`version_changed`、`payload_changed`、`expired` 或 `token_mismatch`。
+缺失缓存使用 `preflight_missing`；损坏缓存使用 `preflight_invalid`。
+
+1. 保存错误和原批次文件。先确认请求是否已提交；成功请求只核对原收据。
+2. 重新读取正文和批注状态，核对冻结目标；保留其他审阅者的修改。
+3. 更新 `expected_revision`。载荷不变且未提交时，沿用请求 ID；载荷变化时使用新 ID。
+4. 重新执行 `--dry-run`，检查逐项结果，使用新预检令牌或同一请求 ID 提交。
+5. 核对收据和 `audit`。部分成功批次只把失败项放入新批次，并使用新请求 ID。
+
+```mermaid
+flowchart LR
+ A[保存失效诊断] --> B[读取最新状态并核对冻结目标]
+ B --> C[更新修订号和请求 ID]
+ C --> D[重新预检]
+ D --> E[提交并核对收据]
+```

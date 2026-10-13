@@ -71,3 +71,23 @@ def test_async_conflict_retains_error_and_does_not_write(tmp_path):
         result = server.annotation_jobs.snapshot(job['task_id'])
         assert result['state'] == 'failed' and result['error'] == 'conflict'
         assert store.metadata(content)['revision'] == 0
+
+
+def test_async_preflight_preserves_structured_diagnostics(tmp_path):
+    from latex_review.annotation_jobs import AnnotationJobs
+    from test_annotation_batch import setup
+    from test_annotations import mutate
+    store, content, request = setup(tmp_path)
+    store.batch(content, {**request, 'dry_run': True})
+    mutate(store, content, 'create', selection=request['items'][0]['selection'], body='Other', author=AUTHOR, category='note')
+    jobs = AnnotationJobs()
+    try:
+        job = jobs.submit(lambda progress: store.batch(content, request, progress))
+        jobs.executor.shutdown(wait=True)
+        result = jobs.snapshot(job['task_id'])
+        assert result['state'] == 'failed' and result['error'] == 'conflict'
+        assert result['code'] == 'preflight_stale'
+        assert result['reasons'] == ['annotation_revision_changed']
+        assert result['expected_revision'] == 0 and result['actual_revision'] == 1
+    finally:
+        jobs.close()

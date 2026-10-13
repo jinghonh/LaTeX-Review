@@ -1,7 +1,7 @@
 # 运行审阅
 
 1. 先确认用户要求修改的章节、文件和对比基线。查看 **git status --short** 与 **git diff --name-status HEAD**。默认来源是磁盘工作区，包含暂存及未暂存的已跟踪修改和未忽略的未跟踪文件；其中也可能有本轮之前的工作。
-2. 用 **command -v latex-review** 确认命令行工具已安装。如果找不到，说明可在 Python 3.11 或更新版本的环境中运行 **python -m pip install /path/to/LaTeX-Review** 安装本工具。不要自行安装软件或修改论文源文件。
+2. 用 **command -v latex-review** 确认命令行工具已安装。如果找不到，先检查 **python -m latex_review.cli --help**。模块可用时用模块入口运行相同参数。模块也缺失时，说明可在 Python 3.11 或更新版本的环境中运行 **python -m pip install /path/to/LaTeX-Review** 安装本工具。不要自行安装软件或修改论文源文件。
 3. 按用户给出的来源选择模式。常用的 Git 模式为：
 
 ~~~sh
@@ -14,7 +14,7 @@ latex-review main.tex --output .latex-review/latest
 5. 先检查本次进程退出码，再读取 **run.json** 中的实际基线、阶段状态和降级原因。无效参数或配置可能保留旧清单。若 **diff.json** 存在，用 **latex-review-query REPORT_DIR** 分页读取主变更，按需用 **--change-id ID --include-raw** 读取原文；旧安装没有查询命令时直接读取 JSON。用户指定文件范围时，用 **latex-review-check-scope REPORT_DIR --allow PATTERN** 核对；章节范围仍由智能体核对。无论是否有差异文件，都独立读取存在的 **diagnostics.json**，检查每项诊断的严重级别、代码、说明和源码位置；来源失败时也阅读标准错误。对照用户指定范围、Git 变更清单及删除路径，指出超范围修改、删除、缺失依赖、源码定位不确定和需要判断的警告或错误。
 6. 仅当用户要求页面验收，或任务涉及报告界面时，执行浏览器验收。若存在 **report.html**：用 **latex-review-preview REPORT_DIR** 启动预览，启动前用 **latex-review-local list** 记录已有槽位，再保存 CLI 输出的稳定论文链接。命令不可用时，可在已安装本项目的同一 Python 环境运行 **python -m latex_review.serve REPORT_DIR**。服务自动读取用户全局翻译默认值，再叠加启动目录的项目配置；从其他目录启动且论文有局部设置时，以 **--config CONFIG_PATH** 指向该论文配置。服务就绪后，用可用且允许访问本机网页的浏览器工具打开该地址。启动服务本身不调用翻译 API。
 7. 核对页面内容与机器数据，查看实际渲染截图，检查图片、公式及错误提示；对报告中存在的筛选、阅读范围、主变更导航和句子明细跳转各执行一次，确认双侧整句着色与实际落点。分别记录通过、失败和未完成的项目；句子锚点缺失时按定位未完成记录，不能把段落高亮当作句子定位成功。用户要求翻译时，在停止本次服务前执行下述翻译分支，再进入清理步骤。外部编辑器协议跳转独立记录。若工具缺失或访问被禁止，保留机器数据检查结果，明确将渲染和交互验收标为未完成；遵守工具限制，不通过更换地址或工具规避访问禁令。
-8. 执行浏览器验收时，保存实际结果和已有截图等证据文件。执行了验收且存在本次 **run.json** 时，用 **latex-review-record-acceptance REPORT_DIR --status STATUS --evidence FILE** 记录实际结论；**STATUS** 选择 **passed**、**failed** 或 **incomplete**。该命令只保存声明。证据不足或工具受限时记录 **incomplete**。验收成功、失败或中断后，都在清理步骤中显式停止本次新建的槽位：向保存的终端会话发送 Ctrl+C，或仅向本次进程发送终止信号，并确认进程退出。用户明确要求继续预览时才保留。服务已停止时，说明临时地址已失效。
+8. 执行浏览器验收时，保存实际结果和已有截图等证据文件。执行了验收且存在本次 **run.json** 时，用 **latex-review-record-acceptance REPORT_DIR --status STATUS --evidence FILE** 记录实际结论；**STATUS** 选择 **passed**、**failed** 或 **incomplete**。该命令只保存声明。证据不足或工具受限时记录 **incomplete**。验收成功、失败或中断后，都在清理步骤中显式停止本次新建的槽位：从启动前后 **list** 清单确认本次新建的完整论文 ID，执行 **latex-review-local stop-paper PAPER_ID --kind diff**。再次运行 **list**，确认该槽位已停止。Ctrl+C 只断开附着客户端。用户明确要求继续预览时才保留。服务已停止时，说明临时地址已失效。
 未执行浏览器验收时，说明“未执行”，不生成验收记录。
 
 9. 向用户提供 **report.html** 的完整路径及报告目录，简述主变更、诊断、范围、删除检查结果及浏览器验收完成情况；执行了翻译时，同时交代译文覆盖、失败项、缓存复用和导出结果。支持本地文件链接时链接报告入口。
@@ -47,7 +47,7 @@ latex-review main.tex --output .latex-review/latest
 
 **latex-review-preview** 和 **latex-review --open-browser** 都使用常驻入口。
 启动成功后 CLI 返回。**--wait** 附着状态；Ctrl+C 只断开客户端。
-验收结束时只停止本次新建的槽位，保留此前已有服务。从 **list** 取得完整论文 ID，执行 **latex-review-local stop-paper PAPER_ID --kind diff**。
+验收结束时只停止本次新建的槽位，保留此前已有服务。从 **list** 取得完整论文 ID，执行 **latex-review-local stop-paper PAPER_ID --kind diff**。命令缺失时，将 **latex-review-local** 替换为 **python -m latex_review.local_service**；参数保持相同。
 新基线使用同一差异槽位串行替换。候选失败时保留旧报告。
 纯 **--upload** 不启动入口；加 **--open-browser** 时，发布先完成，本地阅读随后启动。
 

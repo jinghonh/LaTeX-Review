@@ -32,6 +32,28 @@ class AnnotationError(ValueError):
 class AnnotationConflict(AnnotationError):
     """A stale revision or an import conflict; callers must retain their draft."""
 
+    def __init__(self, message, details=None):
+        super().__init__(message)
+        self.details = details or {}
+
+
+def thread_metadata(value):
+    """Validate optional thread metadata without changing legacy threads."""
+    result = {}
+    if 'title' in value:
+        title = value['title']
+        if not isinstance(title, str) or len(title.encode('utf-8')) > 512:
+            raise AnnotationError('title 须为不超过 512 字节的文字；空字符串恢复自动标题')
+        result['title'] = title.strip()
+    if 'tags' in value:
+        tags = value['tags']
+        if not isinstance(tags, list) or len(tags) > 32:
+            raise AnnotationError('tags 须为最多 32 个标签的列表')
+        result['tags'] = [_text(tag, 'tag', 128).strip() for tag in tags]
+        if len(set(result['tags'])) != len(result['tags']):
+            raise AnnotationError('tags 不得包含重复标签')
+    return result
+
 
 def _hash(value):
     from .identity import identity_hash
@@ -699,7 +721,7 @@ class AnnotationStore:
     def inventory(self, content):
         """Audit inventory does not need anchors, histories or location computation."""
         with self._locked(restore_versions=False) as data:
-            threads = [{'id': t['id'], 'messages': [{k: v for k, v in m.items() if k in
+            threads = [{**{k: deepcopy(v) for k, v in t.items() if k in ('id', 'resolved', 'title', 'tags')}, 'messages': [{k: v for k, v in m.items() if k in
                        ('id', 'author', 'body', 'reply_to', 'deleted_at')} for m in t['messages']]}
                        for t in data['threads'].values() if not t.get('deleted_at')]
             return {'project_id': self.project_id, 'version_id': content['version_id'],
@@ -764,7 +786,9 @@ class AnnotationStore:
         revision = request['expected_revision']
         with self._locked() as data:
             if data['revision'] != revision:
-                raise AnnotationConflict('批注已被其他审阅者更新，请保留草稿并重新读取')
+                raise AnnotationConflict('批注已被其他审阅者更新，请保留草稿并重新读取',
+                    {'code': 'revision_conflict', 'reasons': ['annotation_revision_changed'],
+                     'expected_revision': revision, 'actual_revision': data['revision']})
             self._content(data, content)
             if progress:
                 progress('apply', 0, 1)
@@ -778,7 +802,7 @@ class AnnotationStore:
     @staticmethod
     def _validate_request(request):
         _keys(request, ('operation', 'expected_revision', 'thread_id', 'message_id', 'selection', 'body',
-                        'author', 'category', 'bundle', 'reply_to', 'suggested_replacement'), ('operation', 'expected_revision'))
+                        'author', 'category', 'bundle', 'reply_to', 'suggested_replacement', 'title', 'tags'), ('operation', 'expected_revision'))
         revision = _integer(request['expected_revision'], 'expected_revision')
         operation = request['operation']
         fields = {
@@ -786,13 +810,17 @@ class AnnotationStore:
             'reply': {'thread_id', 'body', 'author', 'category'},
             'edit': {'thread_id', 'message_id', 'body', 'category'},
             'delete_message': {'thread_id', 'message_id'}, 'delete_thread': {'thread_id'},
-            'resolve': {'thread_id'}, 'reopen': {'thread_id'},
+            'resolve': {'thread_id'}, 'reopen': {'thread_id'}, 'update_metadata': {'thread_id'},
             'associate': {'thread_id', 'selection'}, 'reconcile': set(), 'import': {'bundle'},
         }
         if not isinstance(operation, str) or operation not in fields:
             raise AnnotationError('未知批注操作')
-        _keys(request, fields[operation] | {'operation', 'expected_revision'} | ({'reply_to'} if operation == 'reply' else set()) | ({'suggested_replacement'} if operation in ('create', 'reply') else set()),
+        _keys(request, fields[operation] | {'operation', 'expected_revision'} | ({'reply_to'} if operation == 'reply' else set()) | ({'suggested_replacement'} if operation in ('create', 'reply') else set()) | ({'title', 'tags'} if operation in ('create', 'update_metadata') else set()),
               fields[operation] | {'operation', 'expected_revision'})
+        if operation in ('create', 'update_metadata'):
+            thread_metadata(request)
+        if operation == 'update_metadata' and not {'title', 'tags'}.intersection(request):
+            raise AnnotationError('更新元数据需要 title 或 tags')
 
     def _apply(self, data, content, request):
         operation = request['operation']
@@ -810,7 +838,8 @@ class AnnotationStore:
                 'created_version_id': content['version_id'], 'created_at': now, 'updated_at': now,
                 'resolved': False, 'deleted_at': None, 'messages': [message], 'original_anchor': deepcopy(anchor),
                 'current_anchor': deepcopy(anchor), 'associations': {content['version_id']: association},
-                'history': [{'at': now, 'method': 'created', 'anchor': deepcopy(anchor)}]}
+                'history': [{'at': now, 'method': 'created', 'anchor': deepcopy(anchor)}],
+                **thread_metadata(request)}
             result = {'thread_id': thread_id, 'message_id': message['id']}
         elif operation == 'reconcile':
             from .annotation_locations import LocationCache, expand_location
@@ -867,6 +896,9 @@ class AnnotationStore:
                     message.update(body=body, category=category, updated_at=now)
                 else:
                     message['deleted_at'] = now
+            elif operation == 'update_metadata':
+                thread.update(thread_metadata(request))
+                result = {'thread_id': thread_id}
             elif operation == 'delete_thread':
                 thread['deleted_at'] = now
             elif operation in ('resolve', 'reopen'):
@@ -941,9 +973,10 @@ class AnnotationStore:
 
     def _validate_thread(self, thread_id, thread, versions):
         _keys(thread, ('id', 'project_id', 'created_version_id', 'created_at', 'updated_at', 'resolved', 'deleted_at',
-                       'messages', 'original_anchor', 'current_anchor', 'associations', 'history'),
+                       'messages', 'original_anchor', 'current_anchor', 'associations', 'history', 'title', 'tags'),
               ('id', 'project_id', 'created_version_id', 'created_at', 'updated_at', 'resolved', 'deleted_at',
                'messages', 'original_anchor', 'current_anchor', 'associations', 'history'))
+        thread_metadata(thread)
         if thread['id'] != thread_id or thread['project_id'] != self.project_id or type(thread['resolved']) is not bool:
             raise AnnotationError('导入线程身份或状态无效')
         for name in ('created_at', 'updated_at'):

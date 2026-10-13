@@ -70,3 +70,28 @@ def test_snapshot_accepts_directory_alias_but_refuses_symlink_file(tmp_path, cap
     args[-1] = str(link)
     assert annotations_main(args) == 4
     assert '符号链接' in json.loads(capsys.readouterr().out)['error']
+
+
+def test_cli_preflight_diagnostics_and_fixed_retry(tmp_path, capsys):
+    content, _ = content_at(tmp_path / 'paper', 'Sentence.')
+    report = tmp_path / 'report'
+    report.mkdir()
+    (report / MANIFEST).write_text(json.dumps(content))
+    batch = tmp_path / 'batch.json'
+    batch.write_text(json.dumps([{'id': 'a', 'operation': 'add', 'quote': 'Sentence.', 'body': 'A'}]))
+    args = [str(report), 'batch', str(batch), '--request-id', 'recheck', '--author', 'Codex', '--atomic']
+    assert annotations_main([*args, '--dry-run']) == 0
+    capsys.readouterr()
+    assert annotations_main([str(report), 'add', '--quote', 'Sentence.', '--body', 'Other writer', '--author', 'Other']) == 0
+    capsys.readouterr()
+    assert annotations_main(args) == 4
+    failure = json.loads(capsys.readouterr().out)
+    assert failure['code'] == 'preflight_stale'
+    assert failure['reasons'] == ['annotation_revision_changed']
+    assert failure['expected_revision'] == 0 and failure['actual_revision'] == 1
+    assert annotations_main([*args, '--dry-run']) == 0
+    capsys.readouterr()
+    assert annotations_main(args) == 0
+    receipt = json.loads(capsys.readouterr().out)
+    assert receipt['preflight_reused'] and receipt['revision'] == 2 and receipt['audit']['ok']
+    assert len(AnnotationStore.for_content(content).read(content)['threads']) == 2

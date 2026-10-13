@@ -87,6 +87,7 @@ Git 比较使用原始仓库根目录，不使用临时快照目录。实时预�
 
 - `created_version_id`、`created_at`、`updated_at`、`resolved`、`deleted_at`。
 - `messages`：初始批注及回复，按创建顺序保存。
+- 可选 `title`、`tags`：线程标题和主题标签，旧线程无需迁移。
 - `original_anchor`：创建时的原文及完整锚点。
 - `current_anchor`：最近持久化的成功关联。
 - `associations`：按内容版本索引的定位结果。
@@ -188,12 +189,17 @@ Python 公开入口：
 | `edit` | `thread_id`, `message_id`, `body`, `category` |
 | `delete_message` | `thread_id`, `message_id` |
 | `delete_thread`, `resolve`, `reopen` | `thread_id` |
+| `update_metadata` | `thread_id`；至少提供一个可选字段 `title` 或 `tags` |
 | `associate` | `thread_id`, `selection` |
 | `reconcile` | 无 |
 | `import` | `bundle` |
 | `batch` | `request_id`, `items`；可选 `atomic`, `dry_run` |
 | `suggestion_preview`, `suggestion_apply` | `thread_id`, `message_id` |
 
+`create` 可携带 `title`、`tags`。`update_metadata` 只更新提供的字段，并更新线程时间及共享修订号。
+标题最多 512 字节；空标题恢复首行备用标题。标签最多 32 个，每个最多 128 字节；标签不可重复。
+`tags` 替换整个标签列表；空数组清空标签。Python 与离线 JavaScript 使用相同校验。
+旧格式仍使用 `schema_version=1.0`。升级后的报告可以读取旧备份；旧报告需要重新生成才能读取新元数据。
 `create`、`reply` 可携带 `suggested_replacement={original_chunk,replacement_chunk}`。
 批量每项包含唯一 `id` 及单条操作字段，不携带独立修订号。默认提交成功项，并逐条返回结果。
 批量锁覆盖全部校验及一次原子存储写入。原子模式失败只记录幂等收据，线程和修订号保持不变；预检不记录收据。
@@ -220,6 +226,9 @@ CLI 的精简输出、预检缓存及批量快照见 [智能体接口](agent-too
 其信封仍须包含项目和版本 ID，但该只读操作不要求 `expected_revision`。
 修改成功返回线程视图、最新 `revision` 和 `result`。
 创建结果提供线程和初始内容 ID；回复结果提供内容 ID。
+预检冲突通过 `AnnotationConflict.details` 提供 `code`、`reasons`、预期及实际修订号。
+CLI、同步 HTTP 409 和异步失败任务保留这些字段；原有文字错误字段保持兼容。
+实际失效原因与固定重试流程见 [智能体接口](agent-tools.md#预检失效后的固定重试)。
 
 ## CLI 与本机 HTTP
 

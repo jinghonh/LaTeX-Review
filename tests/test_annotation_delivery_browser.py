@@ -57,8 +57,15 @@ def test_offline_lifecycle_reopen_export_import(live_report,chrome,scheme,tmp_pa
         assert p.evaluate('reviewAnnotations.getSnapshot().threads[0].messages.at(-1).reply_to')==mid
         assert p.evaluate('async id=>reviewAnnotations.update({operation:"resolve",thread_id:id})',tid)
         assert p.evaluate('async id=>reviewAnnotations.update({operation:"reopen",thread_id:id})',tid)
+        assert p.evaluate('async id=>reviewAnnotations.update({operation:"update_metadata",thread_id:id,title:"Topic title",tags:["non-experiment","review"]})',tid)
         bundle=p.evaluate('reviewAnnotationDelivery.backup()')
+        assert bundle['threads'][tid]['title']=='Topic title'
+        assert bundle['threads'][tid]['tags']==['non-experiment','review']
         assert bundle['threads'][tid]['messages'][1]['edits'][0]['body']=='Reply $x$'
+        # The portable metadata contract is also accepted by the Python store.
+        content=load_content(output);store=AnnotationStore.for_content(content)
+        imported=store.dispatch(content,{'operation':'import','expected_revision':0,'bundle':bundle})
+        assert imported['threads'][0]['title']=='Topic title'
         assert p.evaluate('async b=>reviewAnnotationDelivery.importBundle(b)',bundle)
         conflict=json.loads(json.dumps(bundle));conflict['threads'][tid]['messages'][0]['body']='conflict'
         assert not p.evaluate('async b=>reviewAnnotationDelivery.importBundle(b)',conflict)

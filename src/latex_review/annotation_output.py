@@ -9,7 +9,8 @@ def write_summary(value, thread_id=None, message_id=None):
 
 
 def add_read_options(parser):
-    parser.add_argument('--summary', action='store_true')
+    parser.add_argument('--summary', action='store_true', help='轻量编号、标题、初始作者、状态和标签列表')
+    parser.add_argument('--tag', action='append', help='仅返回包含全部指定标签的线程，可重复')
     parser.add_argument('--full', action='store_true', help='展开完整正文、锚点和历史')
     parser.add_argument('--history', action='store_true', help='按需展开批注历史')
     parser.add_argument('--fields', help='逗号分隔的线程或正文单元字段')
@@ -29,6 +30,8 @@ def read_projection(value, args):
     for item in items:
         association = item.get('association') or {}
         anchor = association.get('anchor') or association.get('container') or item.get('original_anchor') or {}
+        if getattr(args, 'tag', None) and (key != 'threads' or not set(args.tag).issubset(item.get('tags', []))):
+            continue
         if args.thread_id and (key != 'threads' or item['id'] != args.thread_id):
             continue
         if args.unit_id and (item['id'] if key == 'units' else anchor.get('unit_id')) != args.unit_id:
@@ -44,15 +47,20 @@ def read_projection(value, args):
         selected.append(item)
     fields = [field.strip() for field in args.fields.split(',')] if args.fields else None
     known = set().union(*(item.keys() for item in items)) if items else ({'id', 'kind', 'source', 'section_path', 'raw_latex', 'text', 'atoms', 'order'} if key == 'units' else {'id', 'resolved', 'messages', 'original_anchor', 'association', 'updated_at', 'created_at'})
+    if key == 'threads':
+        known.update(('title', 'author', 'tags'))
     if fields and any(not field or field not in known for field in fields):
         raise ValueError('字段名称无效')
     if args.summary and fields is None:
-        fields = ['id', 'kind', 'source', 'section_path'] if key == 'units' else ['id', 'resolved', 'updated_at']
+        fields = ['id', 'kind', 'source', 'section_path'] if key == 'units' else None
     compact = not args.full and fields is None
     limit = args.limit if args.limit is not None else (50 if compact or args.summary else None)
     paged = selected[args.offset:] if limit is None else selected[args.offset:args.offset + limit]
     if fields:
-        paged = [{field: item.get(field) for field in fields} for item in paged]
+        paged = [{field: ({**item, **thread_list_item(item)} if key == 'threads' else item).get(field)
+                  for field in fields} for item in paged]
+    elif args.summary and key == 'threads':
+        paged = [thread_list_item(item) for item in paged]
     elif compact:
         paged = [unit_summary(item) if key == 'units' else thread_summary(item) for item in paged]
     if args.history and key == 'threads':
@@ -68,11 +76,18 @@ def unit_summary(unit):
             'preview': unit['text'][:160]}
 
 
+def thread_list_item(thread):
+    initial = thread['messages'][0]
+    title = thread.get('title') or next((line.strip() for line in initial['body'].splitlines() if line.strip()), '')
+    return {'id': thread['id'], 'title': title[:120], 'author': initial['author']['name'],
+            'resolved': thread['resolved'], 'updated_at': thread['updated_at'], 'tags': thread.get('tags', [])}
+
+
 def thread_summary(thread):
     association = thread['association']
     anchor = association.get('anchor') or association.get('container') or thread['original_anchor']
     messages = [m for m in thread['messages'] if not m.get('deleted_at')]
-    return {**{key: thread.get(key) for key in ('id', 'resolved', 'updated_at')},
+    return {**thread_list_item(thread),
             'location_status': association['status'], 'reason': association.get('reason'),
             'unit_id': anchor.get('unit_id'), 'source': anchor.get('source'),
             'selection_deleted': (association.get('container') or {}).get('selection_deleted', False),

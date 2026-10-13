@@ -106,3 +106,40 @@ def test_all_failed_batch_keeps_revision_and_audit_detects_duplicate_replies(tmp
     response = store.batch(content, request)
     checked = audit(before, store.read(content), response, expected_items=request['items'])
     assert not checked['ok'] and any(issue['code'] == 'duplicate_reply' for issue in checked['issues'])
+
+
+def test_resolve_25_frozen_targets_and_audit_state(tmp_path):
+    store, content, request = setup(tmp_path)
+    template = request['items'][0]
+    request['items'] = [{**template, 'id': f'create-{index}', 'tags': ['topic']} for index in range(25)]
+    created = store.batch(content, request)
+    before = store.inventory(content)
+    targets = [result['thread_id'] for result in created['results']]
+    batch = {'operation': 'batch', 'expected_revision': created['revision'], 'request_id': 'resolve-25', 'atomic': True,
+             'items': [{'id': f'resolve-{index}', 'operation': 'resolve', 'thread_id': tid} for index, tid in enumerate(targets)]}
+    assert all(result['ok'] for result in store.batch(content, {**batch, 'dry_run': True})['results'])
+    result = store.batch(content, batch)
+    assert result['committed'] and result['preflight_reused']
+    assert all(t['resolved'] for t in store.inventory(content)['threads'])
+    assert audit(before, store.inventory(content), result, expected_items=batch['items'])['ok']
+    assert store.batch(content, batch) == result
+    reopened = {'operation': 'batch', 'expected_revision': result['revision'], 'request_id': 'metadata-reopen', 'atomic': True,
+                'items': [{'id': 'reopen', 'operation': 'reopen', 'thread_id': targets[0]},
+                          {'id': 'metadata', 'operation': 'update_metadata', 'thread_id': targets[0], 'title': 'Reviewed', 'tags': ['other']}]}
+    updated = store.batch(content, reopened)
+    verification = audit(before, store.inventory(content), result, expected_items=batch['items'])
+    assert any(issue['code'] == 'wrong_resolved_state' for issue in verification['issues'])
+    assert audit(before, store.inventory(content), updated, expected_items=reopened['items'])['ok']
+
+
+def test_metadata_atomic_rollback_and_old_backup(tmp_path):
+    store, content, request = setup(tmp_path)
+    created = store.batch(content, request)
+    tid = created['results'][0]['thread_id']
+    bundle = store.export()
+    assert 'title' not in bundle['threads'][tid] and 'tags' not in bundle['threads'][tid]
+    batch = {'operation': 'batch', 'expected_revision': 1, 'request_id': 'metadata-bad', 'atomic': True,
+             'items': [{'id': 'good', 'operation': 'update_metadata', 'thread_id': tid, 'tags': ['topic']},
+                       {'id': 'bad', 'operation': 'update_metadata', 'thread_id': tid, 'tags': ['x', 'x']}]}
+    result = store.batch(content, batch)
+    assert not result['committed'] and store.export() == bundle

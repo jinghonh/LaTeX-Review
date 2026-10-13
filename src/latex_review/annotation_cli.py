@@ -52,6 +52,13 @@ def build_request(content, state, args):
         request.update(operation='create', selection=find_selection(content, args))
     else:
         request['thread_id'] = args.thread_id
+    if args.command in ('add', 'metadata'):
+        if args.command == 'metadata':
+            request['operation'] = 'update_metadata'
+        if args.title is not None:
+            request['title'] = args.title
+        if args.tag is not None or getattr(args, 'clear_tags', False):
+            request['tags'] = args.tag or []
     if args.command in ('preview', 'apply'):
         request.update(operation='suggestion_' + args.command, message_id=args.message_id)
     if args.command in ('add', 'reply'):
@@ -85,7 +92,7 @@ def add_commands(parser):
     commands = parser.add_subparsers(dest='command')
     for name, help_text in (('add', '按原文或完整公式添加批注'), ('reply', '回复批注或指定消息'),
                             ('edit', '编辑指定消息，保留原作者'), ('delete', '删除线程或指定消息'),
-                            ('resolve', '将批注标记为已解决'), ('preview', '预览替换建议差异'), ('apply', '显式应用替换建议')):
+                            ('resolve', '将批注标记为已解决'), ('metadata', '更新线程标题或标签'), ('preview', '预览替换建议差异'), ('apply', '显式应用替换建议')):
         command = commands.add_parser(name, help=help_text)
         command.add_argument('--full', action='store_true', help='返回完整写入结果')
         if name != 'add':
@@ -100,6 +107,12 @@ def add_commands(parser):
             command.add_argument('--original-chunk', help='建议替换的原始 LaTeX 块')
             command.add_argument('--replacement-chunk', help='替换 LaTeX 块，可为空字符串')
             command.add_argument('--author', required=True, help='作者名称；身份固定为 agent')
+        if name in ('add', 'metadata'):
+            command.add_argument('--title', help='线程标题；空字符串恢复自动标题')
+            labels = command.add_mutually_exclusive_group()
+            labels.add_argument('--tag', action='append', help='替换线程标签，可重复')
+        if name == 'metadata':
+            labels.add_argument('--clear-tags', action='store_true', help='清空线程标签')
         if name == 'add':
             command.add_argument('--quote', help='原文；公式模式须包含完整 LaTeX 包装')
             command.add_argument('--unit-id', help='只搜索指定正文单元')
@@ -113,3 +126,8 @@ def add_commands(parser):
             command.add_argument('--message-id', help='只删除指定消息；默认删除整条批注及回复')
             command.add_argument('--yes', action='store_true', help='确认删除')
     return commands
+
+
+if __name__ == '__main__':
+    from .agent_tools import annotations_main
+    raise SystemExit(annotations_main())

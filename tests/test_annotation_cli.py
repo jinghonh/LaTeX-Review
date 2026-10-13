@@ -226,3 +226,46 @@ def test_formula_normalization_preserves_meaning():
     assert normalize_formula('$x + 1$') == normalize_formula(r'\(x+1\)')
     assert normalize_formula(r'$\alpha x$') != normalize_formula(r'$\alphax$')
     assert normalize_formula(r'$\text{a b}$') != normalize_formula(r'$\text{ab}$')
+
+
+def test_metadata_summary_filters_and_backup_round_trip(report, capsys):
+    code, created = call(report, capsys, 'add', '--quote', 'Other Alpha beta.',
+                         '--body', '\nLegacy title\nLong details', '--author', 'Codex')
+    assert code == 0
+    tid = created['result']['thread_id']
+    code, summary = call(report, capsys, '--summary')
+    item = summary['threads'][0]
+    assert item['title'] == 'Legacy title' and item['author'] == 'Codex' and item['tags'] == []
+    assert set(item) == {'id', 'title', 'author', 'tags', 'resolved', 'updated_at'}
+    code, _ = call(report, capsys, 'metadata', tid, '--title', 'Explicit title', '--tag', 'non-experiment', '--tag', 'review')
+    assert code == 0
+    code, summary = call(report, capsys, '--summary', '--tag', 'non-experiment', '--tag', 'review', '--status', 'unresolved')
+    assert summary['total_matched'] == 1 and summary['threads'][0]['title'] == 'Explicit title'
+    assert call(report, capsys, '--summary', '--tag', 'missing')[1]['total_matched'] == 0
+    backup = report[2].export()
+    assert report[2].dispatch(report[1], {'operation': 'import', 'expected_revision': 2, 'bundle': backup})['result']['duplicates'] == 1
+    code, fields = call(report, capsys, '--fields', 'id,title,author,tags')
+    assert fields['threads'][0]['tags'] == ['non-experiment', 'review']
+    code, _ = call(report, capsys, 'metadata', tid, '--title', '', '--clear-tags')
+    assert code == 0
+    assert call(report, capsys, '--summary')[1]['threads'][0]['title'] == 'Legacy title'
+    assert call(report, capsys, '--summary')[1]['threads'][0]['tags'] == []
+
+
+@pytest.mark.parametrize('options', [[], ['--tag', 'duplicate', '--tag', 'duplicate'], ['--title', '界' * 171]])
+def test_invalid_metadata_does_not_write(report, capsys, options):
+    _, created = call(report, capsys, 'add', '--quote', 'Other Alpha beta.', '--body', 'Initial', '--author', 'Codex')
+    tid = created['result']['thread_id']
+    code, _ = call(report, capsys, 'metadata', tid, *options)
+    assert code == 4 and report[2].metadata(report[1])['revision'] == 1
+
+
+def test_add_metadata_and_module_entry(report, capsys):
+    import subprocess
+    import sys
+    code, created = call(report, capsys, 'add', '--quote', 'Other Alpha beta.', '--body', 'Initial',
+                         '--author', 'Codex', '--title', 'Short title', '--tag', 'topic')
+    assert code == 0 and created['threads'][0]['title'] == 'Short title'
+    result = subprocess.run([sys.executable, '-m', 'latex_review.annotation_cli', str(report[0]), '--summary', '--tag', 'topic'],
+                            capture_output=True, text=True, check=True)
+    assert json.loads(result.stdout)['threads'][0]['title'] == 'Short title'

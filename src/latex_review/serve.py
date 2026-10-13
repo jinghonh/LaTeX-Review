@@ -185,7 +185,7 @@ class ReportHandler(SimpleHTTPRequestHandler):
             value = self._execute_annotation(envelope, None, self.directory, self.server)
             self._json(value)
         except AnnotationConflict as exc:
-            self._json({"message": str(exc), "error": "conflict"}, 409)
+            self._json({"message": str(exc), "error": "conflict", **exc.details}, 409)
         except (OSError, ValueError, TypeError, KeyError, UnicodeError) as exc:
             self._json({"message": str(exc), "error": "invalid_request"}, 400)
 

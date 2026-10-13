@@ -156,3 +156,36 @@ def test_batch_does_not_construct_location_view(tmp_path, monkeypatch):
     monkeypatch.setattr(store, '_view', unexpected)
     assert store.batch(content, {**request, 'dry_run': True})['dry_run']
     assert store.batch(content, request)['committed']
+
+
+@pytest.mark.parametrize('change,reason', [('revision', 'annotation_revision_changed'), ('body', 'payload_changed'),
+                                         ('version', 'version_changed'), ('content', 'content_changed'),
+                                         ('expiry', 'expired'), ('token', 'token_mismatch')])
+def test_preflight_reports_actual_change(tmp_path, monkeypatch, change, reason):
+    from latex_review import annotation_preflight
+    store, content, request = setup(tmp_path)
+    preview = store.batch(content, {**request, 'dry_run': True})
+    if change == 'revision':
+        mutate(store, content, 'create', selection=request['items'][0]['selection'], body='Other', author=AUTHOR, category='note')
+    elif change == 'body':
+        request['items'][0]['body'] = 'Changed'
+    elif change == 'version':
+        content = deepcopy(content)
+        content['version_id'] = 'a' * 64
+    elif change == 'content':
+        content = deepcopy(content)
+        content['units'][0]['text'] += ' Changed'
+    elif change == 'expiry':
+        monkeypatch.setattr(annotation_preflight.time, 'time', lambda: preview['preflight_expires_at'] + 1)
+    else:
+        request['preflight_token'] = 'wrong'
+    with pytest.raises(AnnotationConflict) as caught:
+        store.batch(content, request)
+    detail = caught.value.details
+    assert detail['code'] == 'preflight_stale' and reason in detail['reasons']
+    assert detail['expected_revision'] == 0
+    assert detail['actual_revision'] == (1 if change == 'revision' else 0)
+    if change == 'version':
+        assert 'payload_changed' not in detail['reasons']
+    else:
+        assert detail['reasons'] == [reason]

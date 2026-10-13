@@ -326,6 +326,10 @@ def test_cli_and_real_http_use_same_version_checked_contract(tmp_path, capsys):
             with pytest.raises(HTTPError) as exc:
                 post(envelope)
             assert exc.value.code == 409
+            detail = json.load(exc.value)
+            assert detail['code'] == 'revision_conflict'
+            assert detail['expected_revision'] == 1 and detail['actual_revision'] == 2
+            assert detail['reasons'] == ['annotation_revision_changed']
             for token, origin in (('', None), ('bad', None), (state['token'], 'https://evil.example')):
                 with pytest.raises(HTTPError) as exc:
                     post(envelope, token, origin)

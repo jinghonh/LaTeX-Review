@@ -32,7 +32,17 @@ def audit(snapshot_before, snapshot_after, results=None, *, expected_items=None)
         if not thread:
             issues.append({'code': 'missing_thread', 'id': item['id'], 'thread_id': thread_id})
             continue
-        if target.get('operation') not in ('create', 'reply'):
+        operation = target.get('operation')
+        if operation in ('resolve', 'reopen') and thread.get('resolved') != (operation == 'resolve'):
+            issues.append({'code': 'wrong_resolved_state', 'id': item['id'], 'thread_id': thread_id})
+        if operation in ('create', 'update_metadata'):
+            for field in ('title', 'tags'):
+                expected = item.get(field)
+                if field in item:
+                    expected = expected.strip() if field == 'title' else [tag.strip() for tag in expected]
+                    if thread.get(field) != expected:
+                        issues.append({'code': 'wrong_metadata', 'id': item['id'], 'thread_id': thread_id, 'field': field})
+        if operation not in ('create', 'reply'):
             continue
         messages = [m for m in thread['messages'] if not m.get('deleted_at')]
         message_id = target.get('message_id')

@@ -74,6 +74,7 @@ flowchart LR
 
 ## 批注读取与修改
 
+命令缺失时使用 `python -m latex_review.annotation_cli`，参数保持相同。
 优先使用高层命令。命令自动读取项目、正文版本和当前修订号，无需创建请求 JSON。
 `REPORT_DIR` 表示包含 `annotation-content.json` 的本地报告目录，也可传报告文件路径；不接受 HTTP 地址。
 
@@ -121,7 +122,7 @@ latex-review-annotations REPORT_DIR add --formula --unit-id UNIT_ID --body '公�
 默认读取返回最多 50 条摘要。摘要包含作者、消息预览、定位状态和源码位置，不携带完整锚点或历史。
 使用 `--full` 展开完整数据；使用 `--history` 按需展开历史。`--content` 也默认摘要，定位坐标使用 `--content --full`。
 读取支持 `--summary`、`--fields`、`--limit`、`--offset`。分页返回 `total_matched`；`--author` 默认忽略大小写。
-过滤参数为 `--thread-id`、`--unit-id`、`--status`、`--author`、`--kind`。
+过滤参数为 `--thread-id`、`--unit-id`、`--status`、`--author`、`--kind`、`--tag`。
 
 ```sh
 latex-review-annotations REPORT_DIR --summary --limit 20
@@ -160,7 +161,7 @@ CLI 将阶段及完成条数写到 stderr。stdout 保持单个 JSON；`--quiet-
 批量执行只复制受影响线程，不逐项复制所有正文版本。审计读取不执行锚点定位。响应提供全部 `results`、`committed` 和修订号。
 相同请求 ID 和内容重试返回原收据；修订号不属于幂等载荷。不同内容使用相同 ID 返回冲突。
 提交前保存线程快照，默认位于项目 `.latex-review/annotation-batches/`，响应返回 `snapshot_file`。
-自动 `audit` 核对消息、作者、父消息及重复回复；外部新增线程和消息单独列出。再次复核快照可以发现后续新增批注。
+自动 `audit` 核对消息、作者、父消息、解决状态、标题、标签及重复回复；外部新增线程和消息单独列出。再次复核快照可以发现后续新增批注。
 复核回复包含判断、依据和剩余问题。回复完成与问题解决分开；证据不足时保持未解决。
 
 ### 源码建议
@@ -224,3 +225,87 @@ latex-review-annotations /path/to/report --request request.json
 换版迁移使用 `operation=reconcile`。手动关联使用 `operation=associate` 和新版本选区。
 冲突时保留输入，重新读取修订号后检查对象。不要自动覆盖冲突。
 完整字段及导入规则见 [批注契约](report-annotations-contract.md)。
+
+
+## 标题、标签与轻量筛选
+
+`--summary` 返回 `id`、`title`、`author`、`resolved`、`updated_at` 和 `tags`，不展开消息或锚点。
+`author` 是初始消息作者。未设置标题时，使用初始消息首个非空行；列表标题最多 120 个字符。
+`--fields id,title,author,resolved,tags` 可以进一步选字段。
+`--tag` 精确匹配标签；重复指定时，线程必须包含全部标签。
+`metadata --tag` 替换整组标签；未指定的字段保持原值。
+标题最多 512 字节；最多 32 个标签，每个标签最多 128 字节，不能重复。
+空标题恢复自动标题；`--clear-tags` 清空标签。
+
+```sh
+latex-review-annotations REPORT_DIR add --quote '目标原文' --body '修改建议' --author Codex --title '引言修改' --tag '非实验部分详细修改'
+latex-review-annotations REPORT_DIR metadata THREAD_ID --title '引言修改' --tag '非实验部分详细修改' --tag '待复核'
+latex-review-annotations REPORT_DIR metadata THREAD_ID --clear-tags
+latex-review-annotations REPORT_DIR --summary --status unresolved --tag '非实验部分详细修改' --limit 20 --offset 0
+latex-review-annotations REPORT_DIR --summary --status unresolved --author Codex --limit 20
+latex-review-annotations REPORT_DIR --thread-id THREAD_ID --full
+```
+
+标题和标签先由 CLI/API 管理，网页不提供编辑控件。
+旧线程无需迁移。旧版离线报告可能拒绝含标题或标签的备份；重新生成报告后导入。
+
+## 按主题批量解决
+
+1. 用标签和状态筛选轻量列表，检查 `total_matched`，读取全部分页。
+2. 核对每条目标的证据，将确认的编号写入 `resolve.json`，冻结目标清单。
+3. 保存查询返回的修订号，设置 `expected_revision`，使用 `--atomic --dry-run` 预检。
+4. 核对逐项 `results`，使用同一请求 ID 和相同文件提交。
+5. 检查 `committed`、逐项结果和自动 `audit`；再次读取目标确认解决状态。
+
+```mermaid
+flowchart LR
+ A[标签筛选与分页] --> B[核对证据并冻结编号]
+ B --> C[修订号绑定与原子预检]
+ C --> D[提交同一批次]
+ D --> E[核对收据和解决状态]
+```
+
+以下 `17` 是示例修订号，执行时替换为查询返回的 `revision`。
+
+```json
+{
+  "expected_revision": 17,
+  "items": [
+    {"id": "resolve-01", "operation": "resolve", "thread_id": "THREAD_1"},
+    {"id": "resolve-02", "operation": "resolve", "thread_id": "THREAD_2"}
+  ]
+}
+```
+
+```sh
+latex-review-annotations REPORT_DIR batch resolve.json --request-id resolve-topic-01 --atomic --dry-run
+latex-review-annotations REPORT_DIR batch resolve.json --request-id resolve-topic-01 --atomic
+latex-review-annotations REPORT_DIR audit SNAPSHOT_FILE
+```
+
+`batch` 还支持 `reopen` 和 `update_metadata`。更新标签项示例：
+
+```json
+{"id":"tag-01","operation":"update_metadata","thread_id":"THREAD_1","tags":["非实验部分详细修改"]}
+```
+
+## 预检失效后的固定重试
+
+错误保留文字说明，并提供 `code`、`reasons`、`expected_revision` 和 `actual_revision`。
+预检的 `expected_revision` 是缓存修订号；`request_expected_revision` 是本次请求修订号。
+`reasons` 列出实际变化项：`annotation_revision_changed`、`content_changed`、`version_changed`、`payload_changed`、`expired` 或 `token_mismatch`。
+缺失缓存使用 `preflight_missing`；损坏缓存使用 `preflight_invalid`。
+
+1. 保存错误和原批次文件。先确认请求是否已提交；成功请求只核对原收据。
+2. 重新读取正文和批注状态，核对冻结目标；保留其他审阅者的修改。
+3. 更新 `expected_revision`。载荷不变且未提交时，沿用请求 ID；载荷变化时使用新 ID。
+4. 重新执行 `--dry-run`，检查逐项结果，使用新预检令牌或同一请求 ID 提交。
+5. 核对收据和 `audit`。部分成功批次只把失败项放入新批次，并使用新请求 ID。
+
+```mermaid
+flowchart LR
+ A[保存失效诊断] --> B[读取最新状态并核对冻结目标]
+ B --> C[更新修订号和请求 ID]
+ C --> D[重新预检]
+ D --> E[提交并核对收据]
+```
