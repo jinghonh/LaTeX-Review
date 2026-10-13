@@ -10,7 +10,6 @@ from copy import deepcopy
 from datetime import datetime, timezone
 from difflib import SequenceMatcher
 import fcntl
-import hashlib
 from html.parser import HTMLParser
 import json
 import os
@@ -35,8 +34,8 @@ class AnnotationConflict(AnnotationError):
 
 
 def _hash(value):
-    return hashlib.sha256(json.dumps(value, ensure_ascii=False, sort_keys=True,
-                                    separators=(',', ':')).encode()).hexdigest()
+    from .identity import identity_hash
+    return identity_hash(value)
 
 
 def _now():

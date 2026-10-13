@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>__TITLE__ · LaTeX Review</title>
+<style>
+html,body{margin:0;width:100%;height:100%;overflow:hidden}
+iframe{display:block;width:100%;height:100%;border:0}
+</style>
+</head>
+<body>
+<iframe title="__TITLE__" src="__WORKER_ORIGIN__/report.html" referrerpolicy="no-referrer"></iframe>
+<script>
+const generation=__GENERATION__;
+async function refreshWorker(){
+  try{
+    const response=await fetch('/api/v1/papers');
+    if(!response.ok)return;
+    const {papers}=await response.json();
+    const paper=papers.find(p=>p.paper_id==='__PAPER_ID__');
+    const slot=paper?.slots?.__KIND__;
+    if(slot&&slot.state!=='updating'&&slot.generation!==generation)location.reload();
+  }catch{}
+}
+setInterval(refreshWorker,2000);
+</script>
+</body>
+</html>

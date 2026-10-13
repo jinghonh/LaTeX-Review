@@ -304,7 +304,9 @@ def test_open_browser_previews_generated_report_and_preserves_status(tmp_path, m
     assert cli.main(args) == 0
     assert calls == []
     assert cli.main([*args, '--open-browser']) == 0
-    assert calls == [[str(tmp_path / 'custom-report'), '--open-browser', '--config', str(config)]]
+    assert len(calls) == 1
+    assert Path(calls[0][0]) != tmp_path / 'custom-report'  # Frozen private browser copy.
+    assert calls[0][1:] == ['--open-browser', '--translation-cache-dir', str(tmp_path / 'translation-cache'), '--config', str(config)]
     (tmp_path / 'main.tex').write_text(r'\section{A}\odd{unknown}', encoding='utf-8')
     assert cli.main([*args, '--open-browser']) == 2
     monkeypatch.setattr(serve, 'main', lambda args: 4)

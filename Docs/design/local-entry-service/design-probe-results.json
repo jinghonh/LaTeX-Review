@@ -1,0 +1,12 @@
+{
+  "race_requests": 24,
+  "owners": 1,
+  "busy": 23,
+  "worker_pid": 2921,
+  "owner_pipe_close_worker_exit": 0,
+  "worker_exit_ms": 5,
+  "lock_reacquired": true,
+  "fixed_port_conflict_rejected": true,
+  "symlink_identity_equal": true,
+  "platform": "Darwin"
+}

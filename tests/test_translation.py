@@ -882,11 +882,12 @@ def test_preview_exits_promptly_with_translation_in_flight(provider, translation
                     'api_key_env="TEST_TRANSLATION_KEY"\ntimeout=30\n')
     gate.clear()
     process = subprocess.Popen([sys.executable, "-m", "latex_review.serve", str(report.directory),
-                                "--config", str(path)], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+                                "--config", str(path), "--wait"], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
     try:
         address = process.stdout.readline().strip()
         assert address.startswith("http://127.0.0.1:")
-        base = address.removesuffix("/report.html")
+        from test_local_core import report_url
+        base = report_url(address).rsplit("/", 1)[0]
         with urlopen(base + "/api/translation/status") as response:
             token = json.load(response)["token"]
         request = Request(base + "/api/translation/start", data=json.dumps({"units": [units[0]["id"]]}).encode(),
@@ -896,6 +897,11 @@ def test_preview_exits_promptly_with_translation_in_flight(provider, translation
         _wait(lambda: len(calls) == 1)
         process.send_signal(stop_signal)
         assert process.wait(timeout=1.5) == 0
+        # Detaching a CLI must not stop a shared reading service.
+        with urlopen(address) as response:
+            assert response.status == 200
+        from latex_review import local_client
+        local_client.stop()
         with create_server(report.directory, int(base.rsplit(":", 1)[1])):
             pass
     finally:

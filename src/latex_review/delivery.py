@@ -255,6 +255,12 @@ class PreparedPublication:
 
 
 def prepare_publication(directory: Path, slug: str, translation_config: dict | None = None) -> PreparedPublication:
+    from .report_rebuild import rebuild_lock
+    with rebuild_lock(directory):
+        return _prepare_publication(directory, slug, translation_config)
+
+
+def _prepare_publication(directory: Path, slug: str, translation_config: dict | None = None) -> PreparedPublication:
     """Freeze a publication before negotiating missing resources."""
     directory = directory.resolve()
     html = publication_html(directory, translation_config, include_assets=False, compressed_annotations=True)

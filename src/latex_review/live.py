@@ -24,7 +24,8 @@ from .structure import parse_project
 def fingerprint(root: Path, output: Path, *, cache_directory: Path | None = None) -> str:
     """内容指纹包括新增、删除文件；服务产物不会触发刷新。"""
     digest = sha256()
-    excluded = (output,) + ((cache_directory,) if cache_directory else ())
+    from .local_paths import state_directory
+    excluded = (output, state_directory()) + ((cache_directory,) if cache_directory else ())
     for current, dirs, files in os.walk(root, followlinks=False):
         folder = Path(current)
         dirs[:] = sorted(name for name in dirs if name not in {
@@ -103,88 +104,142 @@ def refresh_translation(server: ReportServer, output: Path) -> None:
         server.translation.refresh()
 
 
-def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description='持续预览当前论文的 HTML 内容，不比较版本')
-    parser.add_argument('entry', type=Path, help='当前论文入口 .tex 文件')
-    parser.add_argument('--root', type=Path, help='论文项目根目录，默认入口文件所在目录')
-    parser.add_argument('--output', type=Path, help='预览目录，默认项目内 .latex-review/live')
-    parser.add_argument('--open-browser', action='store_true')
-    parser.add_argument('--poll-files', action='store_true', help='使用元数据轮询，适用于不支持原生事件的文件系统')
-    parser.add_argument('--config', type=Path, help='项目配置文件，默认当前目录 .latex-review.toml')
-    parser.add_argument('--translation-cache-dir', type=Path, help='独立翻译缓存目录')
-    args = parser.parse_args(argv)
-    entry = args.entry.resolve()
-    from .cli import _source_roots
-    root = args.root.resolve() if args.root else _source_roots({'entry': str(entry)})[-1]
-    output = args.output.resolve() if args.output else root / '.latex-review' / 'live'
-    if not entry.is_file() or not entry.is_relative_to(root) or root.is_relative_to(output):
-        parser.error('入口必须位于项目根目录内，输出目录不能包含项目根目录')
+def prepare_request(entry, *, root=None, output=None, config=None, cache=None, poll_files=False):
+    from .cli import _source_roots, _config
+    from .identity import paper_identity, identity_hash
+    entry = Path(entry).expanduser().resolve()
+    root = Path(root).expanduser().resolve() if root else _source_roots({'entry': str(entry)})[-1]
+    identity = paper_identity(root, entry, require_entry=True)
+    output = Path(output).expanduser().resolve() if output else root / '.latex-review' / 'live'
     storage = root / '.latex-review' / 'annotations'
-    if output == storage or output in storage.parents or storage in output.parents:
-        parser.error('输出目录不能覆盖项目共享批注存储')
-    source = ProjectSource('new', root, entry.relative_to(root).as_posix(), ComparisonSource('directory', str(root)))
-    output.mkdir(parents=True, exist_ok=True)
-    cache_directory = (args.translation_cache_dir or root / '.latex-review' / 'translation-cache').expanduser().absolute()
-    if root.is_relative_to(cache_directory):
-        parser.error('翻译缓存目录不能包含论文项目根目录')
-    if cache_directory == storage or cache_directory in storage.parents or storage in cache_directory.parents:
-        parser.error('翻译缓存目录不能覆盖项目共享批注存储')
+    cache = Path(cache).expanduser().resolve() if cache else root / '.latex-review' / 'translation-cache'
+    for path in (output, cache):
+        if root.is_relative_to(path) or path == storage or path in storage.parents or storage in path.parents:
+            raise ValueError('输出和缓存不可覆盖论文或共享批注存储')
+    if output == cache or output in cache.parents or cache in output.parents:
+        raise ValueError('输出和缓存不可重叠')
+    config_path = Path(config or '.latex-review.toml').expanduser().resolve()
+    values = _config(config_path, bool(config))
+    return {**identity, 'kind': 'live', 'output': str(output), 'config': str(config_path),
+            'config_explicit': bool(config), 'cache': str(cache), 'poll_files': bool(poll_files),
+            'configuration_fingerprint': identity_hash(values)}
+
+
+def run_worker(recipe, stop):
+    """Internal runtime; public main always uses the resident service."""
     from .file_events import ProjectEvents
-    events = ProjectEvents(root, output, cache_directory, force_polling=args.poll_files,
-                           extra_files=((args.config or Path('.latex-review.toml')).absolute(),))
-    events.__enter__()
-    try:
-        from .cli import _config
-        config = _config(args.config or Path('.latex-review.toml'), bool(args.config))
-        translation = TranslationConfig.from_mapping(config['translation']) if 'translation' in config else None
+    from .output_leases import output_lease
+    from .report_rebuild import rebuild_lock
+    from .local_state import write_json
+    from .cli import _config
+    from contextlib import ExitStack
+    root, output = Path(recipe['root']), Path(recipe['output'])
+    cache = Path(recipe['cache'])
+    source = ProjectSource('new', root, recipe['entry'], ComparisonSource('directory', str(root)))
+    with ExitStack() as stack:
+        stack.enter_context(output_lease(output, wait=False, persistent=True))
+        output.mkdir(parents=True, exist_ok=True)
+        events = stack.enter_context(ProjectEvents(root, output, cache, force_polling=recipe['poll_files'],
+                                                   extra_files=(Path(recipe['config']),)))
         initial = events.generation
-        messages = build(source, output)
-        server = create_server(output, translation_config=translation, cache_directory=cache_directory,
-                               annotation_project_root=root)
-    except (OSError, ValueError, RuntimeError, SourceError) as exc:
-        events.__exit__()
-        print(f'预览启动失败：{exc}', file=sys.stderr)
-        return 4
-    _write(output / 'live-status.json', json.dumps({'revision': 1, 'message': f'持续预览已启动。预览诊断：{len(messages)} 项。'}, ensure_ascii=False))
-    thread = Thread(target=server.serve_forever, daemon=True)
-    thread.start()
-    url = f'http://127.0.0.1:{server.server_port}/report.html'
-    revision = 1
-    previous = initial
-    try:
-        if args.open_browser:
-            webbrowser.open(url)
-        print(f'持续预览：{url}\n按 Ctrl+C 停止。', flush=True)
-        warning = ''
-        while True:
+        revision = 1
+        from .local_reports import copy_report, replace_report
+        import shutil
+        import tempfile
+        with rebuild_lock(output):
+            stage = Path(tempfile.mkdtemp(prefix='.' + output.name + '.stage-', dir=output.parent))
             try:
-                current = events.wait(previous)
-                if events.warning != warning:
-                    warning = events.warning
-                    print(warning, file=sys.stderr, flush=True)
-                    _write(output / 'live-status.json', json.dumps({'revision': revision, 'message': warning}, ensure_ascii=False))
-                if current != previous:
-                    # Consume only events seen before building; later saves remain pending.
-                    previous = current
-                    from .report_rebuild import rebuild_lock
-                    with rebuild_lock(output):
-                        messages = build(source, output, revision + 1)
-                        refresh_translation(server, output)
-                    revision += 1
-                    message = events.warning + f'已更新当前论文。预览诊断：{len(messages)} 项。'
-                    print(message, flush=True)
+                if recipe.get('candidate'):
+                    shutil.rmtree(stage)
+                    copy_report(Path(recipe['candidate']), stage)
+                    messages = []
+                else:
+                    messages = build(source, stage)
+                replace_report(stage, output)
+            finally:
+                if stage.exists():
+                    shutil.rmtree(stage)
+        config = _config(Path(recipe['config']), recipe['config_explicit'])
+        translation = TranslationConfig.from_mapping(config['translation']) if 'translation' in config else None
+        server = create_server(output, translation_config=translation, cache_directory=cache,
+                               annotation_project_root=root)
+        stack.callback(server.server_close)
+        server.local_nonce = recipe['nonce']
+        thread = Thread(target=server.serve_forever, kwargs={'poll_interval': .1}, daemon=True)
+        thread.start()
+        _write(output / 'live-status.json', json.dumps({'revision': revision, 'message': '持续预览已启动。'}, ensure_ascii=False))
+        write_json(recipe['ready'], {'nonce': recipe['nonce'], 'pid': os.getpid(),
+                                    'port': server.server_port, 'directory': str(output)})
+        previous = initial
+        # A source save between candidate generation and watcher creation must
+        # trigger a refresh, even if the new watcher has not seen an event.
+        pending = bool(recipe.get('candidate')) and recipe.get('source_fingerprint') != fingerprint(root, output, cache_directory=cache)
+        warning = ''
+        try:
+            while not stop.is_set():
+                current = events.wait(previous, timeout=.2)
+                if stop.is_set():
+                    break
+                if current != previous or pending:
+                    previous, pending = current, False
+                    try:
+                        with rebuild_lock(output):
+                            stage = Path(tempfile.mkdtemp(prefix='.' + output.name + '.stage-', dir=output.parent))
+                            try:
+                                messages = build(source, stage, revision + 1)
+                                replace_report(stage, output)
+                            finally:
+                                if stage.exists():
+                                    shutil.rmtree(stage)
+                            refresh_translation(server, output)
+                        revision += 1
+                        message = events.warning + f'已更新当前论文。预览诊断：{len(messages)} 项。'
+                    except (OSError, ValueError, RuntimeError, SourceError) as exc:
+                        message = f'更新失败，保留上次预览：{exc}'
                     _write(output / 'live-status.json', json.dumps({'revision': revision, 'message': message}, ensure_ascii=False))
-            except (OSError, ValueError, SourceError) as exc:
-                message = f'更新失败，保留上次预览：{exc}'
-                print(message, file=sys.stderr, flush=True)
-                _write(output / 'live-status.json', json.dumps({'revision': revision, 'message': message}, ensure_ascii=False))
+                elif events.warning != warning:
+                    warning = events.warning
+                    _write(output / 'live-status.json', json.dumps({'revision': revision, 'message': warning}, ensure_ascii=False))
+        finally:
+            server.shutdown()
+            thread.join()
+    return 0
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(description='启动或复用受管持续预览，命令返回后服务继续运行')
+    parser.add_argument('entry', type=Path)
+    parser.add_argument('--root', type=Path)
+    parser.add_argument('--output', type=Path)
+    parser.add_argument('--open-browser', action='store_true')
+    parser.add_argument('--poll-files', action='store_true')
+    parser.add_argument('--config', type=Path)
+    parser.add_argument('--translation-cache-dir', type=Path)
+    parser.add_argument('--wait', action='store_true', help='附着状态；Ctrl+C只断开客户端')
+    parser.add_argument('--startup-timeout', type=float, default=120)
+    args = parser.parse_args(argv)
+    try:
+        request = prepare_request(args.entry, root=args.root, output=args.output, config=args.config,
+                                  cache=args.translation_cache_dir, poll_files=args.poll_files)
+        from .local_client import ensure, follow
+        result = ensure(request, timeout=args.startup_timeout)
+        print(result['url'], flush=True)
+        print('持续预览已就绪；使用latex-review-local stop-paper显式停止。', file=sys.stderr, flush=True)
+        if args.open_browser:
+            try:
+                opened = webbrowser.open(result['url'])
+            except (OSError, webbrowser.Error):
+                opened = False
+            if not opened:
+                print('无法自动打开浏览器；请手动打开上述地址。', file=sys.stderr)
+        if args.wait:
+            follow(request['paper_id'], 'live')
+        return 0
     except KeyboardInterrupt:
         return 0
-    finally:
-        events.__exit__()
-        server.shutdown()
-        server.server_close()
-        thread.join()
+    except (OSError, ValueError, RuntimeError) as exc:
+        print(f'持续预览启动失败：{exc}', file=sys.stderr)
+        return 4
 
 
 if __name__ == '__main__':

@@ -66,6 +66,8 @@ def upload_report(directory: Path, entry: Path, translation_config: dict | None 
     host, base, slug = load_upload_config(entry)
     try:
         prepared = prepare_publication(directory, slug, translation_config)
+        from .output_leases import release_generation
+        release_generation()
         query = _ssh(host, 'resource-query-v1', input=json.dumps(prepared.manifest, ensure_ascii=False).encode())
         if query.returncode:
             message = query.stderr.decode('utf-8', errors='replace').strip()

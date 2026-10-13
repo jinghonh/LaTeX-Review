@@ -1,0 +1,39 @@
+{
+  "date": "2026-10-13",
+  "status": "T1-T5 complete",
+  "required_verify": {
+    "command": "scripts/verify-macos.sh",
+    "passed": 620,
+    "seconds": 336.35,
+    "independent_files_run_separately": true
+  },
+  "independent_entry_upload": {
+    "passed": 42,
+    "seconds": 46.57
+  },
+  "independent_translation_cache": {
+    "passed": 1,
+    "seconds": 4.19
+  },
+  "final_targeted": {
+    "passed": 39,
+    "seconds": 18.1
+  },
+  "browser": {
+    "passed": true,
+    "checks": [
+      "open report",
+      "stop live",
+      "restart live",
+      "root API redirect",
+      "390px viewport",
+      "no page errors"
+    ],
+    "screenshot": "implementation-browser.png"
+  },
+  "platform_tested": "macOS",
+  "production_remote_publish": false,
+  "issue_published": false,
+  "committed": false,
+  "remaining_user_questions": []
+}

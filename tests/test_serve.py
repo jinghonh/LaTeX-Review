@@ -22,6 +22,11 @@ def report(tmp_path):
     (root / 'report.html').write_text('<h1>审阅</h1>', encoding='utf-8')
     (root / 'assets').mkdir()
     (root / 'assets' / 'image.svg').write_text('<svg/>')
+    entry = tmp_path / 'main.tex'
+    entry.write_text('paper')
+    from latex_review.identity import paper_identity
+    from latex_review.local_state import write_json
+    write_json(root / '.local-identity.json', paper_identity(tmp_path, entry))
     return root
 
 
@@ -56,30 +61,26 @@ def test_server_start_does_not_require_host_name_lookup(report, monkeypatch):
         assert server.server_name == "localhost" and server.server_port > 0
 
 
-@pytest.mark.parametrize('stop_signal', [signal.SIGINT, signal.SIGTERM])
-def test_cli_stops_and_releases_port(report, stop_signal):
+def test_cli_returns_and_explicit_stop_releases_worker_port(report):
+    from latex_review import local_client
     process = subprocess.Popen([sys.executable, '-m', 'latex_review.serve', str(report)],
                                stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
-    try:
-        with ThreadPoolExecutor() as pool:
-            pending = pool.submit(process.stdout.readline)
-            try:
-                address = pending.result(timeout=10).strip()
-            except TimeoutError:
-                process.kill()
-                raise
-        assert address.startswith('http://127.0.0.1:')
-        with urlopen(address, timeout=3) as response:
-            assert response.status == 200
-        port = int(address.split(':')[2].split('/')[0])
-        process.send_signal(stop_signal)
-        assert process.wait(timeout=5) == 0
-        with create_server(report, port):
-            pass
-    finally:
-        if process.poll() is None:
-            process.kill()
-        process.communicate()
+    stdout, stderr = process.communicate(timeout=30)
+    assert process.returncode == 0, stderr
+    address = stdout.strip()
+    assert address.startswith('http://127.0.0.1:')
+    with urlopen(address, timeout=3) as response:
+        assert response.status == 200
+    paper = local_client.request('/api/v1/papers')['papers'][0]
+    port = paper['slots']['diff']['port']
+    stop = local_client.request(f"/api/v1/papers/{paper['paper_id']}/diff/stop", {})
+    import time
+    deadline = time.monotonic() + 10
+    while local_client.request('/api/v1/operations/' + stop['operation_id'])['state'] != 'ready':
+        assert time.monotonic() < deadline
+        time.sleep(.05)
+    with create_server(report, port):
+        pass
 
 
 def test_invalid_report_and_occupied_port(report, tmp_path):
@@ -101,6 +102,8 @@ def test_cli_accepts_report_file_or_paper_entry(tmp_path, input_kind):
     entry.write_text(r'\begin{document}论文\end{document}', encoding='utf-8')
     target = directory / 'report.html' if input_kind == 'html' else entry.relative_to(tmp_path)
     command = [sys.executable, '-m', 'latex_review.serve', str(target)]
+    if input_kind == 'html':
+        command.extend(['--entry', str(entry), '--root', str(entry.parent)])
     if configured:
         config = tmp_path / 'selected.toml'
         config.write_text('output="自定义报告"\n', encoding='utf-8')
@@ -116,9 +119,9 @@ def test_cli_accepts_report_file_or_paper_entry(tmp_path, input_kind):
                 process.kill()
                 raise
         assert address.startswith('http://127.0.0.1:'), process.stderr.read()
-        with urlopen(address, timeout=3) as response:
+        from test_local_core import report_url
+        with urlopen(report_url(address), timeout=3) as response:
             assert '已有审阅报告' in response.read().decode()
-        process.send_signal(signal.SIGTERM)
         assert process.wait(timeout=5) == 0
     finally:
         if process.poll() is None:
@@ -139,14 +142,13 @@ def test_optional_browser_open_after_bind(report, monkeypatch, capsys, open_brow
             raise serve.webbrowser.Error('unavailable')
         return browser_result
 
-    def stop_server(self, **kwargs):
-        assert calls == ([f'http://127.0.0.1:{self.server_port}/report.html'] if open_browser else [])
-        raise KeyboardInterrupt
-
+    from latex_review import local_client
+    address = 'http://127.0.0.1:8765/papers/example/diff'
+    monkeypatch.setattr(local_client, 'ensure', lambda *args, **kwargs: {'url': address})
     monkeypatch.setattr(serve.webbrowser, 'open', open_page)
-    monkeypatch.setattr(serve.ReportServer, 'serve_forever', stop_server)
     args = [str(report)] + (['--open-browser'] if open_browser else [])
     assert serve.main(args) == 0
+    assert calls == ([address] if open_browser else [])
     captured = capsys.readouterr()
     assert captured.out.strip().startswith('http://127.0.0.1:')
     assert ('无法自动打开浏览器' in captured.err) == (open_browser and browser_result != True)

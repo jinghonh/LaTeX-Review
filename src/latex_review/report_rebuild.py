@@ -10,6 +10,9 @@ import subprocess
 import sys
 import tempfile
 import uuid
+from threading import local
+
+_held = local()
 
 RECIPE = '.rebuild/recipe.json'
 
@@ -18,12 +21,18 @@ RECIPE = '.rebuild/recipe.json'
 def rebuild_lock(report):
     report = Path(report).resolve()
     lock = report.parent / ('.' + report.name + '.rebuild.lock')
-    fd = os.open(lock, os.O_CREAT | os.O_RDWR | os.O_NOFOLLOW, 0o600)
+    held = getattr(_held, 'paths', set())
+    if str(lock) in held:
+        yield
+        return
+    lock.parent.mkdir(parents=True, exist_ok=True)
+    fd = os.open(lock, os.O_CREAT | os.O_RDWR | os.O_NOFOLLOW | os.O_CLOEXEC, 0o600)
     try:
         fcntl.flock(fd, fcntl.LOCK_EX)
+        _held.paths = held | {str(lock)}
         yield
     finally:
-        fcntl.flock(fd, fcntl.LOCK_UN)
+        _held.paths = held
         os.close(fd)
 
 
@@ -110,7 +119,8 @@ def rebuild_report(report):
     report = Path(report).expanduser()
     report = (report if report.is_dir() else report.parent).resolve()
     try:
-        with rebuild_lock(report):
+        from .output_leases import output_lease
+        with output_lease(report), rebuild_lock(report):
             return _rebuild_report(report)
     except OSError as exc:
         return {'status': 'pending', 'message': '源码已修改，报告待更新：' + str(exc)}
@@ -127,8 +137,14 @@ def _rebuild_report(report):
         stage = Path(tempfile.mkdtemp(prefix='.' + report.name + '.rebuild-', dir=report.parent))
         code = ('from latex_review.report_rebuild import replay; import sys; '
                 'sys.exit(replay(sys.argv[1], sys.argv[2], sys.argv[3]))')
+        from .local_tasks import OWNER_FD
+        inherited = ()
+        if OWNER_FD is not None:
+            code = ('from latex_review.local_tasks import inherit_owner; '
+                    f'inherit_owner({OWNER_FD}); ' + code)
+            inherited = (OWNER_FD,)
         result = subprocess.run([sys.executable, '-c', code, str(recipe_path), str(stage), str(report)],
-                                capture_output=True, text=True)
+                                capture_output=True, text=True, pass_fds=inherited)
         from .annotations import load_content
         if result.returncode not in (0, 2) or not (stage / 'report.html').is_file():
             raise ValueError((result.stderr or result.stdout or '报告重建失败')[-800:])

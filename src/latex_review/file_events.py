@@ -15,7 +15,8 @@ class ProjectEvents:
                  extra_files: tuple[Path, ...] = ()):
         self.extra_files = tuple(path.absolute() for path in extra_files)
         self.root = root.resolve()
-        self.excluded = (output.resolve(), cache_directory.resolve())
+        from .local_paths import state_directory
+        self.excluded = (output.resolve(), cache_directory.resolve(), state_directory())
         self.audit_interval = audit_interval
         self.condition = Condition()
         self.stop = Event()
@@ -30,6 +31,10 @@ class ProjectEvents:
         if not path.is_relative_to(self.root):
             return False
         relative = path.relative_to(self.root)
+        output_name = self.excluded[0].name
+        if any(part.startswith(tuple("." + output_name + suffix for suffix in (".stage-", ".before-", ".rebuild-")))
+               or part == "." + output_name + ".rebuild.lock" for part in relative.parts):
+            return False
         return not any(part in IGNORED for part in relative.parts) and not any(
             path.is_relative_to(excluded) for excluded in self.excluded)
 

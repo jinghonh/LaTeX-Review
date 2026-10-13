@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import argparse
+from contextlib import ExitStack
+import tempfile
 from dataclasses import asdict
 from importlib.metadata import version
 import json
@@ -289,8 +291,29 @@ def _source_recovery(code: str) -> None:
     _progress("恢复操作：" + advice.get(code, "检查上述来源错误和文件读取权限后重新运行。"))
 
 
+def _finish_current(output, run, code):
+    from .output_leases import output_lease
+    from .report_rebuild import rebuild_lock
+    from .run_manifest import artifact_hash
+    try:
+        with output_lease(output, wait=False), rebuild_lock(output):
+            if artifact_hash(output) == run.get('report_fingerprint'):
+                finish(output, run, code)
+    except (OSError, ValueError):
+        # A later writer owns this output. Its manifest must not replace this
+        # command's independent publication result or exit code.
+        pass
+
+
 def main(argv: list[str] | None = None, *, configuration: dict | None = None,
          source_exclusions: tuple[Path, ...] = ()) -> int:
+    from .output_leases import generation_guard
+    with ExitStack() as output_guard, ExitStack() as resources, generation_guard(output_guard):
+        return _main(argv, configuration=configuration, source_exclusions=source_exclusions,
+                     output_guard=output_guard, resources=resources)
+
+
+def _main(argv=None, *, configuration=None, source_exclusions=(), output_guard, resources):
     parser = ReviewArgumentParser(prog="latex-review", description="比较论文并生成结构化审阅报告。",
                                   epilog="默认比较 Git HEAD 与磁盘工作区；仅显式 --compile 才运行 TeX。")
     parser.add_argument("paths", nargs="*", help="Git 模式入口，或两个独立源文件")
@@ -300,7 +323,9 @@ def main(argv: list[str] | None = None, *, configuration: dict | None = None,
     parser.add_argument("--old", dest="old_revision", help="修改前 Git 提交")
     parser.add_argument("--new", dest="new_revision", help="修改后 Git 提交或 worktree")
     parser.add_argument("--output", help="报告目录，默认 .latex-review/latest")
-    parser.add_argument("--open-browser", action="store_true", help="生成报告后启动本机预览并打开默认浏览器；按 Ctrl+C 停止")
+    parser.add_argument("--open-browser", action="store_true", help="生成报告后启动或复用本机预览并打开浏览器；服务就绪后返回")
+    parser.add_argument("--wait", action="store_true", help="浏览器服务就绪后附着；Ctrl+C只断开客户端")
+    parser.add_argument("--startup-timeout", type=float, default=120, help="本地工作进程就绪等待秒数")
     parser.add_argument("--upload", action="store_true", help="生成后通过 SSH 发布静态报告；使用用户级 upload.toml")
     parser.add_argument("--cache-dir", help="解析缓存目录，默认位于报告目录旁")
     parser.add_argument("--no-cache", action="store_true", help="本次绕过解析缓存")
@@ -318,6 +343,8 @@ def main(argv: list[str] | None = None, *, configuration: dict | None = None,
     parser.add_argument("--sandbox-render", action="store_true", help="在可验证的 macOS 沙箱中执行复杂宏编译")
     parser.add_argument("--version", action="version", version=f"%(prog)s {version('latex-review')}")
     args = parser.parse_args(argv)
+    if args.startup_timeout <= 0:
+        parser.error("本地启动超时必须大于0")
     if not args.paths and not args.entry_option and not args.old_dir and not args.new_dir and not args.config and not Path(".latex-review.toml").exists():
         parser.print_help()
         return 0
@@ -357,6 +384,14 @@ def main(argv: list[str] | None = None, *, configuration: dict | None = None,
             raise ConfigurationError("缓存路径不能包含符号链接")
         if args.clear_cache:
             _clear_cache(cache_dir, options, managed_default=args.cache_dir is None)
+        from .output_leases import output_lease
+        from .report_rebuild import rebuild_lock
+        try:
+            output_guard.enter_context(output_lease(output))
+        except ValueError as exc:
+            print(f"latex-review: 输出认领失败：{exc}", file=sys.stderr)
+            return 4
+        output_guard.enter_context(rebuild_lock(output))
         _prepare_output(output)
         output_ready = True
         if compile_enabled:
@@ -366,12 +401,15 @@ def main(argv: list[str] | None = None, *, configuration: dict | None = None,
                                    "comments": args.comments if args.comments is not None else config.get("diff", {}).get("comments", False),
                                    "include_title": True})
         _progress("正在读取比较来源")
-        with resolve_sources(**options, excluded_paths=(output, cache_dir, output.parent / "translation-cache",
+        from .local_paths import state_directory
+        with resolve_sources(**options, excluded_paths=(output, cache_dir, output.parent / "translation-cache", state_directory(),
                                                            *source_exclusions,
                                                            *tuple(root / ".latex-review" / "annotations" for root in _source_roots(options))),
                              ignore_patterns=tuple(config.get("ignore", ()))) as pair:
             _progress("正在展开两版来源")
             old_expanded, new_expanded = pair.old.expand(), pair.new.expand()
+            from .identity import paper_identity
+            local_identity = paper_identity(pair.new.worktree_origin or pair.new.root, pair.new.entry)
             run["baselines"] = {"old": baseline(old_expanded), "new": baseline(new_expanded)}
             run["stages"]["sources"] = "complete"
             active_stage = "parse"
@@ -492,7 +530,19 @@ def main(argv: list[str] | None = None, *, configuration: dict | None = None,
             run["degradation_reasons"] = [{"code": "internal_error", "message": str(exc)}]
             finish(output, run, 8)
         return 8
+    from .local_state import write_json
+    write_json(output / '.local-identity.json', local_identity)
     finish(output, run, result)
+    preview_directory = output
+    preview_error = None
+    if args.open_browser:
+        try:
+            from .local_reports import copy_report
+            temporary = Path(resources.enter_context(tempfile.TemporaryDirectory(prefix='latex-review-browser-')))
+            preview_directory = temporary / 'report'
+            copy_report(output, preview_directory)
+        except (OSError, ValueError) as exc:
+            preview_error = str(exc)
     if args.upload:
         from .upload import UploadError, upload_report
         try:
@@ -508,19 +558,28 @@ def main(argv: list[str] | None = None, *, configuration: dict | None = None,
             result = 16
             run["stages"]["upload"] = "failed"
             run["degradation_reasons"].append({"code": "upload_failed", "message": str(exc)})
+    output_guard.close()
     if args.open_browser:
         from .serve import main as preview
-        preview_args = [str(output), "--open-browser"]
+        preview_args = [str(preview_directory), "--open-browser", "--translation-cache-dir", str(output.parent / "translation-cache")]
         if args.config:
             preview_args.extend(["--config", args.config])
+        if args.wait:
+            preview_args.append("--wait")
+        if args.startup_timeout != 120:
+            preview_args.extend(["--startup-timeout", str(args.startup_timeout)])
         run["stages"]["preview"] = "running"
-        finish(output, run, result)
-        preview_result = preview(preview_args)
+        _finish_current(output, run, result)
+        if preview_error:
+            print(f"latex-review: 预览副本失败：{preview_error}", file=sys.stderr)
+            preview_result = 4
+        else:
+            preview_result = preview(preview_args)
         run["stages"]["preview"] = "failed" if preview_result else "complete"
         if preview_result:
-            finish(output, run, preview_result)
+            _finish_current(output, run, preview_result)
             return preview_result
-    finish(output, run, result)
+    _finish_current(output, run, result)
     return result
 
 

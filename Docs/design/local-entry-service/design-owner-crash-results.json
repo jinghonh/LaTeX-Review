@@ -1,0 +1,8 @@
+{
+  "owner_sigkill": -9,
+  "worker_pid": 7818,
+  "lock_busy_before_crash": true,
+  "worker_observed_eof": true,
+  "lock_reacquired_after_crash": true,
+  "elapsed_ms": 12
+}

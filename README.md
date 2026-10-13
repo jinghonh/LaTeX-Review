@@ -2,7 +2,7 @@
 
 用于论文修改的结构化审阅工具。比较 LaTeX 版本，生成 HTML 审阅报告，并支持当前论文的持续预览。
 
-支持 macOS，需要 Python 3.11+。默认无需安装 TeX；HTML 内容预览不保证与 PDF 排版一致。
+本地入口面向 macOS 和 Linux；本轮完成 macOS 验收。需要 Python 3.11+。默认无需安装 TeX；HTML 内容预览不保证与 PDF 排版一致。
 
 ## 安装
 
@@ -34,7 +34,20 @@ latex-review --old-dir A --new-dir B --entry main.tex --open-browser
 latex-review-live main.tex --open-browser
 ```
 
-持续预览默认使用 `.latex-review/live/`。本机预览服务按 Ctrl+C 停止。
+持续预览默认使用 `.latex-review/live/`。启动成功后 CLI 返回，服务继续运行。
+
+使用常驻入口发现服务。每篇论文最多运行一个持续预览和一个差异报告服务。
+
+```sh
+latex-review-local list
+latex-review-local open
+latex-review-local stop
+```
+
+入口默认地址为 `http://127.0.0.1:8765/`。收藏 CLI 输出的稳定论文链接。
+报告在固定入口页面内显示，地址栏保持入口端口；工作进程替换后页面自动加载当前报告。
+`--wait` 附着状态；Ctrl+C 只断开客户端。显式 `stop` 停止入口及受管服务。
+升级前须手动停止旧版预览；新入口不接管未知进程。详见[持续预览与迁移](Docs/live-preview.md)。
 
 项目配置使用 `.latex-review.toml`；命令行选项优先。更多选项见 `latex-review --help`。
 
@@ -43,6 +56,7 @@ latex-review-live main.tex --open-browser
 | 需求 | 文档 |
 | --- | --- |
 | 安装、比较来源与配置 | [使用指南](Docs/user-guide.md) |
+| 当前论文持续预览与迁移 | [持续预览](Docs/live-preview.md) |
 | 打开已有报告 | [报告预览](Docs/report-preview.md) |
 | 中文翻译、术语表与译文导出 | [翻译指南](Docs/translation.md) |
 | 阅读与添加批注 | [批注指南](Docs/report-annotations-user-guide.md) |

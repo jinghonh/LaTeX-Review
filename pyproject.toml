@@ -17,6 +17,7 @@ test = ["pytest>=8,<10", "playwright>=1.45,<2"]
 latex-review = "latex_review.cli:main"
 latex-review-live = "latex_review.live:main"
 latex-review-preview = "latex_review.serve:main"
+latex-review-local = "latex_review.local_service:main"
 latex-review-annotations = "latex_review.agent_tools:annotations_main"
 latex-review-query = "latex_review.agent_tools:query_main"
 latex-review-check-scope = "latex_review.agent_tools:scope_main"
@@ -26,7 +27,7 @@ latex-review-record-acceptance = "latex_review.agent_tools:acceptance_main"
 where = ["src"]
 
 [tool.setuptools.package-data]
-latex_review = ["schemas/*.json", "report_interaction.js", "report_annotations.js", "annotation_delivery.js", "report_reader.js", "report_search.js", "report_sections.js", "report_translation.js", "report.css", "live_reader.js", "math_render.js"]
+latex_review = ["schemas/*.json", "report_interaction.js", "report_annotations.js", "annotation_delivery.js", "report_reader.js", "report_search.js", "report_sections.js", "report_translation.js", "report.css", "live_reader.js", "local_dashboard.html", "local_report.html", "math_render.js"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

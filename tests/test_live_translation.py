@@ -207,7 +207,9 @@ def test_live_command_refreshes_translation_manifest(tmp_path, provider):
                                     '--config', str(configuration)], stdout=stream, stderr=stream, env=env)
         try:
             _wait(lambda: 'http://127.0.0.1:' in log.read_text())
-            base = re.search(r'http://127\.0\.0\.1:\d+', log.read_text())[0]
+            stable = re.search(r'http://127\.0\.0\.1:\d+/papers/[a-f0-9]+/live', log.read_text())[0]
+            from test_local_core import report_url
+            base = report_url(stable).rsplit('/', 1)[0]
             def status():
                 with urlopen(base + '/api/translation/status', timeout=3) as response:
                     return json.load(response)

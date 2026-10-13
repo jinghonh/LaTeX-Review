@@ -77,7 +77,7 @@ def _copy_project(source: ProjectSource, destination: Path, excluded: Path) -> N
     total = 0
     for current, dirs, files in os.walk(root, followlinks=False):
         folder = Path(current)
-        dirs[:] = [name for name in dirs if name != ".git" and not (folder / name).is_relative_to(excluded)]
+        dirs[:] = [name for name in dirs if name not in {".git", ".latex-review"} and not (folder / name).is_relative_to(excluded)]
         for name in dirs:
             if (folder / name).is_symlink():
                 raise OSError(f"隔离副本拒绝目录符号链接：{(folder / name).relative_to(root)}")

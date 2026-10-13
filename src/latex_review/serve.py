@@ -38,6 +38,10 @@ class ReportHandler(SimpleHTTPRequestHandler):
 
     def do_GET(self):
         path = urlsplit(self.path).path
+        if path == "/api/local-worker/health" and getattr(self.server, "local_nonce", None):
+            if not self._local_request():
+                return
+            return self._json({"nonce": self.server.local_nonce, "pid": __import__("os").getpid()})
         if path == "/api/report":
             if not self._local_request():
                 return
@@ -290,51 +294,54 @@ def _report_directory(path: Path, config: dict) -> Path:
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description="在本机预览已生成的报告，按 Ctrl+C 停止。")
-    parser.add_argument("directory", type=Path, help="报告目录、report.html，或论文 .tex 入口（预览当前目录的已有报告）")
-    parser.add_argument("--port", type=int, default=0, help="监听端口，默认 0 表示自动选择")
-    parser.add_argument("--open-browser", action="store_true", help="启动预览后自动打开默认浏览器")
-    parser.add_argument("--config", type=Path, help="项目配置文件，默认当前目录 .latex-review.toml；翻译设置覆盖用户全局默认值")
-    parser.add_argument("--translation-cache-dir", type=Path, help="翻译缓存目录，默认报告目录同级的 translation-cache")
-    parser.add_argument("--annotation-project-root", type=Path, help="批注所属论文项目根目录；须与报告项目身份一致")
+    parser = argparse.ArgumentParser(description='启动或复用受管差异报告服务；命令返回后服务继续运行')
+    parser.add_argument('directory', type=Path, help='已有报告目录、report.html或论文入口')
+    parser.add_argument('--port', type=int, default=0, help='工作进程端口；0自动分配')
+    parser.add_argument('--open-browser', action='store_true')
+    parser.add_argument('--config', type=Path)
+    parser.add_argument('--translation-cache-dir', type=Path)
+    parser.add_argument('--annotation-project-root', type=Path)
+    parser.add_argument('--entry', type=Path, help='旧报告缺少身份时的论文入口')
+    parser.add_argument('--root', type=Path, help='旧报告的真实论文根目录')
+    parser.add_argument('--wait', action='store_true', help='附着状态；Ctrl+C只断开客户端')
+    parser.add_argument('--startup-timeout', type=float, default=120)
     args = parser.parse_args(argv)
-    if not 0 <= args.port <= 65535:
-        parser.error("端口必须在 0 至 65535 之间")
+    if not 0 <= args.port <= 65535 or args.startup_timeout <= 0:
+        parser.error('端口或启动超时无效')
     try:
         from .cli import _config
-        config = _config(args.config or Path(".latex-review.toml"), bool(args.config))
-        translation = TranslationConfig.from_mapping(config["translation"]) if "translation" in config else None
-        directory = _report_directory(args.directory, config)
-        server = create_server(directory, args.port, translation_config=translation,
-                               cache_directory=args.translation_cache_dir, annotation_project_root=args.annotation_project_root)
+        from .identity import identity_hash
+        from .local_reports import report_identity
+        config_path = (args.config or Path('.latex-review.toml')).expanduser().resolve()
+        config = _config(config_path, bool(args.config))
+        directory = _report_directory(args.directory, config).resolve()
+        shortcut = args.directory if args.directory.suffix.lower() == '.tex' else None
+        identity = report_identity(directory, root=args.root or args.annotation_project_root,
+                                   entry=args.entry or shortcut)
+        request = {**identity, 'kind': 'diff', 'directory': str(directory), 'port': args.port,
+                   'config': str(config_path), 'config_explicit': bool(args.config),
+                   'cache': str((args.translation_cache_dir or directory.parent / 'translation-cache').expanduser().resolve()),
+                   'configuration_fingerprint': identity_hash(config)}
+        from .local_client import ensure, follow
+        result = ensure(request, timeout=args.startup_timeout)
+        print(result['url'], flush=True)
+        print('差异报告服务已就绪；使用latex-review-local stop-paper显式停止。', file=sys.stderr, flush=True)
+        if args.open_browser:
+            try:
+                opened = webbrowser.open(result['url'])
+            except (OSError, webbrowser.Error):
+                opened = False
+            if not opened:
+                print('无法自动打开浏览器；请手动打开上述地址。', file=sys.stderr)
+        if args.wait:
+            follow(request['paper_id'], 'diff')
+        return 0
+    except KeyboardInterrupt:
+        return 0
     except (OSError, ValueError, RuntimeError) as exc:
-        print(f"预览启动失败：{exc}", file=sys.stderr)
+        print(f'预览启动失败：{exc}', file=sys.stderr)
         return 4
 
-    def stop(signum, frame):
-        raise KeyboardInterrupt
 
-    previous = signal.signal(signal.SIGTERM, stop)
-    try:
-        with server:
-            address = f"http://127.0.0.1:{server.server_port}/report.html"
-            print(address, flush=True)
-            print("预览已启动；按 Ctrl+C 或发送终止信号停止。", file=sys.stderr, flush=True)
-            if args.open_browser:
-                try:
-                    opened = webbrowser.open(address)
-                except (OSError, webbrowser.Error):
-                    opened = False
-                if not opened:
-                    print("无法自动打开浏览器；请手动打开上述地址。", file=sys.stderr, flush=True)
-            server.serve_forever(poll_interval=0.2)
-    except KeyboardInterrupt:
-        pass
-    finally:
-        server.server_close()
-        signal.signal(signal.SIGTERM, previous)
-    return 0
-
-
-if __name__ == "__main__":
+if __name__ == '__main__':
     raise SystemExit(main())

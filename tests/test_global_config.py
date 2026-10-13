@@ -95,20 +95,26 @@ def test_preview_automatically_loads_global_defaults_without_api_call(tmp_path):
     report = project / ".latex-review/latest"
     report.mkdir(parents=True)
     (report / "report.html").write_text('<h1>原文报告</h1>', encoding="utf-8")
+    entry = project / 'main.tex'
+    entry.write_text('paper')
+    from latex_review.identity import paper_identity
+    from latex_review.local_state import write_json
+    write_json(report / '.local-identity.json', paper_identity(project, entry))
     process = subprocess.Popen([sys.executable, '-m', 'latex_review.serve', str(report)],
                                cwd=project, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
     try:
         with ThreadPoolExecutor() as pool:
             address = pool.submit(process.stdout.readline).result(timeout=10).strip()
         assert address.startswith('http://127.0.0.1:')
-        base = address.removesuffix('/report.html')
+        from test_local_core import report_url
+        worker_url = report_url(address)
+        base = worker_url.rsplit('/', 1)[0]
         with urlopen(base + '/api/translation/status', timeout=3) as response:
             status = json.load(response)
         assert status["enabled"] and status["concurrency"] == 8
         assert status["states"] == {} and status["results"] == {}
-        with urlopen(address, timeout=3) as response:
+        with urlopen(worker_url, timeout=3) as response:
             assert '原文报告' in response.read().decode()
-        process.send_signal(signal.SIGTERM)
         assert process.wait(timeout=5) == 0
     finally:
         if process.poll() is None:
