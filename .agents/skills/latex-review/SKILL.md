@@ -1,6 +1,6 @@
 ---
 name: latex-review
-description: 使用 LaTeX Review 生成论文修改审阅报告、翻译报告变更、管理报告批注，或启动论文 HTML 持续预览。
+description: 使用 LaTeX Review 审查当前论文全文、生成修改差异报告、翻译报告变更、管理批注或启动持续预览。
 ---
 
 # LaTeX Review
@@ -9,6 +9,8 @@ description: 使用 LaTeX Review 生成论文修改审阅报告、翻译报告�
 
 只读取当前任务对应的参考文件。
 
+- 用户要求审查当前全文的语言、结构、论证或一致性，并新增审查意见：读取 [全文审查](references/editorial.md)。此分支优先于持续预览和差异审阅。
+- 用户要求核对已有批注是否落实：读取 [批注](references/annotations.md) 的“复核已有批注”流程。
 - 用户要求审阅论文修改或生成差异报告：读取 [审阅](references/review.md)。
 - 用户要求当前论文持续预览、保存后自动刷新或不比较版本：读取 [持续预览](references/live.md)。此分支优先于差异审阅。
 - 用户要求翻译报告变更：读取 [翻译](references/translation.md)。优先复用已有报告，默认报告保持原文。

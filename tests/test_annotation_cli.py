@@ -1,5 +1,6 @@
 """High-level CLI behavior against real preview manifests and shared storage."""
 import json
+from pathlib import Path
 
 import pytest
 
@@ -269,3 +270,69 @@ def test_add_metadata_and_module_entry(report, capsys):
     result = subprocess.run([sys.executable, '-m', 'latex_review.annotation_cli', str(report[0]), '--summary', '--tag', 'topic'],
                             capture_output=True, text=True, check=True)
     assert json.loads(result.stdout)['threads'][0]['title'] == 'Short title'
+
+
+def test_detail_keeps_complete_messages_without_duplicate_anchors(report, capsys):
+    body = 'Complete review message. ' * 150
+    _, created = call(report, capsys, 'add', '--quote', 'Other Alpha beta.', '--body', body, '--author', 'Codex')
+    tid = created['result']['thread_id']
+    code, detail = call(report, capsys, '--thread-id', tid, '--detail')
+    assert code == 0
+    thread = detail['threads'][0]
+    assert thread['messages'][0]['body'] == body
+    assert thread['quote'] == thread['current_quote'] == 'Other Alpha beta.'
+    assert thread['location']['source']['file'] == 'main.tex'
+    assert thread['text'].startswith('Other Alpha beta.')
+    assert not {'original_anchor', 'current_anchor', 'history', 'associations', 'association'} & thread.keys()
+    assert detail['report_context']['display_version_id'] == report[1]['version_id']
+    assert detail['report_context']['kind'] == 'unknown'
+    assert call(report, capsys, '--detail', '--full')[0] == 4
+
+
+def test_detail_does_not_present_old_position_as_current(report, capsys):
+    _, created = call(report, capsys, 'add', '--quote', 'Other Alpha beta.', '--body', 'Review', '--author', 'Codex')
+    tid = created['result']['thread_id']
+    updated, _ = content_at(Path(report[1]['project_root']), 'Entirely different paragraph.')
+    (report[0] / MANIFEST).write_text(json.dumps(updated))
+    code, detail = call(report, capsys, '--thread-id', tid, '--detail')
+    assert code == 0
+    item = detail['threads'][0]
+    assert item['location']['status'] == 'needs_relocation'
+    assert item['location']['source'] is None and item['text'] is None
+    assert item['quote'] == 'Other Alpha beta.'
+
+
+def test_file_line_quote_disambiguates_without_touching_source(report, capsys):
+    before = (Path(report[1]['project_root']) / 'main.tex').read_bytes()
+    unit = next(u for u in report[1]['units'] if u['text'].startswith('Other'))
+    code, result = call(report, capsys, 'add', '--file', 'main.tex', '--line', str(unit['source']['start_line']),
+                        '--quote', 'Alpha beta', '--body', 'Review', '--author', 'Codex')
+    assert code == 0 and result['threads'][0]['association']['anchor']['unit_id'] == unit['id']
+    assert (Path(report[1]['project_root']) / 'main.tex').read_bytes() == before
+    for args in [('--file', 'main.tex', '--line', '99'), ('--line', '1'), ('--file', '../main.tex'),
+                 ('--file', '/tmp/main.tex'), ('--file', 'C:/main.tex')]:
+        assert call(report, capsys, 'add', *args, '--quote', 'Alpha beta', '--body', 'Review', '--author', 'Codex')[0] == 4
+    assert report[2].metadata(report[1])['revision'] == 1
+
+
+def test_file_line_rejects_unreliable_source(report, capsys):
+    unit = next(u for u in report[1]['units'] if u['text'].startswith('Other'))
+    unit['source_span'] = {'reliable': False, 'writable': False, 'reason': 'Complex source'}
+    (report[0] / MANIFEST).write_text(json.dumps(report[1]))
+    code, result = call(report, capsys, 'add', '--file', 'main.tex', '--line', str(unit['source']['start_line']),
+                        '--quote', 'Other Alpha beta.', '--body', 'Review', '--author', 'Codex')
+    assert code == 4 and result['candidates'] and any(not item['reliable'] for item in result['candidates'])
+    assert report[2].metadata(report[1])['revision'] == 0
+
+
+def test_report_context_distinguishes_shared_paper_versions(report, capsys):
+    recipe = report[0] / '.rebuild' / 'recipe.json'
+    recipe.parent.mkdir()
+    for mode, expected in [('live', 'live'), ('directory', 'diff')]:
+        recipe.write_text(json.dumps({'mode': mode}))
+        code, value = call(report, capsys, '--summary')
+        assert code == 0 and value['report_context']['kind'] == expected
+        assert value['report_context']['project_id'] == report[1]['project_id']
+        assert value['report_context']['display_version_id'] == report[1]['version_id']
+    # Export remains an unchanged, importable contract.
+    assert 'report_context' not in call(report, capsys, '--export')[1]

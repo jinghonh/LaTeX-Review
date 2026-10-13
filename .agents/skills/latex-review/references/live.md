@@ -26,3 +26,5 @@ HTML 内容预览不保证与 PDF 排版一致。公式使用在线 MathJax；PD
 使用 **latex-review-local stop** 会停止入口及全部受管槽位，仅在用户授权该范围时执行。
 入口命令缺失时，将 **latex-review-local** 替换为 **python -m latex_review.local_service**；参数保持相同。
 升级前由用户停止旧版本服务。新入口不会接管无协议旧进程。
+
+报告类型、显示版本和共享批注存储见 [版本说明](annotations.md#显示版本与共享存储)。

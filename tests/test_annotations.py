@@ -312,6 +312,9 @@ def test_cli_and_real_http_use_same_version_checked_contract(tmp_path, capsys):
         worker.start()
         base = f'http://127.0.0.1:{server.server_port}'
         try:
+            context = json.load(urlopen(base + '/api/report'))['report_context']
+            assert context['project_id'] == content['project_id']
+            assert context['display_version_id'] == content['version_id']
             state = json.load(urlopen(base + '/api/annotations/status'))
             assert state['threads'][0]['id'] == tid and state['token']
             assert json.load(urlopen(base + '/api/annotations/content')) == content

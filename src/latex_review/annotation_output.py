@@ -12,6 +12,7 @@ def add_read_options(parser):
     parser.add_argument('--summary', action='store_true', help='轻量编号、标题、初始作者、状态和标签列表')
     parser.add_argument('--tag', action='append', help='仅返回包含全部指定标签的线程，可重复')
     parser.add_argument('--full', action='store_true', help='展开完整正文、锚点和历史')
+    parser.add_argument('--detail', action='store_true', help='完整消息、目标原文和当前位置，省略历史锚点')
     parser.add_argument('--history', action='store_true', help='按需展开批注历史')
     parser.add_argument('--fields', help='逗号分隔的线程或正文单元字段')
     parser.add_argument('--limit', type=int)
@@ -23,7 +24,7 @@ def add_read_options(parser):
     parser.add_argument('--kind', choices=['text', 'formula'])
 
 
-def read_projection(value, args):
+def read_projection(value, args, content=None):
     key = 'units' if 'units' in value else 'threads'
     items = value[key]
     selected = []
@@ -53,12 +54,18 @@ def read_projection(value, args):
         raise ValueError('字段名称无效')
     if args.summary and fields is None:
         fields = ['id', 'kind', 'source', 'section_path'] if key == 'units' else None
+    detail = getattr(args, 'detail', False)
+    if detail and (key != 'threads' or args.full or args.summary or fields or args.history):
+        raise ValueError('--detail 只用于批注读取，不能与 --full、--summary、--fields 或 --history 混用')
     compact = not args.full and fields is None
     limit = args.limit if args.limit is not None else (50 if compact or args.summary else None)
     paged = selected[args.offset:] if limit is None else selected[args.offset:args.offset + limit]
     if fields:
         paged = [{field: ({**item, **thread_list_item(item)} if key == 'threads' else item).get(field)
                   for field in fields} for item in paged]
+    elif detail:
+        units = {unit['id']: unit for unit in content['units']}
+        paged = [thread_detail(item, units) for item in paged]
     elif args.summary and key == 'threads':
         paged = [thread_list_item(item) for item in paged]
     elif compact:
@@ -81,6 +88,46 @@ def thread_list_item(thread):
     title = thread.get('title') or next((line.strip() for line in initial['body'].splitlines() if line.strip()), '')
     return {'id': thread['id'], 'title': title[:120], 'author': initial['author']['name'],
             'resolved': thread['resolved'], 'updated_at': thread['updated_at'], 'tags': thread.get('tags', [])}
+
+
+def thread_detail(thread, units):
+    association = thread['association']
+    anchor = association.get('anchor')
+    container = association.get('container')
+    location = anchor or container or {}
+    unit = units.get(location.get('unit_id'), {})
+    return {**thread_list_item(thread), 'quote': thread['original_anchor']['quote'],
+            'created_version_id': thread['created_version_id'],
+            'location': {'status': association['status'], 'reason': association.get('reason'),
+                         'unit_id': location.get('unit_id'), 'source': location.get('source'),
+                         'section_path': location.get('section_path', []),
+                         'selection_deleted': (container or {}).get('selection_deleted', False),
+                         'start': (anchor or {}).get('start'), 'end': (anchor or {}).get('end')},
+            'text': unit.get('text'), 'current_quote': (anchor or {}).get('quote'),
+            'messages': [{k: v for k, v in message.items() if k in
+                          ('id', 'body', 'author', 'category', 'reply_to', 'created_at', 'updated_at', 'suggested_replacement')}
+                         for message in thread['messages'] if not message.get('deleted_at')]}
+
+
+def report_context(report, content):
+    import json
+    from pathlib import Path
+    from .report_rebuild import RECIPE
+    root = Path(report).expanduser().resolve()
+    if not root.is_dir():
+        root = root.parent
+    kind = 'unknown'
+    try:
+        recipe = json.loads((root / RECIPE).read_text())
+        if recipe.get('mode') == 'live':
+            kind = 'live'
+        elif recipe.get('mode') in ('git', 'file', 'directory') or recipe.get('new_kind') == 'git':
+            kind = 'diff'
+    except (OSError, ValueError, AttributeError):
+        pass
+    return {'report_directory': str(root), 'kind': kind, 'project_id': content['project_id'],
+            'project_root': content['project_root'], 'entry': content['entry'],
+            'display_version_id': content['version_id']}
 
 
 def thread_summary(thread):

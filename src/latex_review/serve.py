@@ -50,6 +50,8 @@ class ReportHandler(SimpleHTTPRequestHandler):
                      "report_url": f"http://127.0.0.1:{self.server.server_port}/report.html"}
             try:
                 content = load_content(self.directory)
+                from .annotation_output import report_context
+                value['report_context'] = report_context(self.directory, content)
                 value.update({key: content[key] for key in
                               ("project_root", "project_id", "version_id", "entry") if key in content})
             except (OSError, ValueError, TypeError, KeyError) as exc:

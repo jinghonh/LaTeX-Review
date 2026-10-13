@@ -120,7 +120,8 @@ latex-review-annotations REPORT_DIR add --formula --unit-id UNIT_ID --body '公�
 `--project-root` 等顶层选项放在子命令之前；子命令不能与旧读取或 JSON 请求模式混用。
 
 默认读取返回最多 50 条摘要。摘要包含作者、消息预览、定位状态和源码位置，不携带完整锚点或历史。
-使用 `--full` 展开完整数据；使用 `--history` 按需展开历史。`--content` 也默认摘要，定位坐标使用 `--content --full`。
+使用 `--thread-id ID --detail` 读取完整消息、目标原文和当前位置。
+使用 `--full` 展开诊断数据；使用 `--history` 按需展开历史。`--content` 也默认摘要，定位坐标使用 `--content --full`。
 读取支持 `--summary`、`--fields`、`--limit`、`--offset`。分页返回 `total_matched`；`--author` 默认忽略大小写。
 过滤参数为 `--thread-id`、`--unit-id`、`--status`、`--author`、`--kind`、`--tag`。
 
@@ -309,3 +310,47 @@ flowchart LR
  C --> D[重新预检]
  D --> E[提交并核对收据]
 ```
+
+## 精简详情与预检输出
+
+```sh
+latex-review-annotations REPORT_DIR --thread-id THREAD_ID --detail
+latex-review-annotations REPORT_DIR add --file sections/introduction.tex --line 42 --quote '目标原文' --body '问题：……依据：……建议：……' --author Codex
+latex-review-annotations REPORT_DIR batch review.json --request-id editorial-01 --author Codex --atomic --dry-run
+latex-review-annotations REPORT_DIR batch review.json --request-id editorial-01 --author Codex --atomic --review-record review.md
+```
+
+`--detail` 返回完整消息、创建时原文、当前单元正文、当前选区和源码位置。
+它省略原始锚点、历史锚点、历史编辑和各版本关联。未可靠关联时，当前位置为空。
+选区已删除但容器保留时，`selection_deleted=true`；容器位置不代表选区恢复。
+`--detail` 不与 `--full`、`--summary`、`--fields` 或 `--history` 混用。
+
+批量默认返回逐项结果、开始数量、修订号和预检令牌，不返回全部已有批注编号。
+预检返回 `preflight_file`，其中保留完整开始清单、原始输入和逐项结果。
+提交返回 `snapshot_file`，其中保留完整收据。`batch --full` 显式展开开始编号清单。
+`--review-record FILE.md` 在提交后导出独立 Markdown 记录，保留显示版本、文件行号、原文、意见、结果和批注编号。
+部分成功时，记录同时保留失败项。再次提交相同请求 ID 只核对原收据，不重复添加。
+记录导出失败时，响应保留已提交收据并提供 `review_record_error`；修复输出路径后用同一请求 ID 补导出。
+
+## 文件、行号与原文联合定位
+
+```json
+{"id":"review-01","operation":"add","file":"sections/introduction.tex","line":42,"quote":"目标原文","body":"问题：……依据：……建议：……"}
+```
+
+`file` 为论文项目内相对 POSIX 路径。`line` 从 1 开始，并需要 `file`。
+行号必须属于当前显示版本中可靠、连续、单文件的源码单元范围。
+工具先筛选文件和行号，再匹配原文。范围结束行列采用半开区间。
+只给 `file` 时可以缩小文件范围；复杂源码缺少可靠范围时，联合行号定位拒绝写入。
+重复原文仍须用 `unit_id` 或 `occurrence` 消歧；工具不自动选择最近位置。
+失败项返回候选用于核对。定位不读取当前磁盘来推算历史报告坐标。
+
+## 显示版本与共享存储
+
+**显示版本**是指定报告当前展示的新侧正文版本，由 `display_version_id` 标识。
+CLI 查询与 `/api/report` 提供 `report_context`，包含报告目录、`kind`、项目身份、论文入口和显示版本。
+`kind=live` 表示当前全文预览；`kind=diff` 表示差异报告；旧报告缺少可靠类型信息时返回 `unknown`。
+同一论文的两类服务共享 `project_id` 和批注线程，分别使用独立服务槽位。
+每个显示版本独立计算定位。共享批注线程不代表共享正文坐标。
+两份报告的显示版本可以相同，也可以不同；换版后须重新读取当前位置。
+全文审查使用当前全文预览；修改对比使用差异报告。目录名称或批注数量不能证明报告类型。

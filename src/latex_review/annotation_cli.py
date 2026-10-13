@@ -13,17 +13,43 @@ class SelectionError(AnnotationError):
 
 
 def find_selection(content, args):
+    from pathlib import PurePosixPath, PureWindowsPath
+    file, line = getattr(args, 'file', None), getattr(args, 'line', None)
+    if file is not None:
+        if not isinstance(file, str) or not file or '\\' in file or PurePosixPath(file).is_absolute() or PureWindowsPath(file).drive or '..' in file.split('/'):
+            raise SelectionError('file 须为项目内相对 POSIX 路径', [])
+        file = str(PurePosixPath(file))
+    if line is not None and (type(line) is not int or line < 1 or file is None):
+        raise SelectionError('line 须为正整数，并同时指定 file', [])
     quote = normalize_quote(args.quote) if args.quote is not None else None
     if quote == '' or (quote is None and not (args.formula and args.unit_id)):
         raise SelectionError('需要非空 --quote；完整公式也可使用 --formula --unit-id', [])
     candidates = []
     eligible = []
+    source_candidates = []
     plain_quote, formulas = quote_atoms(args.quote or "")
     for unit in sorted(content['units'], key=lambda u: u['order']):
         if unit['kind'] != ('formula' if args.formula else 'text'):
             continue
         if args.unit_id and unit['id'] != args.unit_id:
             continue
+        if file is not None:
+            source, span = unit.get('source') or {}, unit.get('source_span') or {}
+            if source.get('file') != file:
+                continue
+            source_candidates.append({'unit_id': unit['id'], 'source': source,
+                                      'reliable': span.get('reliable', False), 'preview': unit['text'][:160]})
+            if line is not None:
+                if not span.get('reliable') or span.get('file') != file:
+                    continue
+                start_line = source.get('start_line')
+                end_line = source.get('end_line', 0)
+                if type(start_line) is not int or type(end_line) is not int:
+                    continue
+                if source.get('end_column') == 1 and end_line > start_line:
+                    end_line -= 1
+                if not start_line <= line <= end_line:
+                    continue
         eligible.append(unit)
         if args.formula:
             if quote is not None and (not (formulas or (quote.startswith(r'\begin{') and quote.endswith('}'))) or normalize_formula(unit['raw_latex']) != normalize_formula(quote)):
@@ -36,6 +62,8 @@ def find_selection(content, args):
                                'source': unit['source'], 'section_path': unit['section_path'],
                                'text': unit['text']})
     if not candidates:
+        if file is not None:
+            raise SelectionError('文件、可靠行号范围与原文未能共同匹配；请核对显示版本', source_candidates[:8])
         raise SelectionError('未找到原文或完整公式；请读取 --content 并核对 --unit-id', nearest(eligible, quote or ''))
     if args.occurrence is not None:
         if not 1 <= args.occurrence <= len(candidates):
@@ -114,6 +142,8 @@ def add_commands(parser):
         if name == 'metadata':
             labels.add_argument('--clear-tags', action='store_true', help='清空线程标签')
         if name == 'add':
+            command.add_argument('--file', help='项目内源码文件，使用相对 POSIX 路径')
+            command.add_argument('--line', type=int, help='显示版本的源码行号，从 1 开始；需要 --file')
             command.add_argument('--quote', help='原文；公式模式须包含完整 LaTeX 包装')
             command.add_argument('--unit-id', help='只搜索指定正文单元')
             command.add_argument('--occurrence', type=int, help='在当前候选中选择第几个位置，从 1 开始')

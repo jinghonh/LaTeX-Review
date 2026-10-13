@@ -21,6 +21,8 @@ def add_batch_commands(commands):
     batch.add_argument('--preflight-token', help='指定预检返回的令牌；默认复用相同请求 ID 的预检')
     batch.add_argument('--quiet-progress', action='store_true', help='关闭 stderr 阶段进度')
     batch.add_argument('--snapshot', type=Path, help='复核快照文件；默认保存到项目共享存储旁')
+    batch.add_argument('--full', action='store_true', help='返回完整批量结果及开始清单')
+    batch.add_argument('--review-record', type=Path, help='提交后导出独立 Markdown 审查记录，路径须以 .md 结尾')
     check = commands.add_parser('audit', help='复核保存的批量操作并报告运行期间新增批注')
     check.add_argument('snapshot', type=Path)
 
@@ -55,7 +57,8 @@ def prepare_batch(content, state, value, args):
                 item['author'] = {'name': args.author, 'type': 'agent'}
         if operation == 'create' and 'selection' not in item:
             locator = SimpleNamespace(quote=item.pop('quote', None), formula=item.pop('formula', False),
-                                      unit_id=item.pop('unit_id', None), occurrence=item.pop('occurrence', None))
+                                      unit_id=item.pop('unit_id', None), occurrence=item.pop('occurrence', None),
+                                      file=item.pop('file', None), line=item.pop('line', None))
             try:
                 item['selection'] = find_selection(content, locator)
             except SelectionError as exc:
@@ -83,7 +86,11 @@ def run_batch(store, content, args):
             print(f"{labels.get(phase, phase)} {completed}/{total}", file=sys.stderr, flush=True)
     progress('read', 0, 0)
     before = store.inventory(content)
-    request = prepare_batch(content, before, _read_json(args.file), args)
+    submitted = _read_json(args.file)
+    request = prepare_batch(content, before, submitted, args)
+    originals = submitted if isinstance(submitted, list) else submitted['items']
+    if args.review_record and (args.dry_run or args.review_record.suffix.lower() != '.md' or args.review_record.is_symlink()):
+        raise AnnotationError('--review-record 只用于提交，须为非符号链接的 .md 文件')
     request_id = request['request_id']
     if not isinstance(request_id, str) or not request_id.strip():
         raise AnnotationError('批量写入需要 --request-id 或 JSON request_id')
@@ -93,8 +100,11 @@ def run_batch(store, content, args):
     if snapshot_path.is_symlink():
         raise AnnotationError('快照文件不可为符号链接')
     snapshot_path = snapshot_path.parent.resolve() / snapshot_path.name
+    if args.review_record and args.review_record.expanduser().resolve() == snapshot_path:
+        raise AnnotationError('审查记录不能覆盖批量快照')
     snapshot = {'project_id': content['project_id'], 'version_id': content['version_id'],
-                'request_id': request_id, 'before': before, 'expected_items': request['items']}
+                'request_id': request_id, 'before': before, 'expected_items': request['items'],
+                'submitted_items': originals}
     if not args.dry_run:
         if snapshot_path.exists():
             saved = json.loads(snapshot_path.read_text(encoding='utf-8'))
@@ -107,6 +117,14 @@ def run_batch(store, content, args):
         snapshot_path.parent.mkdir(parents=True, exist_ok=True)
         _atomic_write(snapshot_path, snapshot)
     result = store.batch(content, request, progress=progress)
+    if args.dry_run:
+        preflight_path = snapshot_path.with_suffix('.preflight.json')
+        if preflight_path.is_symlink():
+            raise AnnotationError('预检文件不可为符号链接')
+        snapshot.update(result=result)
+        preflight_path.parent.mkdir(parents=True, exist_ok=True)
+        _atomic_write(preflight_path, snapshot)
+        result = {**result, 'preflight_file': str(preflight_path)}
     if not args.dry_run:
         progress('audit', 0, len(request['items']))
         successful = {item['id'] for item in result['results'] if item['ok']}
@@ -115,7 +133,16 @@ def run_batch(store, content, args):
         snapshot.update(result=result, audit=verification)
         _atomic_write(snapshot_path, snapshot)
         result = {**result, 'audit': verification, 'snapshot_file': str(snapshot_path.resolve())}
+        if args.review_record:
+            from .annotation_review_record import write_record
+            try:
+                result['review_record'] = write_record(args.review_record, content, request, result, store.read(content), originals)
+            except OSError as exc:
+                result['review_record_error'] = str(exc)
         progress('complete', len(request['items']), len(request['items']))
+    if not args.full:
+        result = {**result, 'start_thread_count': len(result.get('start_thread_ids', []))}
+        result.pop('start_thread_ids', None)
     return result
 
 

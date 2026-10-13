@@ -303,3 +303,15 @@ HTML 导出清理运行时 DOM，内嵌图片并保留译文 JSON。公式加载
 变更句线程仍位于现有 `inline-change` 卡片。
 
 用户操作见 [批注操作指南](report-annotations-user-guide.md)。
+
+## 智能体读取与源码定位
+
+批注 CLI 的 `--detail` 是读取投影，不改变线程存储或导出契约。
+它返回完整未删除消息、创建原文和指定显示版本的当前位置，省略历史锚点和编辑历史。
+高层 `add` 和批量 `add` 接受 `file`、`line`、`quote`，并转换为已有 `selection`。
+文件和行号筛选要求可靠源码范围；歧义仍返回候选，不新增宽松定位模式。
+底层请求信封和离线导入继续使用 `selection`，不直接接受这些高层定位字段。
+批量 CLI 默认隐藏 `start_thread_ids`；底层事务收据保留完整字段。
+预检文件和提交快照保存完整清单；`batch --full` 可以展开完整结果。
+`report_context` 是 CLI 与报告发现接口的附加信息，不写入备份契约。
+独立 Markdown 审查记录由 `--review-record` 导出，不修改论文源码。

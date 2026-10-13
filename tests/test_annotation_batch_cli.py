@@ -95,3 +95,76 @@ def test_cli_preflight_diagnostics_and_fixed_retry(tmp_path, capsys):
     receipt = json.loads(capsys.readouterr().out)
     assert receipt['preflight_reused'] and receipt['revision'] == 2 and receipt['audit']['ok']
     assert len(AnnotationStore.for_content(content).read(content)['threads']) == 2
+
+
+def test_preflight_11_items_hides_63_existing_ids_and_saves_full_snapshot(tmp_path, capsys):
+    content, _ = content_at(tmp_path / 'paper', 'Sentence.')
+    report = tmp_path / 'report'
+    report.mkdir()
+    (report / MANIFEST).write_text(json.dumps(content))
+    store = AnnotationStore.for_content(content)
+    unit = content['units'][0]
+    store.batch(content, {'operation': 'batch', 'expected_revision': 0, 'request_id': 'seed',
+                         'items': [{'id': str(i), 'operation': 'create', 'selection': {'unit_id': unit['id'], 'start': 0, 'end': 8},
+                                    'body': 'Existing', 'author': {'name': 'Other', 'type': 'agent'}, 'category': 'note'} for i in range(63)]})
+    batch = tmp_path / 'batch.json'
+    batch.write_text(json.dumps([{'id': str(i), 'operation': 'add', 'quote': 'Sentence.', 'body': 'Review',
+                                 'file': 'main.tex', 'line': unit['source']['start_line']} for i in range(11)]))
+    args = [str(report), 'batch', str(batch), '--author', 'Codex', '--request-id', 'review-11', '--atomic', '--dry-run']
+    assert annotations_main(args) == 0
+    value = json.loads(capsys.readouterr().out)
+    assert len(value['results']) == 11 and value['start_thread_count'] == 63 and 'start_thread_ids' not in value
+    saved = json.loads(__import__('pathlib').Path(value['preflight_file']).read_text())
+    assert len(saved['result']['start_thread_ids']) == len(saved['before']['threads']) == 63
+    assert annotations_main([*args, '--full']) == 0
+    assert len(json.loads(capsys.readouterr().out)['start_thread_ids']) == 63
+
+
+def test_review_record_and_batch_source_location(tmp_path, capsys):
+    content, _ = content_at(tmp_path / 'paper', 'Sentence.')
+    report = tmp_path / 'report'
+    report.mkdir()
+    (report / MANIFEST).write_text(json.dumps(content))
+    source = tmp_path / 'paper' / 'main.tex'
+    before = source.read_bytes()
+    batch = tmp_path / 'batch.json'
+    batch.write_text(json.dumps([{'id': 'one', 'operation': 'add', 'file': 'main.tex', 'line': 1,
+                                 'quote': 'Sentence.', 'body': '问题：结构不清。依据：原文。建议：补充解释。'},
+                                {'id': 'bad', 'operation': 'add', 'file': 'main.tex', 'line': 999,
+                                 'quote': 'Missing.', 'body': 'Unmatched review'}]))
+    record = tmp_path / 'review.md'
+    args = [str(report), 'batch', str(batch), '--author', 'Codex', '--request-id', 'record', '--review-record', str(record)]
+    assert annotations_main(args) == 4
+    result = json.loads(capsys.readouterr().out)
+    assert result['committed'] and result['audit']['ok']
+    text = record.read_text()
+    assert content['version_id'] in text and 'main.tex:1-' in text
+    assert result['results'][0]['thread_id'] in text and 'Sentence.' in text
+    assert 'Unmatched review' in text and 'main.tex:999-' in text
+    assert source.read_bytes() == before
+    assert annotations_main(args) == 4
+    assert json.loads(capsys.readouterr().out)['results'] == result['results']
+    assert len(AnnotationStore.for_content(content).read(content)['threads']) == 1
+
+
+def test_record_export_failure_retains_committed_receipt(tmp_path, capsys, monkeypatch):
+    from latex_review import annotation_review_record
+    content, _ = content_at(tmp_path / 'paper', 'Sentence.')
+    report = tmp_path / 'report'
+    report.mkdir()
+    (report / MANIFEST).write_text(json.dumps(content))
+    batch = tmp_path / 'batch.json'
+    batch.write_text(json.dumps([{'id': 'one', 'operation': 'add', 'quote': 'Sentence.', 'body': 'Review'}]))
+    def unavailable(*args):
+        raise OSError('record directory unavailable')
+    original = annotation_review_record.write_record
+    monkeypatch.setattr(annotation_review_record, 'write_record', unavailable)
+    args = [str(report), 'batch', str(batch), '--author', 'Codex', '--request-id', 'record-fail', '--review-record', str(tmp_path / 'review.md')]
+    assert annotations_main(args) == 4
+    result = json.loads(capsys.readouterr().out)
+    assert result['committed'] and result['results'][0]['ok']
+    assert 'record directory unavailable' in result['review_record_error']
+    monkeypatch.setattr(annotation_review_record, 'write_record', original)
+    assert annotations_main(args) == 0
+    capsys.readouterr()
+    assert len(AnnotationStore.for_content(content).read(content)['threads']) == 1

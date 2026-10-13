@@ -158,7 +158,7 @@ def annotations_main(argv: list[str] | None = None) -> int:
     """Read annotations or execute a high-level/version-checked JSON request."""
     from .annotations import AnnotationStore, execute_request, load_content
     from .annotation_cli import SelectionError, add_commands, build_request
-    from .annotation_output import add_read_options, read_projection, write_summary
+    from .annotation_output import add_read_options, read_projection, write_summary, report_context
     from .annotation_batch_cli import add_batch_commands, run_batch, run_audit
     import sys
     p = parser('latex-review-annotations')
@@ -178,10 +178,11 @@ def annotations_main(argv: list[str] | None = None) -> int:
             raise ValueError('子命令不能与 --content、--export 或 --request 同时使用')
         content = load_content(args.report)
         store = AnnotationStore.for_content(content, args.project_root)
+        context = report_context(args.report, content)
         if args.command == 'batch':
             value = run_batch(store, content, args)
-            emit(value)
-            return 0 if all(item['ok'] for item in value['results']) else 4
+            emit({**value, 'report_context': context})
+            return 0 if all(item['ok'] for item in value['results']) and not value.get('review_record_error') else 4
         elif args.command == 'audit':
             value = run_audit(store, content, args.snapshot)
         elif args.command:
@@ -206,7 +207,9 @@ def annotations_main(argv: list[str] | None = None) -> int:
                 from .report_rebuild import rebuild_report
                 value['result']['rebuild'] = rebuild_report(args.report)
         else:
-            value = read_projection(store.read(content), args)
+            value = read_projection(store.read(content), args, content)
+        if not args.export:
+            value = {**value, 'report_context': context}
         emit(value)
         return 0
     except SelectionError as exc:
