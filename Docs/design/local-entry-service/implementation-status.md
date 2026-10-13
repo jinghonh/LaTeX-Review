@@ -40,13 +40,21 @@ ensure接受请求ID，返回202及操作ID；操作状态为queued/starting/rea
 | identity.py | 兼容旧project_id哈希与规范服务身份 |
 | local_paths.py、local_state.py | 私有状态路径、终身内核锁、原子JSON |
 | output_leases.py | 持久输出租约、祖先路径重叠检查、生成冻结边界 |
-| local_reports.py | 完整报告副本、资源及身份核验、候选替换 |
+| local_reports.py | 完整报告副本、资源及身份核验 |
+| report_directory.py | 候选目录生命周期、目录替换、失败回退和备份策略 |
 | local_protocol.py、local_client.py | 客户端发现、并发启动、请求ID、等待与显式停止 |
 | local_worker.py、local_tasks.py | 槽位终身锁、所有者EOF、独立任务组取消 |
 | local_service.py | FIFO、候选替换、状态恢复、固定地址报告页面、管理命令 |
 | local_dashboard.html | 论文列表、两类槽位、打开/停止/恢复与诊断 |
 | live.py、serve.py、cli.py | 全部公开CLI受管接入；保留内部create_server/build API |
 | report_rebuild.py、delivery.py、upload.py | 输出事务及发布冻结；SSH阶段释放生成锁 |
+
+持续预览和显式重建通过`report_directory`上下文更新报告目录。
+调用方持有现有锁，并在候选目录中生成和验证内容。
+正常退出提交，异常退出清理候选目录。
+持续预览删除旧目录；显式重建保留`previous_report`。
+替换失败时恢复旧目录；回退失败时保留备份，并报告恢复路径。
+翻译会话刷新和状态更新仍由调用方执行。
 
 ## 有依据的实施调整
 

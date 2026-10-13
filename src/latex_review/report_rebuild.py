@@ -8,8 +8,6 @@ from pathlib import Path
 import shutil
 import subprocess
 import sys
-import tempfile
-import uuid
 from threading import local
 
 _held = local()
@@ -131,41 +129,31 @@ def _rebuild_report(report):
     recipe_path = report / RECIPE
     if not recipe_path.is_file():
         return {'status': 'pending', 'message': '源码已修改，报告待更新：旧报告缺少重建配方。'}
-    stage = None
-    backup = report.parent / ('.' + report.name + '.before-' + uuid.uuid4().hex)
     try:
-        stage = Path(tempfile.mkdtemp(prefix='.' + report.name + '.rebuild-', dir=report.parent))
-        code = ('from latex_review.report_rebuild import replay; import sys; '
-                'sys.exit(replay(sys.argv[1], sys.argv[2], sys.argv[3]))')
-        from .local_tasks import OWNER_FD
-        inherited = ()
-        if OWNER_FD is not None:
-            code = ('from latex_review.local_tasks import inherit_owner; '
-                    f'inherit_owner({OWNER_FD}); ' + code)
-            inherited = (OWNER_FD,)
-        result = subprocess.run([sys.executable, '-c', code, str(recipe_path), str(stage), str(report)],
-                                capture_output=True, text=True, pass_fds=inherited)
-        from .annotations import load_content
-        if result.returncode not in (0, 2) or not (stage / 'report.html').is_file():
-            raise ValueError((result.stderr or result.stdout or '报告重建失败')[-800:])
-        load_content(stage)  # A source fallback cannot provide the new annotation identity.
-        manifest = stage / 'run.json'
-        if manifest.exists():
-            data = json.loads(manifest.read_text(encoding='utf-8'))
-            data['artifacts'] = {name: str((report / name).resolve()) for name in data.get('artifacts', {})}
-            from .run_manifest import write_manifest
-            write_manifest(stage, data)
-        os.replace(report, backup)
-        try:
-            os.replace(stage, report)
-            stage = None
-        except Exception:
-            os.replace(backup, report)
-            raise
+        from .report_directory import report_directory
+        with report_directory(report, keep_previous=True) as candidate:
+            stage = candidate.directory
+            code = ('from latex_review.report_rebuild import replay; import sys; '
+                    'sys.exit(replay(sys.argv[1], sys.argv[2], sys.argv[3]))')
+            from .local_tasks import OWNER_FD
+            inherited = ()
+            if OWNER_FD is not None:
+                code = ('from latex_review.local_tasks import inherit_owner; '
+                        f'inherit_owner({OWNER_FD}); ' + code)
+                inherited = (OWNER_FD,)
+            result = subprocess.run([sys.executable, '-c', code, str(recipe_path), str(stage), str(report)],
+                                    capture_output=True, text=True, pass_fds=inherited)
+            from .annotations import load_content
+            if result.returncode not in (0, 2) or not (stage / 'report.html').is_file():
+                raise ValueError((result.stderr or result.stdout or '报告重建失败')[-800:])
+            load_content(stage)  # A source fallback cannot provide the new annotation identity.
+            manifest = stage / 'run.json'
+            if manifest.exists():
+                data = json.loads(manifest.read_text(encoding='utf-8'))
+                data['artifacts'] = {name: str((report / name).resolve()) for name in data.get('artifacts', {})}
+                from .run_manifest import write_manifest
+                write_manifest(stage, data)
         return {'status': 'updated', 'message': '源码已修改，报告已更新。',
-                'report_directory': str(report), 'previous_report': str(backup)}
+                'report_directory': str(report), 'previous_report': str(candidate.previous_report)}
     except (OSError, ValueError, TypeError, KeyError) as exc:
         return {'status': 'pending', 'message': '源码已修改，报告待更新：' + str(exc)}
-    finally:
-        if stage and stage.exists():
-            shutil.rmtree(stage)

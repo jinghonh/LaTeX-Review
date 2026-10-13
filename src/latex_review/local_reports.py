@@ -47,9 +47,10 @@ def report_identity(directory, *, root=None, entry=None):
     return paper_identity(root or entry_path.parent, entry_path)
 
 
-def copy_report(source, destination):
+def copy_report(source, destination, *, allow_empty=False):
     source, destination = Path(source).resolve(), Path(destination)
-    if destination.exists():
+    if destination.exists() and not (allow_empty and destination.is_dir()
+                                    and not destination.is_symlink() and not any(destination.iterdir())):
         raise ValueError('候选报告目录已存在')
     class Resources(HTMLParser):
         def handle_starttag(self, tag, attrs):
@@ -71,7 +72,7 @@ def copy_report(source, destination):
             if not (source / 'report.html').is_file():
                 raise ValueError('报告入口不存在')
             Resources().feed((source / 'report.html').read_text(encoding='utf-8'))
-            destination.mkdir(parents=True, mode=0o700)
+            destination.mkdir(parents=True, mode=0o700, exist_ok=allow_empty)
             for folder, dirs, names in os.walk(source, followlinks=False):
                 folder = Path(folder)
                 dirs.sort()
@@ -99,21 +100,3 @@ def copy_report(source, destination):
         if destination.exists():
             shutil.rmtree(destination)
         raise
-
-
-def replace_report(stage, output):
-    """Swap a completed generation on the output filesystem, with rollback."""
-    import uuid
-    stage, output = Path(stage), Path(output)
-    backup = output.parent / ('.' + output.name + '.before-' + uuid.uuid4().hex)
-    had_output = output.exists()
-    if had_output:
-        output.replace(backup)
-    try:
-        stage.replace(output)
-    except BaseException:
-        if had_output:
-            backup.replace(output)
-        raise
-    if had_output:
-        shutil.rmtree(backup)

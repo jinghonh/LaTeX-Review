@@ -143,22 +143,14 @@ def run_worker(recipe, stop):
                                                    extra_files=(Path(recipe['config']),)))
         initial = events.generation
         revision = 1
-        from .local_reports import copy_report, replace_report
-        import shutil
-        import tempfile
-        with rebuild_lock(output):
-            stage = Path(tempfile.mkdtemp(prefix='.' + output.name + '.stage-', dir=output.parent))
-            try:
-                if recipe.get('candidate'):
-                    shutil.rmtree(stage)
-                    copy_report(Path(recipe['candidate']), stage)
-                    messages = []
-                else:
-                    messages = build(source, stage)
-                replace_report(stage, output)
-            finally:
-                if stage.exists():
-                    shutil.rmtree(stage)
+        from .local_reports import copy_report
+        from .report_directory import report_directory
+        with rebuild_lock(output), report_directory(output) as candidate:
+            if recipe.get('candidate'):
+                copy_report(Path(recipe['candidate']), candidate.directory, allow_empty=True)
+                messages = []
+            else:
+                messages = build(source, candidate.directory)
         config = _config(Path(recipe['config']), recipe['config_explicit'])
         translation = TranslationConfig.from_mapping(config['translation']) if 'translation' in config else None
         server = create_server(output, translation_config=translation, cache_directory=cache,
@@ -184,13 +176,8 @@ def run_worker(recipe, stop):
                     previous, pending = current, False
                     try:
                         with rebuild_lock(output):
-                            stage = Path(tempfile.mkdtemp(prefix='.' + output.name + '.stage-', dir=output.parent))
-                            try:
-                                messages = build(source, stage, revision + 1)
-                                replace_report(stage, output)
-                            finally:
-                                if stage.exists():
-                                    shutil.rmtree(stage)
+                            with report_directory(output) as candidate:
+                                messages = build(source, candidate.directory, revision + 1)
                             refresh_translation(server, output)
                         revision += 1
                         message = events.warning + f'已更新当前论文。预览诊断：{len(messages)} 项。'
