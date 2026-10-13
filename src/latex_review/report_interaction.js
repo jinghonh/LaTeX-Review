@@ -201,7 +201,7 @@
   mode.addEventListener('change', context);
   filter();
 
-  function jump(button) {
+  function jump(button, scroll = true) {
     const card = button.closest('.change-card') || cards.find(item =>
       inlineChanges.get(item)?.contains(button));
     if (card) updateSelection(card);
@@ -276,8 +276,16 @@
       arrangeInlineChanges();
       const toolbar = document.querySelector('.report-controls');
       detail.style.scrollMarginTop = (toolbar && getComputedStyle(toolbar).position === 'sticky' ? toolbar.offsetHeight + 16 : 16) + 'px';
-      detail.scrollIntoView({block: 'start', behavior: 'auto'});
-      if (selectedDetail) {
+      if (scroll) detail.scrollIntoView({block: 'start', behavior: 'auto'});
+      else {
+        const summary = detail.querySelector('summary');
+        const bounds = summary.getBoundingClientRect();
+        if (bounds.top < parseFloat(detail.style.scrollMarginTop) || bounds.bottom > innerHeight) {
+          summary.style.scrollMarginTop = detail.style.scrollMarginTop;
+          summary.scrollIntoView({block: 'nearest', behavior: 'auto'});
+        }
+      }
+      if (scroll && selectedDetail) {
         selectedDetail.style.scrollMarginTop = detail.style.scrollMarginTop;
         selectedDetail.scrollIntoView({block: 'nearest', behavior: 'auto'});
       }
@@ -301,7 +309,7 @@
       card.scrollIntoView({block: 'center', behavior: 'auto'});
       button.focus({preventScroll: true});
     }
-    jump(button);
+    jump(button, origin !== 'inline');
     if (origin === 'card' || origin === 'translation' || origin === 'page')
       afterDirectoryNavigation();
   }
@@ -376,44 +384,123 @@
     }
     return null;
   }
+  let activeSide = 'new';
+  let geometry = null;
+  let syncFrame = false;
+  const expectedScroll = {old: null, new: null};
+  const stableNode = {old: null, new: null};
+  function measure() {
+    geometry = Object.fromEntries(['old', 'new'].map(side => {
+      const panel = panels[side];
+      const origin = panel.getBoundingClientRect().top + (panel.clientTop || 0);
+      return [side, visibleNodes(side).map(node => {
+        const rect = node.getBoundingClientRect();
+        let depth = 0;
+        for (let parent = node.parentElement.closest('.review-node'); parent;
+             parent = parent.parentElement.closest('.review-node')) depth++;
+        return {node, top: rect.top - origin + panel.scrollTop, height: rect.height, depth};
+      })];
+    }));
+  }
   function align(side) {
     if (readingView() || !sync.checked || performance.now() < mutedUntil || window.matchMedia('(max-width:1000px)').matches) return;
+    if (!geometry) measure();
     const panel = panels[side];
-    const other = panels[side === 'old' ? 'new' : 'old'];
-    const reference = panel.getBoundingClientRect().top + panel.clientHeight / 2;
-    const candidates = visibleNodes(side);
+    const targetSide = side === 'old' ? 'new' : 'old';
+    const other = panels[targetSide];
+    const reference = panel.scrollTop + panel.clientHeight / 2;
+    const candidates = geometry[side];
     if (!candidates.length) return;
-    const depth = node => {
-      let result = 0;
-      for (let parent = node.parentElement.closest('.review-node'); parent;
-           parent = parent.parentElement.closest('.review-node')) result++;
-      return result;
-    };
-    const distance = node => {
-      const rect = node.getBoundingClientRect();
-      return Math.max(rect.top - reference, reference - rect.bottom, 0);
-    };
-    const score = node => distance(node) + Math.min(node.getBoundingClientRect().height, 500) * .1;
-    const active = candidates.reduce((best, node) =>
-      score(node) < score(best) || (score(node) === score(best) && depth(node) > depth(best)) ? node : best);
-    const anchor = nearestAnchor(side, active, reference);
-    if (!anchor) return;
-    const [from, to] = anchor;
-    const fraction = Math.max(0, Math.min(1, (reference - from.getBoundingClientRect().top) / Math.max(1, from.offsetHeight)));
-    const desired = other.scrollTop + to.getBoundingClientRect().top - other.getBoundingClientRect().top +
-      fraction * to.offsetHeight - other.clientHeight / 2;
+    const distance = entry => Math.max(entry.top - reference, reference - entry.top - entry.height, 0);
+    const score = entry => distance(entry) + Math.min(entry.height, 500) * .1;
+    let active = candidates.reduce((best, entry) =>
+      score(entry) < score(best) || (score(entry) === score(best) && entry.depth > best.depth) ? entry : best);
+    const previous = candidates.find(entry => entry.node === stableNode[side]);
+    if (previous && score(previous) <= score(active) + 12) active = previous;
+    stableNode[side] = active.node;
+    const targets = new Map(geometry[targetSide].map(entry => [entry.node.dataset.nodeId, entry]));
+    const matches = candidates.flatMap(entry => {
+      const target = targets.get(paired[side].get(entry.node.dataset.nodeId));
+      return target ? [{from: entry, to: target}] : [];
+    });
+    const direct = matches.find(pair => pair.from === active);
+    let position;
+    if (!direct) {
+      // Use adjacent leaf anchors; a containing section cannot bound an insertion.
+      const adjacent = matches.filter(pair => !pair.from.node.contains(active.node) && !active.node.contains(pair.from.node));
+      const before = adjacent.filter(pair => pair.from.top + pair.from.height <= reference)
+        .sort((a, b) => b.from.top + b.from.height - a.from.top - a.from.height)[0];
+      const after = adjacent.filter(pair => pair.from.top >= reference).sort((a, b) => a.from.top - b.from.top)[0];
+      if (before && after && after.from.top > before.from.top + before.from.height &&
+          after.to.top >= before.to.top + before.to.height) {
+        const fraction = (reference - before.from.top - before.from.height) /
+          (after.from.top - before.from.top - before.from.height);
+        position = before.to.top + before.to.height + fraction * (after.to.top - before.to.top - before.to.height);
+      }
+    }
+    if (position === undefined) {
+      const pair = direct || matches.filter(pair => pair.from.node.parentElement === active.node.parentElement)
+        .sort((a, b) => distance(a.from) - distance(b.from))[0] ||
+        matches.sort((a, b) => distance(a.from) - distance(b.from))[0];
+      if (!pair) return;
+      const fraction = Math.max(0, Math.min(1, (reference - pair.from.top) / Math.max(1, pair.from.height)));
+      position = pair.to.top + fraction * pair.to.height;
+    }
+    const desired = Math.max(0, Math.min(Number.isFinite(other.scrollHeight) ? other.scrollHeight - other.clientHeight : Infinity,
+      position - other.clientHeight / 2));
     if (Math.abs(desired - other.scrollTop) > 2) {
-      mutedUntil = performance.now() + 180;
       other.scrollTop = desired;
+      expectedScroll[targetSide] = other.scrollTop;
     }
   }
+  function scheduleSync() {
+    if (syncFrame) return;
+    syncFrame = true;
+    requestAnimationFrame(() => { syncFrame = false; align(activeSide); });
+  }
+  function invalidateGeometry() {
+    const panel = panels[activeSide];
+    const entry = geometry?.[activeSide].find(item => item.node === stableNode[activeSide]);
+    const offset = entry ? panel.scrollTop + panel.clientHeight / 2 - entry.top : null;
+    geometry = null;
+    if (entry && sync.checked && !readingView()) {
+      measure();
+      const updated = geometry[activeSide].find(item => item.node === entry.node);
+      if (updated) {
+        panel.scrollTop = Math.max(0, updated.top + offset - panel.clientHeight / 2);
+        expectedScroll[activeSide] = panel.scrollTop;
+      }
+    }
+    scheduleSync();
+  }
   for (const side of ['old', 'new']) {
-    let scheduled = false;
-    panels[side].addEventListener('scroll', () => {
-      if (scheduled) return;
-      scheduled = true;
-      requestAnimationFrame(() => { scheduled = false; align(side); });
+    const panel = panels[side];
+    const activate = () => { activeSide = side; expectedScroll[side] = null; };
+    for (const event of ['wheel', 'pointerdown', 'touchstart', 'keydown'])
+      panel.addEventListener(event, activate, {passive: true});
+    panel.addEventListener('scroll', () => {
+      if (expectedScroll[side] !== null && Math.abs(panel.scrollTop - expectedScroll[side]) <= 2) return;
+      expectedScroll[side] = null;
+      activeSide = side;
+      scheduleSync();
     }, {passive: true});
+    panel.addEventListener('load', invalidateGeometry, true);
+    panel.addEventListener('toggle', invalidateGeometry, true);
+  }
+  sync.addEventListener('change', () => { mutedUntil = 0; invalidateGeometry(); });
+  for (const control of [mode, kind, category, layout].filter(Boolean))
+    control.addEventListener('change', invalidateGeometry);
+  if (window.addEventListener) window.addEventListener('resize', invalidateGeometry, {passive: true});
+  if (typeof ResizeObserver !== 'undefined') {
+    const observer = new ResizeObserver(invalidateGeometry);
+    Object.values(panels).forEach(panel => observer.observe(panel));
+    Object.values(nodes).flat().forEach(node => observer.observe(node));
+  }
+  if (typeof MutationObserver !== 'undefined') {
+    const observer = new MutationObserver(invalidateGeometry);
+    Object.values(panels).forEach(panel => observer.observe(panel, {
+      subtree: true, childList: true, attributes: true, attributeFilter: ['class', 'hidden', 'open', 'style'],
+    }));
   }
 
   if (layout) {
@@ -709,7 +796,7 @@
       const close = document.createElement('button'); close.type = 'button';
       close.className = 'inline-close'; close.textContent = '收起对照 ↑';
       close.addEventListener('click', () => {
-        detail.open = false; updateTriggerState(); arrangeInlineChanges(); summary.focus();
+        detail.open = false; updateTriggerState(); arrangeInlineChanges(); summary.focus({preventScroll: true});
       });
       detail.append(close);
       summary.addEventListener('click', event => {

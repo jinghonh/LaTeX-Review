@@ -51,6 +51,26 @@ def browser_page():
         browser.close()
 
 
+def test_inline_expansion_keeps_reading_position(reading_report, browser_page):
+    page = browser_page
+    page.goto(reading_report.html.as_uri())
+    detail = page.locator('.inline-change').first
+    summary = detail.locator(':scope > summary')
+    summary.evaluate("node => node.scrollIntoView({block: 'center'})")
+    before = summary.bounding_box()['y']
+    summary.click()
+    page.wait_for_timeout(100)
+    assert detail.get_attribute('open') is not None
+    assert abs(summary.bounding_box()['y'] - before) <= 2
+    summary.click()
+    page.wait_for_timeout(100)
+    assert detail.get_attribute('open') is None
+    assert abs(summary.bounding_box()['y'] - before) <= 2
+    page.locator('#next-change').click()
+    assert page.locator('.inline-change[open]').count() == 1
+    assert page.locator('.inline-change[open] > summary').bounding_box()['y'] < 200
+
+
 def test_reading_inline_navigation_and_filters(reading_report, browser_page):
     page = browser_page
     errors = []

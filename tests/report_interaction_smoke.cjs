@@ -92,7 +92,7 @@ const document = {
 };
 const window = {reviewNodePairs: [['section-old','section-new'], ...Array.from({length:6}, (_,i)=>['p'+(i+1)+'-old','p'+(i+1)+'-new'])], matchMedia:()=>({matches:false})};
 let script = fs.readFileSync(process.argv[2], 'utf8');
-script = script.replace(/\}\)\(\);\s*$/, 'window.hooks={context,filter,nearestAnchor,align,jump};})();');
+script = script.replace(/\}\)\(\);\s*$/, 'window.hooks={context,filter,nearestAnchor,align,jump,invalidateGeometry};})();');
 let now = 1000;
 vm.runInNewContext(script, {CustomEvent: class { constructor(type, init) { this.type = type; this.detail = init.detail; } }, document, window, navigator:{}, performance:{now:()=>now}, requestAnimationFrame: fn=>fn(), console});
 
@@ -115,6 +115,31 @@ assert(anchor[1] === oldParagraphs[2], '锚点应指向旧侧对应段落');
 ids.get('sync-scroll').checked = true;
 window.hooks.align('new');
 assert(old.scrollTop > 100 && old.scrollTop < 350, 'old scrollTop=' + old.scrollTop);
+const firstPosition = old.scrollTop;
+fresh.scrollTop += 10;
+fresh.events.scroll();
+assert(old.scrollTop > firstPosition, '连续滚动不得被同步静默期阻断');
+const secondPosition = old.scrollTop;
+fresh.scrollTop += 10;
+fresh.events.scroll();
+assert(old.scrollTop > secondPosition && old.scrollTop - secondPosition < 10,
+  '新增区域应连续插值');
+const sourcePosition = fresh.scrollTop;
+old.events.scroll();
+assert.strictEqual(fresh.scrollTop, sourcePosition, '被动侧反馈不得反向移动主动侧');
+old.events.wheel();
+old.scrollTop += 30;
+old.events.scroll();
+assert.notStrictEqual(fresh.scrollTop, sourcePosition, '用户操作旧侧后应切换主动侧');
+fresh.events.wheel();
+fresh.scrollTop = 250;
+window.hooks.align('new');
+inserted.y += 40;
+window.hooks.invalidateGeometry();
+assert.strictEqual(fresh.scrollTop, 290, '布局变化应保留当前节点阅读位置');
+inserted.y -= 40;
+window.hooks.invalidateGeometry();
+
 
 const jump = card.querySelector('.change-jump');
 card.dataset.kind = 'added';
