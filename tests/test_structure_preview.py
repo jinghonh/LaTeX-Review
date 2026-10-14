@@ -140,3 +140,45 @@ def test_nested_captions_and_underscored_unknown_environment(tmp_path):
     assert fallback.review.source.file == "main.tex" and fallback.origins
     assert any(diagnostic.code == "unknown_latex" for diagnostic in fallback.diagnostics)
     assert "此处暂无法预览" in preview.html
+
+
+@pytest.mark.parametrize('span', [
+    r'\multicolumn{2}{c}{\multirow{2}{*}{Group}}',
+    r'\multirow{2}{*}{\multicolumn{2}{c}{Group}}',
+])
+def test_table_spans_skip_covered_placeholders_and_preserve_coordinates(tmp_path, span):
+    from html.parser import HTMLParser
+
+    class Cells(HTMLParser):
+        def __init__(self):
+            super().__init__()
+            self.cells = []
+
+        def handle_starttag(self, tag, attrs):
+            if tag == 'td':
+                self.cells.append(dict(attrs))
+
+    source = (r'\documentclass{article}\begin{document}\begin{table}\begin{tabular}{lll}'
+              + span + r' & First\\ & & Second\\\end{tabular}\end{table}\end{document}')
+    old, new = _pair(tmp_path, source)
+    with resolve_sources(entry='main.tex', old_dir=old, new_dir=new) as pair:
+        result = render_preview(None, parse_project(pair.new.expand()))
+    cells = Cells()
+    cells.feed(result.html)
+    assert len(cells.cells) == 3
+    assert cells.cells[0]['rowspan'] == '2'
+    assert cells.cells[0]['colspan'] == '2'
+    assert cells.cells[-1]['data-row'] == '2'
+    assert cells.cells[-1]['data-column'] == '3'
+
+
+def test_table_span_conflict_preserves_source_with_diagnostic(tmp_path):
+    source = (r'\documentclass{article}\begin{document}\begin{table}\begin{tabular}{ll}'
+              r'\multirow{2}{*}{Group}&First\\Conflict&Second\\'
+              r'\end{tabular}\end{table}\end{document}')
+    old, new = _pair(tmp_path, source)
+    with resolve_sources(entry='main.tex', old_dir=old, new_dir=new) as pair:
+        result = render_preview(None, parse_project(pair.new.expand()))
+    assert any(d.code == 'preview_table_span_conflict' for d in result.diagnostics)
+    assert 'Conflict' in result.html
+    assert 'table-source-fallback' in result.html

@@ -134,10 +134,12 @@ def _display_cell(raw: str) -> DisplayCell | None:
     while match := _DISPLAY_RULE.match(cell):
         cell = cell[match.end():]
     colspan = rowspan = 1
-    for command in ("multicolumn", "multirow"):
-        match = re.match(r"\s*\\" + command + r"(?![A-Za-z@])", cell)
-        if not match:
-            continue
+    seen = set()
+    while match := re.match(r"\s*\\(multicolumn|multirow)(?![A-Za-z@])", cell):
+        command = match.group(1)
+        if command in seen:
+            return None
+        seen.add(command)
         first = _braced(cell, match.end())
         second = _braced(cell, first[1]) if first else None
         third = _braced(cell, second[1]) if second else None

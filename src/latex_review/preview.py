@@ -536,10 +536,26 @@ def _table_preview(node: ParsedNode, project: ParsedProject, side: str,
     rendered = []
     for table_index, table in enumerate(tables, 1):
         rows = []
+        occupied = {}
         for row_index, row in enumerate(table, 1):
             column = 1
             cells = []
             for cell in row:
+                columns = range(column, column + cell.colspan)
+                covered = [occupied.get(index, 0) >= row_index for index in columns]
+                if any(covered):
+                    if not all(covered) or cell.text or cell.rowspan > 1:
+                        diagnostics.append(Diagnostic(
+                            "preview_table_span_conflict", "warning",
+                            "表格跨行跨列占用冲突；已保留表格源码",
+                            source_old=node.review.source if side == "old" else None,
+                            source_new=node.review.source if side == "new" else None))
+                        return '<pre class="table-source-fallback">' + _e(node.review.raw_latex) + '</pre>'
+                    column += cell.colspan
+                    continue
+                if cell.rowspan > 1:
+                    for index in columns:
+                        occupied[index] = row_index + cell.rowspan - 1
                 attrs = (f' data-row="{row_index}" data-column="{column}" data-table-index="{table_index}"'
                          f' data-annotation-subunit="{"header" if row_index == 1 else "cell"}"'
                          + (f' colspan="{cell.colspan}"' if cell.colspan > 1 else "")

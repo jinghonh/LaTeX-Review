@@ -82,8 +82,9 @@ def test_include_original_file_and_git_read_only(tmp_path):
 
 @pytest.mark.parametrize('cell', [r'\multicolumn{2}{c}{Same}', r'\multirow{2}{*}{Same}', r'\custom{Same}'])
 def test_complex_cells_explicitly_degrade(tmp_path, cell):
+    continuation = r' & Same' if cell.startswith(r'\multirow') else r' Same & Same'
     result = content(tmp_path, r'\begin{table}\caption{Simple}\begin{tabular}{cc}' + cell +
-                     r' & Other\\ Same & Same\\\end{tabular}\end{table}')
+                     r' & Other\\' + continuation + r'\\\end{tabular}\end{table}')
     cells = [u for u in result['units'] if u.get('subunit', {}).get('type') in ('cell', 'header')]
     assert cells
     assert all(not u['source_span']['reliable'] and not u['source_span']['writable'] for u in cells)
