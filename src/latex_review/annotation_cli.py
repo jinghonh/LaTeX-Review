@@ -179,7 +179,13 @@ def read_text_inputs(args):
         raise AnnotationError('同一次调用只允许一个参数读取标准输入')
     for field, path in sources:
         if path is not None:
-            raw = sys.stdin.read() if path == '-' else Path(path).read_text(encoding='utf-8')
+            if path == '-':
+                raw = sys.stdin.read()
+            else:
+                p = Path(path)
+                if not p.is_file():
+                    raise AnnotationError(f'--{field}-file 指定的文件不存在：{path}')
+                raw = p.read_text(encoding='utf-8')
             setattr(args, field, raw)
 
 

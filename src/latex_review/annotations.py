@@ -788,7 +788,7 @@ class AnnotationStore:
         revision = request['expected_revision']
         with self._locked() as data:
             if data['revision'] != revision:
-                raise AnnotationConflict('批注已被其他审阅者更新，请保留草稿并重新读取',
+                raise AnnotationConflict(f"批注已被其他审阅者更新（期望修订号 {revision}，实际修订号 {data['revision']}），请保留草稿并重新读取",
                     {'code': 'revision_conflict', 'reasons': ['annotation_revision_changed'],
                      'expected_revision': revision, 'actual_revision': data['revision']})
             self._content(data, content)
@@ -935,7 +935,7 @@ class AnnotationStore:
                     return deepcopy(previous['response'])
             plan = None if dry_run else annotation_preflight.load(self, content, request, fingerprint, data['revision'])
             if revision != data['revision']:
-                raise AnnotationConflict('批注已被其他审阅者更新，请保留草稿并重新读取',
+                raise AnnotationConflict(f"批注已被其他审阅者更新（期望修订号 {revision}，实际修订号 {data['revision']}），请保留草稿并重新读取",
                         {'code': 'revision_conflict', 'reasons': ['annotation_revision_changed'],
                          'expected_revision': revision, 'actual_revision': data['revision']})
             report('validate')
@@ -1031,7 +1031,11 @@ class AnnotationStore:
         _integer(request['expected_revision'], 'expected_revision')
         with self._locked() as data:
             if data['revision'] != request['expected_revision']:
-                raise AnnotationConflict('批注版本已变化，请重新读取')
+                exp = request['expected_revision']
+                act = data['revision']
+                raise AnnotationConflict(f"批注版本已变化（期望修订号 {exp}，实际修订号 {act}），请重新读取",
+                    {'code': 'revision_conflict', 'reasons': ['annotation_revision_changed'],
+                     'expected_revision': exp, 'actual_revision': act})
             thread = data['threads'].get(request['thread_id'])
             message = next((m for m in thread['messages'] if m['id'] == request['message_id'] and not m['deleted_at']), None) if thread and not thread['deleted_at'] else None
             if not message or not message.get('suggested_replacement'):

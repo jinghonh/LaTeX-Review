@@ -396,8 +396,9 @@ def test_reply_resolve_validation_and_revision_conflict(report, capsys):
                'author': {'name': 'Agent', 'type': 'agent'}, 'category': 'note',
                'resolve': True, 'expected_revision': value['revision'] - 1}
     before = report[2].path.read_bytes()
-    with pytest.raises(AnnotationConflict):
+    with pytest.raises(AnnotationConflict) as caught:
         report[2].dispatch(report[1], request)
+    assert '期望修订号' in str(caught.value) and '实际修订号' in str(caught.value)
     request.update(expected_revision=value['revision'], resolve='true')
     with pytest.raises(AnnotationError):
         report[2].dispatch(report[1], request)

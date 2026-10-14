@@ -194,7 +194,7 @@ def annotations_main(argv: list[str] | None = None) -> int:
             snapshot = store.read(content)
             thread = next((t for t in snapshot['threads'] if t['id'] == args.thread_id), None)
             if thread is None:
-                raise ValueError('批注线程不存在或已删除')
+                raise ValueError(f'批注线程 {args.thread_id} 不存在或已删除')
             from .annotation_output import thread_detail
             value = {'project_id': snapshot['project_id'], 'version_id': snapshot['version_id'],
                      'revision': snapshot['revision'],
