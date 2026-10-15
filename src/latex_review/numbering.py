@@ -145,16 +145,22 @@ def _compiled_labels(project: ParsedProject) -> dict[str, str]:
 
 
 def _rows(raw: str) -> list[tuple[int, int]]:
-    """Split AMS rows, while keeping nested aligned/split/matrix rows intact."""
+    """Split AMS rows, while keeping nested aligned/split/matrix and brace-group rows (e.g. \\substack) intact."""
     start = 0
     depth = 0
+    braces = 0
     rows = []
-    for match in re.finditer(r'\\(begin|end)\s*\{[^{}]+\}|\\\\(?:\*)?(?:\s*\[[^\]]*\])?', _masked(raw)):
+    # Row breaks are matched before escaped braces, so `\\{` is a break followed by a group.
+    for match in re.finditer(r'\\(begin|end)\s*\{[^{}]+\}|\\\\(?:\*)?(?:\s*\[[^\]]*\])?|\\[{}]|([{}])', _masked(raw)):
         if match.group(1) == 'begin':
             depth += 1
         elif match.group(1) == 'end':
             depth -= 1
-        elif depth == 0:
+        elif match.group(2):
+            braces += 1 if match.group(2) == '{' else -1
+        elif match.group(0) in {r'\{', r'\}'}:
+            continue
+        elif depth == 0 and braces <= 0:
             rows.append((start, match.start()))
             start = match.end()
     if raw[start:].strip():

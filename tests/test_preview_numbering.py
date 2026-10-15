@@ -124,6 +124,18 @@ def test_no_caption_no_number_and_nested_ams_rows(tmp_path):
     assert r'\tag{3}' in equations[1]
 
 
+def test_rows_ignore_line_breaks_inside_brace_groups(tmp_path):
+    _, project = project_at(tmp_path, r'''\begin{align}
+\sum_{\substack{i<n\\j<m}} a_{ij} &= \left\{ x \right. \label{eq:sum}\\
+b &= \frac{c}{d\\e}
+\end{align}''')
+    equation = next(iter(project.numbering.equations.values()))
+    assert re.findall(r'\\tag\{([^{}]+)\}', equation) == ['1', '2']
+    assert r'\substack{i<n\\j<m}' in equation
+    assert r'\label{eq:sum}\tag{1}\\' in equation
+    assert project.numbering.labels['eq:sum'] == '1'
+
+
 def test_subequations_and_body_number_declarations(tmp_path):
     _, project = project_at(tmp_path, r'''\section{Main}
 \begin{subequations}\label{eq:parent}
