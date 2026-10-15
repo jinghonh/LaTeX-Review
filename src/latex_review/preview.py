@@ -813,7 +813,8 @@ figcaption,.table-caption{{font-style:italic}}.asset,.fallback-label{{color:#755
 .node-table{{overflow-x:auto}}.table-preview{{border-collapse:collapse;margin:.6rem 0;width:max-content;max-width:none}}
 .table-preview td{{border:1px solid #ddd8cb;padding:.25rem .6rem;white-space:nowrap}}
 .compiled-fragment{{max-width:100%;height:auto}}
-.math-tex{{font-family:serif;white-space:pre-wrap;overflow-wrap:anywhere;visibility:visible}}.math-tex.preview-unavailable{{visibility:visible}}.node-equation{{overflow-x:auto;text-align:center;margin:1rem 0}}
+/* overflow-x:auto 会让 overflow-y 变为 auto；MathJax 被 clip 的辅助 MathML（如 \\tag 的 mlabeledtr）原生排版更高，会撑出竖向滚动条。 */
+.math-tex{{font-family:serif;white-space:pre-wrap;overflow-wrap:anywhere;visibility:visible}}.math-tex.preview-unavailable{{visibility:visible}}.node-equation{{overflow-x:auto;overflow-y:hidden;text-align:center;margin:1rem 0}}
 .preview-unavailable{{color:#6b3e27;background:#fff1e8;padding:.35rem .55rem}}
 .citation,.cross-ref{{color:#315c86}}.unresolved-ref{{color:#9b3c26}}
 .macro-placeholder{{background:#edf4ed;border-bottom:1px dotted #48734b}}

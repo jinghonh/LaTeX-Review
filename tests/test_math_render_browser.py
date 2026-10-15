@@ -74,3 +74,22 @@ def test_stylesheet_refresh_failure_keeps_rendered_formulas(chrome):
     assert result['errors']==0 and page.locator('.math-tex mjx-container').count()==5
     assert page.evaluate("reviewRenderDiagnostics.some(d=>d.kind==='math-style')")
     page.close()
+
+
+def test_tagged_display_equations_do_not_scroll_vertically(chrome,tmp_path):
+    # MathJax's clipped assistive MathML is laid out natively and can be taller than the CHTML output.
+    from latex_review.contract import ComparisonSource
+    from latex_review.preview import render_preview
+    from latex_review.sources import ProjectSource
+    from latex_review.structure import parse_project
+    (tmp_path/'main.tex').write_text(r'\documentclass{article}\begin{document}\begin{equation}\sum_{i=1}^n x_i^2=\int_0^1 f(x)\,dx\end{equation}\begin{equation}a=b\end{equation}\end{document}')
+    project=parse_project(ProjectSource('new',tmp_path,'main.tex',ComparisonSource('directory',str(tmp_path))).expand())
+    (tmp_path/'preview.html').write_text(render_preview(None,project).html)
+    page=chrome.new_page();page.goto((tmp_path/'preview.html').as_uri())
+    page.wait_for_function("document.querySelector('#math-status').dataset.state==='ready'",timeout=45000)
+    equations=page.locator('.node-equation:has(mjx-container)')
+    assert equations.count()==2
+    for index in range(2):
+        equation=equations.nth(index);equation.hover();page.mouse.wheel(0,200)
+        assert equation.evaluate('n=>n.scrollTop')==0
+    page.close()
