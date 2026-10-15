@@ -15,6 +15,7 @@ from types import SimpleNamespace
 import pytest
 from latex_review import cli, delivery, serve, upload
 from test_cli import project
+from test_annotations import envelope
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -208,27 +209,27 @@ def test_freeze_keeps_resource_bytes_and_annotation_revision(paper, monkeypatch)
         entry = output / 'report.html'
         entry.write_text(entry.read_text().replace('</main>', '<img src="assets/new/chart.png"></main>'))
         content = load_content(output)
-        store = AnnotationStore.for_content(content)
+        store = AnnotationStore.open(content)
         unit = next(u for u in content['units'] if u['kind'] == 'text' and len(u['text']) >= 3)
-        created = store.dispatch(content, {'operation': 'create', 'expected_revision': 0,
+        created = store.execute(envelope(content, {'operation': 'create', 'expected_revision': 0,
             'selection': {'unit_id': unit['id'], 'start': 0, 'end': 3},
-            'body': 'Frozen note.', 'author': {'name': 'Tester', 'type': 'user'}, 'category': 'note'})
+            'body': 'Frozen note.', 'author': {'name': 'Tester', 'type': 'user'}, 'category': 'note'}))
         notes.update(content=content, store=store, thread=created['result']['thread_id'])
         return result
     monkeypatch.setattr(cli, 'write_report', add_resource_and_note)
     def after_freeze():
         (output / 'assets/new/chart.png').write_bytes(b'replaced-resource')
-        notes['store'].dispatch(notes['content'], {'operation': 'reply', 'expected_revision': 1,
+        notes['store'].execute(envelope(notes['content'], {'operation': 'reply', 'expected_revision': 1,
             'thread_id': notes['thread'], 'body': 'Later note.',
-            'author': {'name': 'Tester', 'type': 'user'}, 'category': 'note'})
+            'author': {'name': 'Tester', 'type': 'user'}, 'category': 'note'}))
     remote = Remote(monkeypatch, before_query=after_freeze)
     assert cli.main(['main.tex', '--upload', '--output', str(output)]) == 0
     archive = remote.archives[0]
     assert archive['assets/new/chart.png'] == b'original-resource'
     html = archive['report.html'].decode()
     assert 'src="assets/new/chart.png"' in html
-    envelope = json.loads(re.search(r'id="annotation-backup-gzip">(.*?)</script>', html, re.S)[1])
-    bundle = delivery.decode_annotation_backup(envelope)
+    packed = json.loads(re.search(r'id="annotation-backup-gzip">(.*?)</script>', html, re.S)[1])
+    bundle = delivery.decode_annotation_backup(packed)
     assert bundle['revision'] == 1
     assert bundle['threads'][notes['thread']]['messages'][0]['body'] == 'Frozen note.'
     assert len(bundle['threads'][notes['thread']]['messages']) == 1

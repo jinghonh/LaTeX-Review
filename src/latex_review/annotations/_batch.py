@@ -1,11 +1,11 @@
 """Batch request validation; AnnotationStore owns execution and persistence."""
-from .annotations import AnnotationError, _hash, _integer, _keys, _text
+from ._validation import AnnotationError, digest, _integer, exact_keys, _text
 
 OPERATIONS = {'create', 'reply', 'edit', 'delete_message', 'delete_thread', 'resolve', 'reopen', 'associate', 'update_metadata'}
 
 
 def validate_request(content, request):
-    _keys(request, ('operation', 'expected_revision', 'request_id', 'atomic', 'dry_run', 'items', 'preflight_token'),
+    exact_keys(request, ('operation', 'expected_revision', 'request_id', 'atomic', 'dry_run', 'items', 'preflight_token'),
           ('operation', 'expected_revision', 'request_id', 'items'))
     if request['operation'] != 'batch':
         raise AnnotationError('批量操作须为 batch')
@@ -31,6 +31,6 @@ def validate_request(content, request):
             raise AnnotationError('批量项 ID 重复')
         ids.add(item_id)
     # Revision is a concurrency precondition, not part of the requested mutation.
-    fingerprint = _hash({'project_id': content['project_id'], 'version_id': content['version_id'],
+    fingerprint = digest({'project_id': content['project_id'], 'version_id': content['version_id'],
                          'items': items, 'atomic': atomic})
     return revision, request_id, atomic, dry_run, items, fingerprint

@@ -5,8 +5,8 @@ from pathlib import Path
 import pytest
 
 from latex_review.agent_tools import annotations_main
-from latex_review.annotations import AnnotationStore, MANIFEST, utf16_length
-from test_annotations import content_at
+from latex_review.annotations import AnnotationSession, AnnotationStore, MANIFEST, utf16_length
+from test_annotations import content_at, envelope, storage_path
 
 
 @pytest.fixture
@@ -16,7 +16,7 @@ def report(tmp_path):
     directory = tmp_path / 'report'
     directory.mkdir()
     (directory / MANIFEST).write_text(json.dumps(content))
-    return directory, content, AnnotationStore.for_content(content)
+    return directory, content, AnnotationStore.open(content)
 
 
 def call(report, capsys, *args):
@@ -29,7 +29,7 @@ def call(report, capsys, *args):
 def test_ambiguous_quote_no_write_and_explicit_utf16_selection(report, capsys):
     code, value = call(report, capsys, 'add', '--quote', 'Alpha', '--body', 'Note', '--author', 'Codex')
     assert code == 4 and len(value['candidates']) == 3
-    assert report[2].read(report[1])['revision'] == 0
+    assert report[2].read()['revision'] == 0
     first = value['candidates'][0]['selection']
     assert first['start'] == utf16_length('😀 ')
     code, value = call(report, capsys, 'add', '--quote', 'Alpha', '--occurrence', '2',
@@ -65,7 +65,7 @@ def test_reply_nested_edit_resolve_and_delete(report, capsys):
     assert code == 0 and value['threads'][0]['resolved']
     revision = value['revision']
     code, _ = call(report, capsys, 'delete', tid)
-    assert code == 4 and report[2].read(report[1])['revision'] == revision
+    assert code == 4 and report[2].read()['revision'] == revision
     code, _ = call(report, capsys, 'delete', tid, '--message-id', rid, '--yes')
     assert code == 0 and report[2].export()['threads'][tid]['messages'][1]['deleted_at']
     code, _ = call(report, capsys, 'delete', tid, '--yes')
@@ -90,7 +90,7 @@ def test_complete_formula_selection(report, capsys, by_id):
 def test_invalid_location_does_not_write(report, capsys, locator):
     code, value = call(report, capsys, 'add', *locator, '--body', 'Note', '--author', 'Codex')
     assert code == 4 and 'candidates' in value
-    assert report[2].read(report[1])['revision'] == 0
+    assert report[2].read()['revision'] == 0
 
 
 @pytest.mark.parametrize('command', [['add', '--quote', 'Other Alpha beta.', '--body', 'Note'],
@@ -98,24 +98,24 @@ def test_invalid_location_does_not_write(report, capsys, locator):
 def test_author_required(report, capsys, command):
     with pytest.raises(SystemExit) as exc:
         annotations_main([str(report[0]), *command])
-    assert exc.value.code == 2 and not report[2].path.exists()
+    assert exc.value.code == 2 and not storage_path(report[1]).exists()
     capsys.readouterr()
 
 
 def test_conflict_not_retried(report, capsys, monkeypatch):
-    original = AnnotationStore.dispatch
+    original = AnnotationSession.execute
     calls = []
 
-    def concurrent_write(store, content, request):
-        calls.append(request)
-        competing = {**request, 'body': 'Concurrent note'}
-        original(store, content, competing)
-        return original(store, content, request)
+    def concurrent_write(session, envelope, **options):
+        calls.append(envelope)
+        competing = {**envelope, 'request': {**envelope['request'], 'body': 'Concurrent note'}}
+        original(session, competing, **options)
+        return original(session, envelope, **options)
 
-    monkeypatch.setattr(AnnotationStore, 'dispatch', concurrent_write)
+    monkeypatch.setattr(AnnotationSession, 'execute', concurrent_write)
     code, value = call(report, capsys, 'add', '--quote', 'Other Alpha beta.', '--body', 'Note', '--author', 'Codex')
     assert code == 4 and '其他审阅者' in value['error'] and len(calls) == 1
-    state = report[2].read(report[1])
+    state = report[2].read()
     assert state['revision'] == 1 and state['threads'][0]['messages'][0]['body'] == 'Concurrent note'
 
 
@@ -141,7 +141,7 @@ def test_invalid_message_or_thread_leaves_revision_unchanged(report, capsys, ope
     }
     code, value = call(report, capsys, operation, *arguments[operation])
     assert code == 4 and '不存在' in value['error']
-    assert report[2].read(report[1])['revision'] == 1
+    assert report[2].read()['revision'] == 1
 
 
 def test_repeated_formulas_return_candidates_before_write(tmp_path, capsys):
@@ -149,7 +149,7 @@ def test_repeated_formulas_return_candidates_before_write(tmp_path, capsys):
     directory = tmp_path / 'report'
     directory.mkdir()
     (directory / MANIFEST).write_text(json.dumps(content))
-    report = directory, content, AnnotationStore.for_content(content)
+    report = directory, content, AnnotationStore.open(content)
     code, value = call(report, capsys, 'add', '--formula', '--quote', '$x+1$', '--body', 'Note', '--author', 'Codex')
     assert code == 4 and len(value['candidates']) == 2
     assert not report[2].export()['threads']
@@ -190,7 +190,7 @@ def test_inline_formula_quote_and_wrong_formula_diagnostics(report, capsys):
                        '--body', 'Wrong', '--author', 'Codex')
     assert code == 4 and 0 < len(value['candidates']) <= 3
     assert {'distance', 'context', 'diff', 'source'} <= value['candidates'][0].keys()
-    assert report[2].read(report[1])['revision'] == revision
+    assert report[2].read()['revision'] == revision
 
 
 def test_multiple_atoms_exact_formula_check(tmp_path, capsys):
@@ -198,7 +198,7 @@ def test_multiple_atoms_exact_formula_check(tmp_path, capsys):
     directory = tmp_path / 'report'
     directory.mkdir()
     (directory / MANIFEST).write_text(json.dumps(content))
-    report = directory, content, AnnotationStore.for_content(content)
+    report = directory, content, AnnotationStore.open(content)
     code, value = call(report, capsys, 'add', '--quote', 'Same $x + 1$ and $y + 2$.',
                        '--body', 'Exact', '--author', 'Codex')
     assert code == 0
@@ -244,7 +244,7 @@ def test_metadata_summary_filters_and_backup_round_trip(report, capsys):
     assert summary['total_matched'] == 1 and summary['threads'][0]['title'] == 'Explicit title'
     assert call(report, capsys, '--summary', '--tag', 'missing')[1]['total_matched'] == 0
     backup = report[2].export()
-    assert report[2].dispatch(report[1], {'operation': 'import', 'expected_revision': 2, 'bundle': backup})['result']['duplicates'] == 1
+    assert report[2].execute(envelope(report[1], {'operation': 'import', 'expected_revision': 2, 'bundle': backup}))['result']['duplicates'] == 1
     code, fields = call(report, capsys, '--fields', 'id,title,author,tags')
     assert fields['threads'][0]['tags'] == ['non-experiment', 'review']
     code, _ = call(report, capsys, 'metadata', tid, '--title', '', '--clear-tags')
@@ -258,7 +258,7 @@ def test_invalid_metadata_does_not_write(report, capsys, options):
     _, created = call(report, capsys, 'add', '--quote', 'Other Alpha beta.', '--body', 'Initial', '--author', 'Codex')
     tid = created['result']['thread_id']
     code, _ = call(report, capsys, 'metadata', tid, *options)
-    assert code == 4 and report[2].metadata(report[1])['revision'] == 1
+    assert code == 4 and report[2].metadata()['revision'] == 1
 
 
 def test_add_metadata_and_module_entry(report, capsys):
@@ -312,7 +312,7 @@ def test_file_line_quote_disambiguates_without_touching_source(report, capsys):
     for args in [('--file', 'main.tex', '--line', '99'), ('--line', '1'), ('--file', '../main.tex'),
                  ('--file', '/tmp/main.tex'), ('--file', 'C:/main.tex')]:
         assert call(report, capsys, 'add', *args, '--quote', 'Alpha beta', '--body', 'Review', '--author', 'Codex')[0] == 4
-    assert report[2].metadata(report[1])['revision'] == 1
+    assert report[2].metadata()['revision'] == 1
 
 
 def test_file_line_rejects_unreliable_source(report, capsys):
@@ -322,7 +322,7 @@ def test_file_line_rejects_unreliable_source(report, capsys):
     code, result = call(report, capsys, 'add', '--file', 'main.tex', '--line', str(unit['source']['start_line']),
                         '--quote', 'Other Alpha beta.', '--body', 'Review', '--author', 'Codex')
     assert code == 4 and result['candidates'] and any(not item['reliable'] for item in result['candidates'])
-    assert report[2].metadata(report[1])['revision'] == 0
+    assert report[2].metadata()['revision'] == 0
 
 
 def test_report_context_distinguishes_shared_paper_versions(report, capsys):
@@ -356,13 +356,13 @@ def test_show_literal_inputs_and_atomic_reply(report, capsys, tmp_path, command)
     code, value = call(report, capsys, '--author', 'Global', 'reply', tid,
                        '--body-file', str(body), '--resolve')
     assert code == 0 and value['revision'] == revision + 1
-    state = report[2].read(report[1])
+    state = report[2].read()
     assert state['threads'][0]['resolved']
     assert state['threads'][0]['messages'][-1]['author']['name'] == 'Global'
-    before = report[2].path.read_bytes()
+    before = storage_path(report[1]).read_bytes()
     code, value = call(report, capsys, 'reply', tid, '--body', 'Failed', '--author', 'Agent',
                        '--resolve', '--parent-message-id', 'missing')
-    assert code == 4 and report[2].path.read_bytes() == before
+    assert code == 4 and storage_path(report[1]).read_bytes() == before
     code, value = call(report, capsys, command, 'missing')
     assert code == 4 and '不存在' in value['error']
 
@@ -374,12 +374,12 @@ def test_stdin_and_input_errors_do_not_write(report, capsys, monkeypatch, tmp_pa
     code, value = call(report, capsys, 'add', '--quote', 'Other Alpha beta.',
                        '--body-file', '-', '--author', 'Agent')
     assert code == 0 and value['threads'][0]['messages'][0]['body'] == literal
-    before = report[2].path.read_bytes()
+    before = storage_path(report[1]).read_bytes()
     code, value = call(report, capsys, 'add', '--quote-file', '-', '--body-file', '-', '--author', 'Agent')
     assert code == 4 and '标准输入' in value['error']
     code, _ = call(report, capsys, 'add', '--quote', 'Other Alpha beta.',
                    '--body-file', str(tmp_path / 'missing'), '--author', 'Agent')
-    assert code == 4 and report[2].path.read_bytes() == before
+    assert code == 4 and storage_path(report[1]).read_bytes() == before
     with pytest.raises(SystemExit):
         call(report, capsys, 'add', '--quote', 'Other Alpha beta.',
              '--body', 'text', '--body-file', '-', '--author', 'Agent')
@@ -395,14 +395,14 @@ def test_reply_resolve_validation_and_revision_conflict(report, capsys):
     request = {'operation': 'reply', 'thread_id': tid, 'body': 'Evidence',
                'author': {'name': 'Agent', 'type': 'agent'}, 'category': 'note',
                'resolve': True, 'expected_revision': value['revision'] - 1}
-    before = report[2].path.read_bytes()
+    before = storage_path(report[1]).read_bytes()
     with pytest.raises(AnnotationConflict) as caught:
-        report[2].dispatch(report[1], request)
+        report[2].execute(envelope(report[1], request))
     assert '期望修订号' in str(caught.value) and '实际修订号' in str(caught.value)
     request.update(expected_revision=value['revision'], resolve='true')
     with pytest.raises(AnnotationError):
-        report[2].dispatch(report[1], request)
-    assert report[2].path.read_bytes() == before
+        report[2].execute(envelope(report[1], request))
+    assert storage_path(report[1]).read_bytes() == before
     code, value = call(report, capsys, 'reply', tid, '--body', 'Pending', '--author', 'Agent')
     assert code == 0 and not value['threads'][0]['resolved']
     call(report, capsys, 'resolve', tid)

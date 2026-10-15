@@ -14,26 +14,30 @@ class SelectionError(AnnotationError):
         self.candidates = candidates
 
 
-def find_selection(content, args):
+# Batch items and CLI commands share this vocabulary: ``add`` is the protocol's ``create``.
+OPERATION_ALIASES = {'add': 'create'}
+LOCATOR_FIELDS = ('quote', 'formula', 'unit_id', 'occurrence', 'file', 'line')
+
+
+def find_selection(content, *, quote=None, formula=False, unit_id=None, occurrence=None, file=None, line=None):
     from pathlib import PurePosixPath, PureWindowsPath
-    file, line = getattr(args, 'file', None), getattr(args, 'line', None)
     if file is not None:
         if not isinstance(file, str) or not file or '\\' in file or PurePosixPath(file).is_absolute() or PureWindowsPath(file).drive or '..' in file.split('/'):
             raise SelectionError('file 须为项目内相对 POSIX 路径', [])
         file = str(PurePosixPath(file))
     if line is not None and (type(line) is not int or line < 1 or file is None):
         raise SelectionError('line 须为正整数，并同时指定 file', [])
-    quote = normalize_quote(args.quote) if args.quote is not None else None
-    if quote == '' or (quote is None and not (args.formula and args.unit_id)):
+    quote = normalize_quote(quote) if quote is not None else None
+    if quote == '' or (quote is None and not (formula and unit_id)):
         raise SelectionError('需要非空 --quote；完整公式也可使用 --formula --unit-id', [])
     candidates = []
     eligible = []
     source_candidates = []
-    plain_quote, formulas = quote_atoms(args.quote or "")
+    plain_quote, formulas = quote_atoms(quote or "")
     for unit in sorted(content['units'], key=lambda u: u['order']):
-        if unit['kind'] != ('formula' if args.formula else 'text'):
+        if unit['kind'] != ('formula' if formula else 'text'):
             continue
-        if args.unit_id and unit['id'] != args.unit_id:
+        if unit_id and unit['id'] != unit_id:
             continue
         if file is not None:
             source, span = unit.get('source') or {}, unit.get('source_span') or {}
@@ -53,7 +57,7 @@ def find_selection(content, args):
                 if not start_line <= line <= end_line:
                     continue
         eligible.append(unit)
-        if args.formula:
+        if formula:
             if quote is not None and (not (formulas or (quote.startswith(r'\begin{') and quote.endswith('}'))) or normalize_formula(unit['raw_latex']) != normalize_formula(quote)):
                 continue
             selections = [{'unit_id': unit['id'], 'side': 'new'}]
@@ -67,19 +71,19 @@ def find_selection(content, args):
         if file is not None:
             raise SelectionError('文件、可靠行号范围与原文未能共同匹配；请核对显示版本', source_candidates[:8])
         raise SelectionError('未找到原文或完整公式；请读取 --content 并核对 --unit-id', nearest(eligible, quote or ''))
-    if args.occurrence is not None:
-        if not 1 <= args.occurrence <= len(candidates):
+    if occurrence is not None:
+        if not 1 <= occurrence <= len(candidates):
             raise SelectionError('--occurrence 超出候选范围（从 1 开始）', candidates)
-        return candidates[args.occurrence - 1]['selection']
+        return candidates[occurrence - 1]['selection']
     if len(candidates) != 1:
         raise SelectionError('原文存在多个候选；请用 --unit-id 或 --occurrence 明确位置', candidates)
     return candidates[0]['selection']
 
 
 def build_request(content, state, args):
-    request = {'operation': args.command, 'expected_revision': state['revision']}
+    request = {'operation': OPERATION_ALIASES.get(args.command, args.command), 'expected_revision': state['revision']}
     if args.command == 'add':
-        request.update(operation='create', selection=find_selection(content, args))
+        request.update(operation='create', selection=find_selection(content, **{k: getattr(args, k, None) for k in LOCATOR_FIELDS}))
     else:
         request['thread_id'] = args.thread_id
     if args.command in ('add', 'metadata'):

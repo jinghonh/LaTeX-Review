@@ -9,13 +9,13 @@ import tempfile
 
 
 def error(message):
-    from .annotations import AnnotationError
+    from ._validation import AnnotationError
     raise AnnotationError(message)
 
 
 def validate(value):
-    from .annotations import _keys, _integer
-    _keys(value, ('original_chunk', 'replacement_chunk', 'status', 'version_id', 'unit_id',
+    from ._validation import exact_keys, _integer
+    exact_keys(value, ('original_chunk', 'replacement_chunk', 'status', 'version_id', 'unit_id',
                   'source_span', 'reason', 'applied_at', 'applied_sha256'), ('original_chunk', 'replacement_chunk'))
     if not isinstance(value, dict) or not isinstance(value.get('original_chunk'), str) or not value['original_chunk'] or not isinstance(value.get('replacement_chunk'), str):
         error('建议需要非空原始 LaTeX 块及替换 LaTeX 块')
@@ -27,7 +27,7 @@ def validate(value):
         error('建议降级理由无效')
     span = value.get('source_span')
     if span is not None:
-        _keys(span, ('file', 'start', 'end', 'sha256', 'original_chunk', 'reliable', 'writable', 'reason'))
+        exact_keys(span, ('file', 'start', 'end', 'sha256', 'original_chunk', 'reliable', 'writable', 'reason'))
         if (not isinstance(span['file'], str) or Path(span['file']).is_absolute()
                 or '..' in Path(span['file']).parts or span['reliable'] is not True or span['writable'] is not True
                 or not isinstance(span['sha256'], str) or re.fullmatch('[0-9a-f]{64}', span['sha256']) is None):

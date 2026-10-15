@@ -5,6 +5,7 @@ import subprocess
 import sys
 
 from latex_review import cli
+from test_annotations import envelope, storage_path
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -67,18 +68,18 @@ def test_report_matches_live_title_coordinates_with_cached_parse(tmp_path):
     build(ProjectSource('new', tmp_path, 'main.tex', ComparisonSource('worktree', 'working-tree')), live)
     content = load_content(live)
     title = next(unit for unit in content['units'] if unit['text'] == 'Shared title')
-    store = AnnotationStore.for_content(content)
-    store.dispatch(content, {'operation': 'create', 'expected_revision': 0,
+    store = AnnotationStore.open(content)
+    store.execute(envelope(content, {'operation': 'create', 'expected_revision': 0,
                             'selection': {'unit_id': title['id'], 'start': 0, 'end': 12},
-                            'body': 'Keep this title.', 'author': {'name': 'Reviewer', 'type': 'user'}, 'category': 'note'})
-    before = store.path.read_bytes()
+                            'body': 'Keep this title.', 'author': {'name': 'Reviewer', 'type': 'user'}, 'category': 'note'}))
+    before = storage_path(content).read_bytes()
     for _ in range(2):
         result = run_cli(tmp_path, 'main.tex')
         assert result.returncode == 0, result.stderr
         report_content = load_content(tmp_path / '.latex-review' / 'latest')
         assert report_content['version_id'] == content['version_id']
         assert make_anchor(report_content, {'unit_id': title['id'], 'start': 0, 'end': 12})['quote'] == 'Shared title'
-        assert store.path.read_bytes() == before
+        assert storage_path(content).read_bytes() == before
 
 
 def test_config_precedence_and_output_exclusion(tmp_path):

@@ -6,6 +6,7 @@ import pytest
 from latex_review.cli import main
 from latex_review.annotations import AnnotationStore, load_content
 from latex_review.report_rebuild import rebuild_report
+from test_annotations import envelope
 
 
 def make_report(tmp_path, mode='directory'):
@@ -25,10 +26,10 @@ def test_rebuild_fixes_baseline_and_preserves_annotations(tmp_path, mode):
     old, new, output = make_report(tmp_path, mode)
     content = load_content(output)
     unit = next(u for u in content['units'] if u['kind'] == 'text')
-    store = AnnotationStore.for_content(content)
-    created = store.dispatch(content, {'operation': 'create', 'expected_revision': 0,
+    store = AnnotationStore.open(content)
+    created = store.execute(envelope(content, {'operation': 'create', 'expected_revision': 0,
         'selection': {'unit_id': unit['id'], 'start': 0, 'end': 7}, 'body': 'Keep this.',
-        'author': {'name': 'A', 'type': 'user'}, 'category': 'note'})
+        'author': {'name': 'A', 'type': 'user'}, 'category': 'note'}))
     old.joinpath('main.tex').write_text('Wrong baseline.')
     new.joinpath('main.tex').write_text(r'\documentclass{article}\begin{document}Updated text.\end{document}')
     result = rebuild_report(output / 'report.html')
@@ -39,7 +40,7 @@ def test_rebuild_fixes_baseline_and_preserves_annotations(tmp_path, mode):
     assert 'Updated text.' in json.dumps(diff)
     fresh = load_content(output)
     assert fresh['version_id'] != content['version_id']
-    assert store.read(fresh)['threads'][0]['id'] == created['result']['thread_id']
+    assert AnnotationStore.open(fresh).read()['threads'][0]['id'] == created['result']['thread_id']
     manifest = json.loads(output.joinpath('run.json').read_text())
     assert manifest['browser_acceptance']['status'] == 'not_executed'
     assert all(Path(path).parent == output for path in manifest['artifacts'].values())

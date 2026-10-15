@@ -72,25 +72,18 @@ def _embed_results(html: str, results: dict) -> str:
 
 def embed_annotations(html: str, content: dict, directory: Path | None = None, *, include_assets: bool = True, compressed: bool = False) -> str:
     """Embed a portable manifest and existing backup without creating project paths."""
-    from .annotations import AnnotationStore, SCHEMA_VERSION, validate_content
-    validate_content(content)
-    bundle = {'schema_version': SCHEMA_VERSION, 'project_id': content['project_id'],
-              'revision': 0, 'versions': {}, 'threads': {}}
+    from .annotations import AnnotationStore, validate_bundle
+    bundle = validate_bundle(content)
     root = Path(content['project_root']) if content.get('project_root') else None
     carried = re.search(r'<script type="application/json" id="annotation-backup">(.*?)</script>', html, re.S)
     packed = re.search(r'<script type="application/json" id="annotation-backup-gzip">(.*?)</script>', html, re.S)
     if carried or packed:
         original = json.loads(carried[1]) if carried else decode_annotation_backup(json.loads(packed[1]))
-        verifier = AnnotationStore(root or Path.cwd(), content['project_id'])
-        verifier._import(bundle, original)
-        if type(original['revision']) is not int or original['revision'] < 0:
-            raise DeliveryError('携带批注修订号无效')
-        bundle['revision'] = original['revision']
+        bundle = validate_bundle(content, original)
     if root is not None and root.is_dir():
-        store = AnnotationStore.for_content(content)
-        if store.path.is_file():
-            bundle = store.export()
-    AnnotationStore(root or Path.cwd(), content['project_id'])._content(bundle, content)
+        session = AnnotationStore.open(content)
+        if session.stored:
+            bundle = session.export()
     assets = {}
     if directory is not None and include_assets:
         total = 0

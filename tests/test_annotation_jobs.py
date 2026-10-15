@@ -6,6 +6,7 @@ from urllib.request import Request, urlopen
 from latex_review.annotations import AnnotationStore, MANIFEST
 from latex_review.serve import create_server
 from test_annotations import content_at, select, AUTHOR
+from test_annotations import envelope
 
 
 def test_async_progress_does_not_wait_for_storage_lock(tmp_path, monkeypatch):
@@ -15,12 +16,13 @@ def test_async_progress_does_not_wait_for_storage_lock(tmp_path, monkeypatch):
     (report / 'report.html').write_text('<h1>Review</h1>')
     (report / MANIFEST).write_text(json.dumps(content))
     entered, release = Event(), Event()
-    original = AnnotationStore._apply
-    def delayed(store, data, content, request):
+    from latex_review.annotations import store as annotation_store
+    original = annotation_store.make_anchor
+    def delayed(content, selection):
         entered.set()
         assert release.wait(5)
-        return original(store, data, content, request)
-    monkeypatch.setattr(AnnotationStore, '_apply', delayed)
+        return original(content, selection)
+    monkeypatch.setattr(annotation_store, 'make_anchor', delayed)
     with create_server(report) as server:
         thread = Thread(target=server.serve_forever)
         thread.start()
@@ -63,14 +65,13 @@ def test_async_conflict_retains_error_and_does_not_write(tmp_path):
     (report / 'report.html').write_text('<h1>Review</h1>')
     (report / MANIFEST).write_text(json.dumps(content))
     with create_server(report) as server:
-        from latex_review.annotations import execute_request
-        store = AnnotationStore.for_content(content)
+        store = AnnotationStore.open(content)
         envelope = {'project_id': content['project_id'], 'version_id': '0' * 64, 'request': {}}
-        job = server.annotation_jobs.submit(lambda progress: execute_request(store, content, envelope, progress))
+        job = server.annotation_jobs.submit(lambda progress: store.execute(envelope, progress=progress))
         server.annotation_jobs.executor.shutdown(wait=True)
         result = server.annotation_jobs.snapshot(job['task_id'])
         assert result['state'] == 'failed' and result['error'] == 'conflict'
-        assert store.metadata(content)['revision'] == 0
+        assert store.metadata()['revision'] == 0
 
 
 def test_async_preflight_preserves_structured_diagnostics(tmp_path):
@@ -78,11 +79,11 @@ def test_async_preflight_preserves_structured_diagnostics(tmp_path):
     from test_annotation_batch import setup
     from test_annotations import mutate
     store, content, request = setup(tmp_path)
-    store.batch(content, {**request, 'dry_run': True})
-    mutate(store, content, 'create', selection=request['items'][0]['selection'], body='Other', author=AUTHOR, category='note')
+    store.execute(envelope(content, {**request, 'dry_run': True}))
+    mutate(store, 'create', selection=request['items'][0]['selection'], body='Other', author=AUTHOR, category='note')
     jobs = AnnotationJobs()
     try:
-        job = jobs.submit(lambda progress: store.batch(content, request, progress))
+        job = jobs.submit(lambda progress: store.execute(envelope(content, request), progress=progress))
         jobs.executor.shutdown(wait=True)
         result = jobs.snapshot(job['task_id'])
         assert result['state'] == 'failed' and result['error'] == 'conflict'

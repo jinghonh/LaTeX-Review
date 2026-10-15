@@ -3,7 +3,7 @@ import json
 import secrets
 import time
 
-from .annotations import AnnotationConflict, _hash
+from ._validation import AnnotationConflict, digest
 
 TTL = 15 * 60
 
@@ -11,19 +11,19 @@ TTL = 15 * 60
 def content_hash(store, content):
     if getattr(store, '_prepared_content', None) is content:
         return store._prepared_content_hash
-    return _hash(content)
+    return digest(content)
 
 
-def load(store, content, request, fingerprint, revision, *, connection):
-    row = connection.execute('SELECT payload FROM preflights WHERE id=?', (request['request_id'],)).fetchone()
-    if row is None:
+def load(store, content, request, fingerprint, revision, *, transaction):
+    payload = transaction.preflight(request['request_id'])
+    if payload is None:
         if request.get('preflight_token'):
             raise AnnotationConflict('预检不存在，请重新预检',
                 {'code': 'preflight_missing', 'reasons': ['cache_missing'],
                  'expected_revision': request['expected_revision'], 'actual_revision': revision})
         return None
     try:
-        plan = json.loads(row[0])
+        plan = json.loads(payload)
     except (ValueError, TypeError) as exc:
         raise AnnotationConflict('预检缓存无效，请重新预检',
             {'code': 'preflight_invalid', 'reasons': ['cache_invalid'],
@@ -35,7 +35,7 @@ def load(store, content, request, fingerprint, revision, *, connection):
         reasons.append('content_changed')
     if plan.get('version_id', content['version_id']) != content['version_id']:
         reasons.append('version_changed')
-    payload_hash = _hash({'project_id': content['project_id'], 'items': request['items'],
+    payload_hash = digest({'project_id': content['project_id'], 'items': request['items'],
                           'atomic': request.get('atomic', False)})
     if (plan.get('payload_hash') is not None and plan['payload_hash'] != payload_hash
             or plan.get('payload_hash') is None and plan['fingerprint'] != fingerprint):
@@ -57,14 +57,12 @@ def load(store, content, request, fingerprint, revision, *, connection):
     return plan
 
 
-def save(store, content, request, fingerprint, revision, changed_threads, results, *, connection):
+def save(store, content, request, fingerprint, revision, changed_threads, results, *, transaction):
     plan = {'token': secrets.token_urlsafe(24), 'fingerprint': fingerprint, 'revision': revision,
             'content_hash': content_hash(store, content), 'expires_at': time.time() + TTL,
             'version_id': content['version_id'],
-            'payload_hash': _hash({'project_id': content['project_id'], 'items': request['items'],
+            'payload_hash': digest({'project_id': content['project_id'], 'items': request['items'],
                                    'atomic': request.get('atomic', False)}),
             'threads': changed_threads, 'results': results}
-    from .annotation_storage import encode
-    connection.execute('INSERT INTO preflights(id,payload) VALUES(?,?) '
-        'ON CONFLICT(id) DO UPDATE SET payload=excluded.payload', (request['request_id'], encode(plan)))
+    transaction.save_preflight(request['request_id'], plan)
     return plan

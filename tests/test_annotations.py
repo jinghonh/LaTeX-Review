@@ -11,7 +11,7 @@ import pytest
 
 from latex_review.annotations import (
     AnnotationConflict, AnnotationError, AnnotationStore, MANIFEST, build_content,
-    execute_request, locate, make_anchor, overlapping_threads, query_threads, utf16_length,
+    locate, make_anchor, utf16_length,
 )
 from latex_review.agent_tools import annotations_main
 from latex_review.contract import ComparisonSource
@@ -46,27 +46,43 @@ def select(content, quote, occurrence=0):
             'end': utf16_length(unit['text'][:index + len(quote)]), 'quote': quote}
 
 
-def mutate(store, content, operation, **fields):
-    return store.dispatch(content, {'operation': operation, 'expected_revision': store.read(content)['revision'], **fields})
+def envelope(content, request):
+    return {'project_id': content['project_id'], 'version_id': content['version_id'], 'request': request}
 
 
-def create(store, content, quote, **extra):
-    return mutate(store, content, 'create', selection=select(content, quote), body='A question $x$ <script>bad</script>',
+def storage_path(content):
+    return Path(content['project_root']) / '.latex-review' / 'annotations' / f"{content['project_id']}.sqlite3"
+
+
+def stored_ids(content, table):
+    """Row ids persisted in one storage table, read directly to observe uncommitted effects."""
+    import sqlite3
+    with sqlite3.connect(storage_path(content)) as connection:
+        return {row[0] for row in connection.execute(f'SELECT id FROM {table}')}
+
+
+def mutate(session, operation, **fields):
+    request = {'operation': operation, 'expected_revision': session.metadata()['revision'], **fields}
+    return session.execute(envelope(session.content, request))
+
+
+def create(session, quote, **extra):
+    return mutate(session, 'create', selection=select(session.content, quote), body='A question $x$ <script>bad</script>',
                   author=AUTHOR, category='question', **extra)
 
 
 def test_sentence_layout_preserves_existing_annotation_coordinates(tmp_path):
     root = tmp_path / 'paper'
     content, _ = content_at(root, 'First sentence.\n' + r'\paragraph{Hidden $x$ heading}')
-    store = AnnotationStore(root, content['project_id'])
-    thread = create(store, content, 'First sentence.')
+    store = AnnotationStore.open(content, root)
+    thread = create(store, 'First sentence.')
     source = ProjectSource('new', root, 'main.tex', ComparisonSource('directory', str(root)))
     project = parse_project(source.expand())
     highlights = {('new', node.review.id): frozenset() for node in project.nodes
                   if node.review.type == 'paragraph'}
     highlighted = build_content(project, render_preview(None, project, sentence_highlights=highlights).html)
     assert highlighted['version_id'] == content['version_id']
-    snapshot = store.read(highlighted)
+    snapshot = AnnotationStore.open(highlighted).read()
     assert snapshot['threads'][0]['id'] == thread['result']['thread_id']
 
 
@@ -118,28 +134,24 @@ def test_formula_failures_keep_complete_original_latex(tmp_path):
 
 def test_lifecycle_overlap_authors_filters_and_persistence(tmp_path):
     content, _ = content_at(tmp_path, 'A sufficiently long unchanged sentence.')
-    store = AnnotationStore.for_content(content)
-    value = create(store, content, 'sufficiently long')
+    store = AnnotationStore.open(content)
+    value = create(store, 'sufficiently long')
     tid, mid = value['result']['thread_id'], value['result']['message_id']
-    create(store, content, 'long unchanged')
-    reply = mutate(store, content, 'reply', thread_id=tid, body='Reply \\[y\\]',
-                   author={'name': 'Codex', 'type': 'agent'}, category='suggestion')
+    create(store, 'long unchanged')
+    reply = mutate(store, 'reply', thread_id=tid, body='Reply \\[y\\]', author={'name': 'Codex', 'type': 'agent'}, category='suggestion')
     rid = reply['result']['message_id']
-    mutate(store, content, 'edit', thread_id=tid, message_id=rid, body='Revised reply', category='note')
-    value = mutate(store, content, 'resolve', thread_id=tid)
-    resolved = query_threads(value, resolved=True, author_type='agent', category='note', search='REVISED')
-    assert len(resolved) == 1 and resolved[0]['messages'][1]['edits'][0]['category'] == 'suggestion'
-    anchor = make_anchor(content, select(content, 'long'))
-    assert len(overlapping_threads(value, anchor['unit_id'], anchor['start'], anchor['end'])) == 2
-    mutate(store, content, 'reopen', thread_id=tid)
-    mutate(store, content, 'delete_message', thread_id=tid, message_id=rid)
+    mutate(store, 'edit', thread_id=tid, message_id=rid, body='Revised reply', category='note')
+    value = mutate(store, 'resolve', thread_id=tid)
+    assert value['threads'][0]['resolved'] and value['threads'][0]['messages'][1]['body'] == 'Revised reply'
+    mutate(store, 'reopen', thread_id=tid)
+    mutate(store, 'delete_message', thread_id=tid, message_id=rid)
     with pytest.raises(AnnotationError):
-        mutate(store, content, 'edit', thread_id=tid, message_id=rid, body='x', category='note')
-    restored = AnnotationStore.for_content(content).read(content)
+        mutate(store, 'edit', thread_id=tid, message_id=rid, body='x', category='note')
+    restored = AnnotationStore.open(content).read()
     assert restored['threads'][0]['messages'][0]['id'] == mid
     assert '<script>' in restored['threads'][0]['messages'][0]['body']  # Data, never HTML.
-    mutate(store, content, 'delete_thread', thread_id=tid)
-    assert len(store.read(content)['threads']) == 1
+    mutate(store, 'delete_thread', thread_id=tid)
+    assert len(store.read()['threads']) == 1
     assert store.export()['threads'][tid]['deleted_at']
 
 
@@ -149,20 +161,18 @@ def test_version_identity_project_isolation_and_stale_writes(tmp_path):
     b, _ = content_at(tmp_path / 'b', 'Same text.')
     assert a['project_id'] == same['project_id'] and a['version_id'] == same['version_id']
     assert a['project_id'] != b['project_id'] and a['version_id'] == b['version_id']
-    store = AnnotationStore.for_content(a)
-    create(store, a, 'Same')
+    store = AnnotationStore.open(a)
+    create(store, 'Same')
+    assert not AnnotationStore.open(b).read()['threads']  # Same version, separate project storage.
     with pytest.raises(AnnotationError):
-        store.read(b)
-    with pytest.raises(AnnotationError):
-        AnnotationStore.for_content(a, tmp_path / 'b')
+        AnnotationStore.open(a, tmp_path / 'b')
     with pytest.raises(AnnotationConflict):
-        store.dispatch(a, {'operation': 'resolve', 'expected_revision': 0, 'thread_id': 'any'})
+        store.execute(envelope(a, {'operation': 'resolve', 'expected_revision': 0, 'thread_id': 'any'}))
     changed, _ = content_at(tmp_path / 'a', 'Changed text.')
     with pytest.raises(AnnotationConflict):
-        execute_request(store, changed, {'project_id': a['project_id'], 'version_id': a['version_id'],
-                                         'request': {'operation': 'reconcile', 'expected_revision': 1}})
-    assert store.read(a)['threads'][0]['association']['status'] == 'exact'
-    assert store.read(changed)['threads'][0]['association']['anchor'] is None
+        AnnotationStore.open(changed).execute(envelope(a, {'operation': 'reconcile', 'expected_revision': 1}))
+    assert store.read()['threads'][0]['association']['status'] == 'exact'
+    assert AnnotationStore.open(changed).read()['threads'][0]['association']['anchor'] is None
 
 
 def test_exact_movement_fuzzy_change_ambiguity_low_confidence_and_deletion(tmp_path):
@@ -194,24 +204,24 @@ def test_exact_movement_fuzzy_change_ambiguity_low_confidence_and_deletion(tmp_p
 def test_history_only_content_changes_manual_association_and_original_survives(tmp_path):
     root = tmp_path / 'paper'
     first, _ = content_at(root, 'A long selected passage describes a reliable measurement in this experiment.\n\nOther paragraph.')
-    store = AnnotationStore.for_content(first)
-    tid = create(store, first, 'selected passage describes a reliable measurement')['result']['thread_id']
+    store = AnnotationStore.open(first)
+    tid = create(store, 'selected passage describes a reliable measurement')['result']['thread_id']
     moved, _ = content_at(root, 'Other paragraph.\n\nA long selected passage describes a reliable measurement in this experiment.')
-    result = mutate(store, moved, 'reconcile')['threads'][0]
+    result = mutate(AnnotationStore.open(moved), 'reconcile')['threads'][0]
     assert len(result['history']) == 1
     changed, _ = content_at(root, 'Other paragraph.\n\nA long selected passage describes a reliable measurements in this experiment.')
-    result = mutate(store, changed, 'reconcile')['threads'][0]
+    result = mutate(AnnotationStore.open(changed), 'reconcile')['threads'][0]
     assert result['association']['status'] == 'auto_migrated' and len(result['history']) == 2
-    mutate(store, changed, 'reconcile')
-    assert len(store.read(changed)['threads'][0]['history']) == 2
+    mutate(AnnotationStore.open(changed), 'reconcile')
+    assert len(AnnotationStore.open(changed).read()['threads'][0]['history']) == 2
     deleted, _ = content_at(root, 'Other paragraph.')
-    result = mutate(store, deleted, 'reconcile')['threads'][0]
+    result = mutate(AnnotationStore.open(deleted), 'reconcile')['threads'][0]
     assert result['association']['anchor'] is None and result['original_anchor']['quote'].endswith('measurement')
     assert len(result['history']) == 2
-    result = mutate(store, deleted, 'associate', thread_id=tid, selection=select(deleted, 'Other paragraph.'))['threads'][0]
+    result = mutate(AnnotationStore.open(deleted), 'associate', thread_id=tid, selection=select(deleted, 'Other paragraph.'))['threads'][0]
     assert result['association']['status'] == 'manual' and len(result['history']) == 3
     assert result['history'][-1]['method'] == 'manual'
-    assert store.read(first)['threads'][0]['association']['anchor']['quote'].endswith('measurement')
+    assert store.read()['threads'][0]['association']['anchor']['quote'].endswith('measurement')
 
 
 def test_formula_matching_duplicate_and_manual_history(tmp_path):
@@ -225,13 +235,13 @@ def test_formula_matching_duplicate_and_manual_history(tmp_path):
 
 
 def _concurrent_create(content, number):
-    store = AnnotationStore.for_content(content)
+    store = AnnotationStore.open(content)
     for _ in range(30):
-        revision = store.read(content)['revision']
+        revision = store.read()['revision']
         try:
-            store.dispatch(content, {'operation': 'create', 'expected_revision': revision,
+            store.execute(envelope(content, {'operation': 'create', 'expected_revision': revision,
                                      'selection': select(content, 'Concurrent'), 'body': str(number),
-                                     'author': AUTHOR, 'category': 'note'})
+                                     'author': AUTHOR, 'category': 'note'}))
             return True
         except AnnotationConflict:
             continue
@@ -242,36 +252,36 @@ def test_interprocess_writes_are_atomic_and_never_lose_threads(tmp_path):
     content, _ = content_at(tmp_path, 'Concurrent writes retain every thread.')
     with ProcessPoolExecutor(max_workers=4) as pool:
         assert all(pool.map(_concurrent_create, [content] * 12, range(12)))
-    store = AnnotationStore.for_content(content)
-    snapshot = store.read(content)
+    store = AnnotationStore.open(content)
+    snapshot = store.read()
     assert snapshot['revision'] == 12 and len(snapshot['threads']) == 12
     assert sorted(int(t['messages'][0]['body']) for t in snapshot['threads']) == list(range(12))
-    assert not list(store.directory.glob('.annotations-*.tmp'))
+    assert not list(storage_path(content).parent.glob('.annotations-*.tmp'))
     with pytest.raises(AnnotationConflict):
-        store.dispatch(content, {'operation': 'create', 'expected_revision': 0,
-                                'selection': select(content, 'Concurrent'), 'body': 'lost', 'author': AUTHOR, 'category': 'note'})
+        store.execute(envelope(content, {'operation': 'create', 'expected_revision': 0,
+                                'selection': select(content, 'Concurrent'), 'body': 'lost', 'author': AUTHOR, 'category': 'note'}))
 
 
 def test_import_deduplicates_preserves_tombstones_and_refuses_conflicts(tmp_path):
     content, _ = content_at(tmp_path, 'Import backup.')
-    store = AnnotationStore.for_content(content)
-    value = create(store, content, 'Import')
+    store = AnnotationStore.open(content)
+    value = create(store, 'Import')
     tid, mid = value['result']['thread_id'], value['result']['message_id']
-    mutate(store, content, 'delete_message', thread_id=tid, message_id=mid)
+    mutate(store, 'delete_message', thread_id=tid, message_id=mid)
     backup = store.export()
-    assert mutate(store, content, 'import', bundle=backup)['result']['duplicates'] == 1
+    assert mutate(store, 'import', bundle=backup)['result']['duplicates'] == 1
     conflict = deepcopy(backup)
     conflict['threads'][tid]['messages'][0]['body'] = 'Conflicting content'
     before = store.export()
     with pytest.raises(AnnotationConflict):
-        mutate(store, content, 'import', bundle=conflict)
+        mutate(store, 'import', bundle=conflict)
     assert store.export() == before
     invalid = deepcopy(backup)
     invalid['threads'][tid]['original_anchor']['start'] = 999999
     with pytest.raises(AnnotationError):
-        mutate(store, content, 'import', bundle=invalid)
-    store.path.unlink()
-    result = mutate(store, content, 'import', bundle=backup)
+        mutate(store, 'import', bundle=invalid)
+    storage_path(content).unlink()
+    result = mutate(store, 'import', bundle=backup)
     assert result['result']['imported'] == [tid]
     assert result['threads'][0]['messages'][0]['deleted_at']
 
@@ -284,12 +294,12 @@ def test_import_deduplicates_preserves_tombstones_and_refuses_conflicts(tmp_path
 ])
 def test_invalid_writes_leave_store_unchanged(tmp_path, fields):
     content, _ = content_at(tmp_path, 'Valid content.')
-    store = AnnotationStore.for_content(content)
+    store = AnnotationStore.open(content)
     request = {'operation': 'create', 'expected_revision': 0, 'selection': select(content, 'Valid'),
                'body': 'note', 'author': AUTHOR, 'category': 'note', **fields}
     with pytest.raises(AnnotationError):
-        store.dispatch(content, request)
-    assert store.read(content)['revision'] == 0 and not store.export()['threads']
+        store.execute(envelope(content, request))
+    assert store.read()['revision'] == 0 and not store.export()['threads']
 
 
 def test_cli_and_real_http_use_same_version_checked_contract(tmp_path, capsys):
@@ -380,16 +390,17 @@ def test_near_duplicate_candidates_inside_one_paragraph_are_not_auto_migrated(tm
 
 def test_failed_atomic_replace_retains_existing_file_and_cleans_temporary(tmp_path, monkeypatch):
     content, _ = content_at(tmp_path, 'Atomic update.')
-    store = AnnotationStore.for_content(content)
-    tid = create(store, content, 'Atomic')['result']['thread_id']
-    before = store.path.read_bytes()
+    store = AnnotationStore.open(content)
+    tid = create(store, 'Atomic')['result']['thread_id']
+    before = storage_path(content).read_bytes()
+    from latex_review.annotations._storage import Database
     def fail(*args):
         raise OSError('simulated disk failure')
-    monkeypatch.setattr(store, '_persist', fail)
+    monkeypatch.setattr(Database, 'persist', staticmethod(fail))
     with pytest.raises(OSError):
-        mutate(store, content, 'resolve', thread_id=tid)
-    assert store.path.read_bytes() == before
-    assert not list(store.directory.glob('.annotations-*.tmp'))
+        mutate(store, 'resolve', thread_id=tid)
+    assert storage_path(content).read_bytes() == before
+    assert not list(storage_path(content).parent.glob('.annotations-*.tmp'))
 
 
 def test_report_and_live_share_coordinates_and_disk_store(tmp_path):
@@ -406,8 +417,8 @@ def test_report_and_live_share_coordinates_and_disk_store(tmp_path):
     new = parse_project(source.expand())
     report = write_report(old, new, compare_projects(old, new), tmp_path / 'report', pdf_converter='')
     report_content = load_content(report.directory)
-    store = AnnotationStore.for_content(report_content)
-    create(store, report_content, 'Second unchanged sentence')
+    store = AnnotationStore.open(report_content)
+    create(store, 'Second unchanged sentence')
     live = tmp_path / 'live'
     live.mkdir()
     build(source, live)
@@ -415,12 +426,12 @@ def test_report_and_live_share_coordinates_and_disk_store(tmp_path):
     assert live_content['project_id'] == report_content['project_id']
     assert live_content['version_id'] == report_content['version_id']
     assert [(u['id'], u['text']) for u in live_content['units']] == [(u['id'], u['text']) for u in report_content['units']]
-    state = store.read(live_content)
+    state = AnnotationStore.open(live_content).read()
     assert state['threads'][0]['association']['anchor']['quote'] == 'Second unchanged sentence'
     assert state['threads'][0]['association']['anchor']['change_ids'] == []
     # Same-version navigation metadata from another report must round-trip in backups.
-    mutate(store, live_content, 'resolve', thread_id=state['threads'][0]['id'])
-    mutate(store, live_content, 'import', bundle=store.export())
+    mutate(AnnotationStore.open(live_content), 'resolve', thread_id=state['threads'][0]['id'])
+    mutate(AnnotationStore.open(live_content), 'import', bundle=store.export())
 
 
 @pytest.mark.parametrize('caption', ['', r'\caption{Unique caption with $x$.}'])
@@ -434,8 +445,8 @@ def test_figure_display_resources_do_not_change_annotation_coordinates(tmp_path,
               '<p class="asset-metadata">File: missing.pdf</p><p class="asset-metadata">Size: unknown</p></div>'}
     decorated = build_content(project, render_preview(None, project, figure_assets=assets).html)
     assert plain['version_id'] == decorated['version_id']
-    store = AnnotationStore.for_content(plain)
-    store._content({'versions': {plain['version_id']: plain}}, decorated)
+    AnnotationStore.open(plain, keep_alive=True).close()  # Persists the plain version.
+    AnnotationStore.open(decorated).read()
     assert not any('missing.pdf' in unit['text'] or 'unknown' in unit['text'] for unit in decorated['units'])
     if caption:
         assert next(unit for unit in decorated['units'] if unit.get('subunit') == {'type': 'caption'})['id'].endswith(':block:0')
@@ -460,14 +471,14 @@ def test_new_coordinates_preserve_legacy_version_and_relocate_caption(tmp_path):
     legacy['version_id'] = 'a' * 64
     caption = next(unit for unit in legacy['units'] if unit.get('subunit') == {'type': 'caption'})
     caption['id'] = caption['node_id'] + ':block:3'
-    store = AnnotationStore.for_content(legacy)
-    result = create(store, legacy, 'Unique legacy caption.')
-    before = store.path.read_bytes()
-    state = store.read(content)
-    assert store.path.read_bytes() == before
+    store = AnnotationStore.open(legacy)
+    result = create(store, 'Unique legacy caption.')
+    before = storage_path(legacy).read_bytes()
+    state = AnnotationStore.open(content).read()
+    assert storage_path(legacy).read_bytes() == before
     assert state['threads'][0]['association']['status'] == 'exact'
     assert state['threads'][0]['association']['anchor']['unit_id'].endswith(':block:0')
-    store.dispatch(content, {'operation': 'reconcile', 'expected_revision': state['revision']})
+    AnnotationStore.open(content).execute(envelope(content, {'operation': 'reconcile', 'expected_revision': state['revision']}))
     backup = store.export()
     assert backup['versions'][legacy['version_id']] == legacy
     assert content['version_id'] in backup['versions']
@@ -477,24 +488,24 @@ def test_new_coordinates_preserve_legacy_version_and_relocate_caption(tmp_path):
 def test_report_output_cannot_remove_shared_annotation_storage(tmp_path):
     from latex_review.cli import ConfigurationError, _check_output_separate
     content, _ = content_at(tmp_path, 'Retain annotations.')
-    store = AnnotationStore.for_content(content)
-    create(store, content, 'Retain')
-    before = store.path.read_bytes()
+    store = AnnotationStore.open(content)
+    create(store, 'Retain')
+    before = storage_path(content).read_bytes()
     options = {'old_dir': str(tmp_path), 'new_dir': str(tmp_path), 'entry': 'main.tex'}
-    for output in (tmp_path / '.latex-review', store.directory, store.directory / 'report'):
+    for output in (tmp_path / '.latex-review', storage_path(content).parent, storage_path(content).parent / 'report'):
         with pytest.raises(ConfigurationError, match='批注存储'):
             _check_output_separate(output, options)
     _check_output_separate(tmp_path / '.latex-review' / 'latest', options)
-    assert store.path.read_bytes() == before
+    assert storage_path(content).read_bytes() == before
 
 
 def test_source_fallback_removes_stale_coordinates_but_retains_threads(tmp_path):
     from latex_review.report import write_source_fallback
     root = tmp_path / 'paper'
     content, _ = content_at(root, 'Original body.')
-    store = AnnotationStore.for_content(content)
-    create(store, content, 'Original')
-    before = store.path.read_bytes()
+    store = AnnotationStore.open(content)
+    create(store, 'Original')
+    before = storage_path(content).read_bytes()
     report = tmp_path / 'report'
     report.mkdir()
     (report / MANIFEST).write_text(json.dumps(content))
@@ -502,24 +513,23 @@ def test_source_fallback_removes_stale_coordinates_but_retains_threads(tmp_path)
     old = ProjectSource('old', root, 'main.tex', ComparisonSource('directory', str(root))).expand()
     write_source_fallback(old, new, report, parse_failures=[('new', 'test failure')])
     assert not (report / MANIFEST).exists()
-    assert store.path.read_bytes() == before
+    assert storage_path(content).read_bytes() == before
 
 
 def test_reply_parent_identity_persistence_and_validation(tmp_path):
     content, _ = content_at(tmp_path, 'A sufficiently long unchanged sentence.')
-    store = AnnotationStore.for_content(content)
-    result = create(store, content, 'sufficiently long')['result']
+    store = AnnotationStore.open(content)
+    result = create(store, 'sufficiently long')['result']
     tid, root = result['thread_id'], result['message_id']
     def reply(parent):
-        return mutate(store, content, 'reply', thread_id=tid, reply_to=parent,
-                      body='Same author', author=AUTHOR, category='note')['result']['message_id']
+        return mutate(store, 'reply', thread_id=tid, reply_to=parent, body='Same author', author=AUTHOR, category='note')['result']['message_id']
     first, second = reply(root), reply(root)
     child = reply(first)
-    mutate(store, content, 'edit', thread_id=tid, message_id=child, body='No mention', category='note')
-    messages = AnnotationStore.for_content(content).read(content)['threads'][0]['messages']
+    mutate(store, 'edit', thread_id=tid, message_id=child, body='No mention', category='note')
+    messages = AnnotationStore.open(content).read()['threads'][0]['messages']
     assert messages[-1]['reply_to'] == first and messages[-1]['reply_to'] != second
     bundle = store.export()
-    assert mutate(store, content, 'import', bundle=bundle)
+    assert mutate(store, 'import', bundle=bundle)
     before = store.export()
     with pytest.raises(AnnotationError):
         reply('missing')
@@ -527,4 +537,4 @@ def test_reply_parent_identity_persistence_and_validation(tmp_path):
     invalid = deepcopy(bundle)
     invalid['threads'][tid]['messages'][1]['reply_to'] = child
     with pytest.raises(AnnotationError):
-        mutate(store, content, 'import', bundle=invalid)
+        mutate(store, 'import', bundle=invalid)
