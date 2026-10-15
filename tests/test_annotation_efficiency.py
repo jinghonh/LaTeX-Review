@@ -70,7 +70,7 @@ def test_read_caches_relocation_across_process_instances(tmp_path, monkeypatch):
     first = store.read(new)
     def unexpected(*args):
         pytest.fail('same-version read repeated fuzzy relocation')
-    monkeypatch.setattr(annotations, 'locate', unexpected)
+    monkeypatch.setattr(annotations.store, 'locate', unexpected)
     second = AnnotationStore.for_content(new).read(new)
     assert second == first
     reconciled = mutate(store, new, 'reconcile')
@@ -115,7 +115,7 @@ def test_deleted_table_cell_keeps_labelled_table_navigation_and_backup(tmp_path)
 
 
 def test_preflight_revision_content_drift_expiry_and_token(tmp_path, monkeypatch):
-    from latex_review import annotation_preflight
+    from latex_review.annotations import _preflight as annotation_preflight
     store, content, request = setup(tmp_path)
     preview = store.batch(content, {**request, 'dry_run': True})
     with pytest.raises(AnnotationConflict, match='预检'):
@@ -162,7 +162,7 @@ def test_batch_does_not_construct_location_view(tmp_path, monkeypatch):
                                          ('version', 'version_changed'), ('content', 'content_changed'),
                                          ('expiry', 'expired'), ('token', 'token_mismatch')])
 def test_preflight_reports_actual_change(tmp_path, monkeypatch, change, reason):
-    from latex_review import annotation_preflight
+    from latex_review.annotations import _preflight as annotation_preflight
     store, content, request = setup(tmp_path)
     preview = store.batch(content, {**request, 'dry_run': True})
     if change == 'revision':

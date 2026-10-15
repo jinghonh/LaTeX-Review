@@ -4,7 +4,8 @@ from hashlib import sha256
 import pytest
 
 from latex_review.annotation_sources import enrich_content
-from latex_review.annotations import build_content, _PreviewParser, _Element
+from latex_review.annotations import build_content
+from latex_review.annotations.content import _PreviewParser, _Element
 from latex_review.contract import ComparisonSource
 from latex_review.preview import render_preview
 from latex_review.sources import ProjectSource

@@ -3,7 +3,7 @@ import json
 import secrets
 import time
 
-from .annotations import AnnotationConflict, _hash
+from ._validation import AnnotationConflict, _hash
 
 TTL = 15 * 60
 
@@ -64,7 +64,7 @@ def save(store, content, request, fingerprint, revision, changed_threads, result
             'payload_hash': _hash({'project_id': content['project_id'], 'items': request['items'],
                                    'atomic': request.get('atomic', False)}),
             'threads': changed_threads, 'results': results}
-    from .annotation_storage import encode
+    from ._storage import encode
     connection.execute('INSERT INTO preflights(id,payload) VALUES(?,?) '
         'ON CONFLICT(id) DO UPDATE SET payload=excluded.payload', (request['request_id'], encode(plan)))
     return plan

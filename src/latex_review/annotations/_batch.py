@@ -1,5 +1,5 @@
 """Batch request validation; AnnotationStore owns execution and persistence."""
-from .annotations import AnnotationError, _hash, _integer, _keys, _text
+from ._validation import AnnotationError, _hash, _integer, _keys, _text
 
 OPERATIONS = {'create', 'reply', 'edit', 'delete_message', 'delete_thread', 'resolve', 'reopen', 'associate', 'update_metadata'}
 

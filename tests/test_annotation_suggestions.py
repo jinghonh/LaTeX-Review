@@ -34,7 +34,7 @@ def test_preview_apply_and_no_automatic_resolve(tmp_path):
 
 
 def test_source_changed_during_preparation_is_not_overwritten(tmp_path, monkeypatch):
-    from latex_review import annotation_suggestions
+    from latex_review.annotations import _suggestions as annotation_suggestions
     content, store, path, request = setup(tmp_path)
     original = path.read_bytes()
     real_inspect = annotation_suggestions.inspect
@@ -119,7 +119,7 @@ def test_suggestion_import_keeps_bound_source_metadata(tmp_path):
 
 def test_sqlite_commit_failure_compensates_source(tmp_path, monkeypatch):
     import sqlite3
-    from latex_review.annotation_storage import Database
+    from latex_review.annotations._storage import Database
     content, store, path, request = setup(tmp_path)
     before = path.read_bytes()
     revision = store.metadata(content)['revision']

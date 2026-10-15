@@ -1,6 +1,6 @@
 # 报告批注数据契约
 
-本契约定义 [已确认规格](report-annotations.md) 的共享数据和交付接线。数据实现入口为 `src/latex_review/annotations.py`。
+本契约定义 [已确认规格](report-annotations.md) 的共享数据和交付接线。数据实现入口为 `src/latex_review/annotations/` 包：`content` 负责正文内容清单和锚点，`store` 负责批注事务。
 批注正文始终保存为文字。作者标签表示来源，不构成身份认证。
 
 ## 内容与身份

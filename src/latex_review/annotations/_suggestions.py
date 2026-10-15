@@ -9,12 +9,12 @@ import tempfile
 
 
 def error(message):
-    from .annotations import AnnotationError
+    from ._validation import AnnotationError
     raise AnnotationError(message)
 
 
 def validate(value):
-    from .annotations import _keys, _integer
+    from ._validation import _keys, _integer
     _keys(value, ('original_chunk', 'replacement_chunk', 'status', 'version_id', 'unit_id',
                   'source_span', 'reason', 'applied_at', 'applied_sha256'), ('original_chunk', 'replacement_chunk'))
     if not isinstance(value, dict) or not isinstance(value.get('original_chunk'), str) or not value['original_chunk'] or not isinstance(value.get('replacement_chunk'), str):

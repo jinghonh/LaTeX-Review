@@ -6,7 +6,7 @@ from pathlib import Path
 from threading import Thread
 from playwright.sync_api import sync_playwright
 from latex_review.annotations import AnnotationStore, MANIFEST, load_content, _hash
-from latex_review.annotation_storage import Database, encode
+from latex_review.annotations._storage import Database, encode
 from latex_review.serve import create_server
 from latex_review.version_storage import unpack_storage
 

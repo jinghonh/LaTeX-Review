@@ -4,7 +4,7 @@ import sqlite3
 import json
 import pytest
 from latex_review.annotations import AnnotationStore, AnnotationConflict, AnnotationError
-from latex_review.annotation_storage import Database
+from latex_review.annotations._storage import Database
 from test_annotations import content_at, select, AUTHOR
 
 

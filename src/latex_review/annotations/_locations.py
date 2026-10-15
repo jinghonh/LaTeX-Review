@@ -15,7 +15,7 @@ def compact_location(association):
 
 
 def expand_location(content, association):
-    from .annotations import make_anchor
+    from .content import make_anchor
     result = deepcopy(association)
     for entry in [result, *result['candidates']]:
         old = entry.get('anchor')
@@ -34,7 +34,7 @@ def expand_location(content, association):
 class LocationCache:
     """Access only while the project's existing storage lock is held."""
     def __init__(self, store, content):
-        from .annotations import AnnotationError, _hash
+        from ._validation import AnnotationError, _hash
         self.path = store.directory / f'{store.project_id}.locations.json'
         if self.path.is_symlink():
             raise AnnotationError('定位缓存不可为符号链接')
@@ -53,18 +53,18 @@ class LocationCache:
         self.dirty = False
 
     def get(self, anchor):
-        from .annotations import _hash
+        from ._validation import _hash
         return self.entries.get(_hash(anchor))
 
     def put(self, anchor, association):
-        from .annotations import _hash
+        from ._validation import _hash
         self.entries[_hash(anchor)] = compact_location(association)
         while len(self.entries) > 512:
             self.entries.pop(next(iter(self.entries)))
         self.dirty = True
 
     def save(self):
-        from .annotations import _atomic_write
+        from ._validation import _atomic_write
         if self.dirty:
             self.data.update(fingerprint=self.fingerprint, version_id=self.version)
             _atomic_write(self.path, self.data)
