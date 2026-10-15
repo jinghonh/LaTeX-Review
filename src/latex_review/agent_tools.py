@@ -200,7 +200,7 @@ def annotations_main(argv: list[str] | None = None) -> int:
                      'revision': snapshot['revision'],
                      'thread': thread_detail(thread, {u['id']: u for u in content['units']})}
         elif args.command:
-            value = execute_request(store, content, build_request(content, store.read(content), args))
+            value = execute_request(store, content, build_request(content, store.read_thread(content, args.thread_id) if args.command == 'edit' else store.metadata(content), args))
             if (value.get('result') or {}).get('source_changed'):
                 from .report_rebuild import rebuild_report
                 value['result']['rebuild'] = rebuild_report(args.report)

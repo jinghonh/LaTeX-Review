@@ -116,8 +116,8 @@ def test_restored_http_edit_draft_can_be_saved(live_report,chrome):
             p.locator('.annotation-editor > textarea').fill('Restored edit can be saved')
             p.reload();p.wait_for_function('window.reviewAnnotationDeliveryReady===true')
             assert p.locator('.annotation-editor > textarea').input_value()=='Restored edit can be saved'
-            # Disk persistence sorts object keys. A field-order change is not an edit conflict.
-            assert p.evaluate('''()=>{const d=Object.values(reviewAnnotations.getDrafts())[0];return !d.warning && JSON.stringify(d.message)!==JSON.stringify(reviewAnnotations.getSnapshot().threads[0].messages[0]);}''')
+            # Field order does not affect restored draft validation.
+            assert p.evaluate('''()=>{const d=Object.values(reviewAnnotations.getDrafts())[0];return !d.warning;}''')
             p.locator('.annotation-editor').get_by_text('保存',exact=True).click()
             p.wait_for_function('reviewAnnotations.getSnapshot().threads[0].messages[0].body==="Restored edit can be saved"')
             assert p.locator('.annotation-editor').is_hidden()

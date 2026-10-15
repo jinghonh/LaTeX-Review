@@ -4,7 +4,9 @@ import json
 
 
 def compact_location(association):
-    result = deepcopy(association)
+    result = {k: deepcopy(v) for k, v in association.items() if k not in ('anchor', 'candidates')}
+    result['anchor'] = association.get('anchor')
+    result['candidates'] = [dict(candidate) for candidate in association['candidates']]
     for entry in [result, *result['candidates']]:
         anchor = entry.get('anchor')
         if anchor:

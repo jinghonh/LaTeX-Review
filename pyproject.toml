@@ -11,7 +11,7 @@ requires-python = ">=3.11"
 dependencies = ["jsonschema>=4.21,<5", "plasTeX>=3.1,<4", "watchfiles>=1.1,<2"]
 
 [project.optional-dependencies]
-test = ["pytest>=8,<10", "playwright>=1.45,<2"]
+test = ["pytest>=8,<10", "playwright>=1.45,<2", "psutil>=5.9"]
 
 [project.scripts]
 latex-review = "latex_review.cli:main"

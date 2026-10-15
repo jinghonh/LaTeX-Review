@@ -17,6 +17,11 @@ def validate_request(content, request):
     items = request['items']
     if not isinstance(items, list) or not items:
         raise AnnotationError('items 须为非空列表')
+    if len(items) > 100:
+        raise AnnotationError('批量操作最多 100 条；请拆分请求')
+    import json
+    if len(json.dumps(request, ensure_ascii=False).encode()) > 1024 * 1024:
+        raise AnnotationError('批量请求最多 1 MiB；请拆分请求')
     ids = set()
     for item in items:
         if not isinstance(item, dict):

@@ -145,13 +145,45 @@ def thread_summary(thread):
                           'preview': m['body'][:160]} for m in messages]}
 
 
+def page_anchor(anchor):
+    if anchor is None:
+        return None
+    fields = ('unit_id', 'kind', 'start', 'end', 'quote', 'unit_text', 'selector', 'order',
+              'source', 'section_path', 'scope', 'subunit')
+    return {key: anchor[key] for key in fields if key in anchor}
+
+
+def page_association(association):
+    return {**association, 'anchor': page_anchor(association.get('anchor')),
+            'candidates': [{**candidate, 'anchor': page_anchor(candidate['anchor'])}
+                           for candidate in association['candidates']]}
+
+
 def page_projection(value):
     """Keep UI messages/current anchors; omit duplicated historical text."""
     threads = []
     for thread in value['threads']:
         threads.append({**{k: v for k, v in thread.items() if k not in
                            ('original_anchor', 'current_anchor', 'associations', 'history', 'messages')},
+                        'association': page_association(thread['association']),
                         'original_anchor': {k: thread['original_anchor'][k] for k in ('quote', 'kind')},
                         'messages': [{k: v for k, v in m.items() if k != 'edits'} for m in thread['messages']],
                         'history': [{'at': h['at'], 'method': h['method']} for h in thread['history']]})
     return {**value, 'threads': threads}
+
+
+def request_body_projection(value, request):
+    """Opt-in HTTP delta references unchanged submitted bodies instead of echoing them."""
+    if not value.get('incremental'):
+        return value
+    if request['operation'] == 'batch':
+        items = {item['id']: item for item in request['items']}
+        receipts = [(receipt, items[receipt['id']]) for receipt in value['results'] if receipt['ok']]
+    else:
+        receipts = [(value.get('result') or {}, request)]
+    references = {receipt.get('message_id', item.get('message_id')): item.get('id', 'single')
+                  for receipt, item in receipts if 'body' in item}
+    return {**value, 'threads': [{**thread, 'messages': [
+        {**{k: v for k, v in message.items() if k != 'body'}, 'body_ref': references[message['id']]}
+        if message['id'] in references else message for message in thread['messages']]}
+        for thread in value['threads']]}

@@ -6,7 +6,7 @@ Range. Formula atoms count as one U+FFFC; MathJax descendants never supply offse
 from __future__ import annotations
 
 from contextlib import contextmanager
-from copy import deepcopy
+from copy import deepcopy, copy
 from datetime import datetime, timezone
 from difflib import SequenceMatcher
 import fcntl
@@ -14,11 +14,12 @@ from html.parser import HTMLParser
 import json
 import os
 import re
+import sqlite3
 from pathlib import Path
 import tempfile
 import uuid
 
-from .version_storage import pack_storage, unpack_storage
+from .version_storage import unpack_storage
 
 SCHEMA_VERSION = '1.0'
 MANIFEST = 'annotation-content.json'
@@ -377,6 +378,13 @@ def validate_content(content):
     return content
 
 
+class PreparedContent(dict):
+    """Validated server-owned manifest with an index outside its JSON representation."""
+    def __init__(self, content):
+        super().__init__(content)
+        self.unit_index = {unit['id']: unit for unit in self['units']}
+
+
 def load_content(report):
     root = Path(report).expanduser()
     root = root if root.is_dir() else root.parent
@@ -390,7 +398,8 @@ def make_anchor(content, selection):
         raise AnnotationError('只有修改后或当前正文可新建批注')
     if selection.get('end_unit_id', selection['unit_id']) != selection['unit_id']:
         raise AnnotationError('不支持跨段落选区')
-    unit = next((u for u in content['units'] if u['id'] == selection['unit_id']), None)
+    index = getattr(content, 'unit_index', None)
+    unit = index.get(selection['unit_id']) if index is not None else next((u for u in content['units'] if u['id'] == selection['unit_id']), None)
     if unit is None:
         raise AnnotationError('正文单元不存在于该版本')
     if unit['kind'] == 'formula':
@@ -642,7 +651,8 @@ class AnnotationStore:
             raise AnnotationError('项目 ID 无效')
         self.project_id = project_id
         self.directory = self.root / '.latex-review' / 'annotations'
-        self.path = self.directory / f'{project_id}.json'
+        self.path = self.directory / f'{project_id}.sqlite3'
+        self.legacy_path = self.directory / f'{project_id}.json'
         self.lock_path = self.directory / f'{project_id}.lock'
 
     @classmethod
@@ -656,36 +666,57 @@ class AnnotationStore:
 
     @contextmanager
     def _locked(self, *, restore_versions=True):
-        if any(p.is_symlink() for p in (self.directory, self.directory.parent, self.path, self.lock_path)):
+        from .annotation_storage import Database
+        if any(p.is_symlink() for p in (self.directory, self.directory.parent, self.path,
+                                       self.legacy_path, self.legacy_path.with_suffix('.json.migrated'), self.lock_path,
+                                       Path(str(self.path) + '-wal'), Path(str(self.path) + '-shm'))):
             raise AnnotationError('批注存储路径不可为符号链接')
         self.directory.mkdir(parents=True, exist_ok=True)
         fd = os.open(self.lock_path, os.O_CREAT | os.O_RDWR | os.O_NOFOLLOW, 0o600)
         try:
             fcntl.flock(fd, fcntl.LOCK_EX)
-            if self.path.exists():
+            database = Database(self.path, self.project_id, SCHEMA_VERSION)
+            if not self.path.exists():
+                legacy = None
+                if self.legacy_path.exists():
+                    try:
+                        legacy = unpack_storage(json.loads(self.legacy_path.read_text(encoding='utf-8')))
+                        if legacy['project_id'] != self.project_id or legacy['schema_version'] != SCHEMA_VERSION:
+                            raise ValueError('批注项目身份无效')
+                        self._import({'versions': {}, 'threads': {}},
+                                     {k: v for k, v in legacy.items() if k != 'requests'})
+                    except (ValueError, TypeError, KeyError) as error:
+                        raise AnnotationError('批注存储读取失败') from error
+                temporary_fd, temporary_name = tempfile.mkstemp(prefix='.migration-', suffix='.sqlite3', dir=self.directory)
+                os.close(temporary_fd)
+                temporary = Path(temporary_name)
                 try:
-                    data = unpack_storage(json.loads(self.path.read_text(encoding='utf-8')),
-                                          restore_versions=restore_versions)
-                except (ValueError, TypeError, KeyError) as error:
-                    raise AnnotationError('批注存储读取失败') from error
-                if restore_versions:
-                    for version_id, version in data.get('versions', {}).items():
-                        validate_content(version)
-                        if version_id != version['version_id'] or version['project_id'] != self.project_id:
-                            raise AnnotationError('批注存储正文版本身份无效')
-                _keys(data, ('schema_version', 'project_id', 'revision', 'threads', 'versions', 'requests'),
-                      ('schema_version', 'project_id', 'revision', 'threads', 'versions'))
-                _integer(data['revision'], 'revision')
-                if not isinstance(data['threads'], dict) or not isinstance(data['versions'], dict):
-                    raise AnnotationError('批注存储线程或版本无效')
-                if data.get('schema_version') != SCHEMA_VERSION or data.get('project_id') != self.project_id:
-                    raise AnnotationError('批注存储契约或项目身份无效')
-            else:
-                data = {'schema_version': SCHEMA_VERSION, 'project_id': self.project_id, 'revision': 0,
-                        'threads': {}, 'versions': {}}
-            if not isinstance(data.get('requests', {}), dict):
-                raise AnnotationError('批量请求记录无效')
-            yield data
+                    Database(temporary, self.project_id, SCHEMA_VERSION).initialize(legacy)
+                    os.replace(temporary, self.path)
+                    directory_fd = os.open(self.directory, os.O_RDONLY)
+                    try:
+                        os.fsync(directory_fd)
+                    finally:
+                        os.close(directory_fd)
+                finally:
+                    for path in (temporary, Path(str(temporary)+'-wal'), Path(str(temporary)+'-shm')):
+                        path.unlink(missing_ok=True)
+                if legacy is not None:
+                    backup = self.legacy_path.with_suffix('.json.migrated')
+                    if backup.is_symlink():
+                        raise AnnotationError('迁移备份不可为符号链接')
+                    os.replace(self.legacy_path, backup)
+                    directory_fd = os.open(self.directory, os.O_RDONLY)
+                    try:
+                        os.fsync(directory_fd)
+                    finally:
+                        os.close(directory_fd)
+            with database.transaction() as data:
+                if getattr(self, '_database_keeper', None):
+                    data['threads'].connection.execute('PRAGMA wal_autocheckpoint=0')
+                yield data
+        except sqlite3.DatabaseError as error:
+            raise AnnotationError('批注数据库读取或提交失败') from error
         finally:
             fcntl.flock(fd, fcntl.LOCK_UN)
             os.close(fd)
@@ -695,9 +726,48 @@ class AnnotationStore:
         self._persist(data)
 
     def _persist(self, data):
-        _atomic_write(self.path, pack_storage(data), compact=True)
+        from .annotation_storage import Database
+        Database.persist(data)
+
+    def prepare(self, content):
+        from .annotation_storage import Database
+        if not getattr(self, '_database_keeper', None):
+            # Keep WAL open between HTTP requests; closing the final connection checkpoints it.
+            with self._locked():
+                pass
+            self._database_keeper = Database(self.path, self.project_id, SCHEMA_VERSION).connect()
+            from threading import Event, Thread
+            self._checkpoint_stop = Event()
+            def checkpoint():
+                import sqlite3
+                connection = Database(self.path, self.project_id, SCHEMA_VERSION).connect()
+                try:
+                    while not self._checkpoint_stop.wait(1):
+                        try:
+                            connection.execute('PRAGMA wal_checkpoint(PASSIVE)')
+                        except sqlite3.OperationalError:
+                            pass  # Another writer/checkpointer owns the database; retry next interval.
+                finally:
+                    connection.close()
+            self._checkpoint_thread = Thread(target=checkpoint, name='annotation-checkpoint', daemon=True)
+            self._checkpoint_thread.start()
+        with self._locked() as data:
+            self._content(data, content)
+            self._persist(data)
+        self._prepared_content = content
+        self._prepared_inode = self.path.stat().st_ino
+        self._prepared_content_hash = _hash(content)
+
+    def close(self):
+        if getattr(self, '_database_keeper', None):
+            self._checkpoint_stop.set()
+            self._checkpoint_thread.join()
+            self._database_keeper.close()
+            self._database_keeper = None
 
     def _content(self, data, content):
+        if getattr(self, '_prepared_content', None) is content and self.path.stat().st_ino == self._prepared_inode:
+            return None
         validate_content(content)
         if content['project_id'] != self.project_id:
             raise AnnotationError('不能访问其他项目的批注')
@@ -716,10 +786,26 @@ class AnnotationStore:
             self._content(data, content)
             return self._view(data, content, progress=progress)
 
+    def read_thread(self, content, thread_id):
+        with self._locked() as data:
+            self._content(data, content)
+            thread = data['threads'].get(thread_id)
+            return self._view({**data, 'threads': {thread_id: thread} if thread else {}}, content)
+
     def metadata(self, content):
         """Read identity/revision without constructing or relocating any thread."""
         with self._locked(restore_versions=False) as data:
             return {'project_id': self.project_id, 'version_id': content['version_id'], 'revision': data['revision']}
+
+    def changes(self, content, since):
+        _integer(since, 'since')
+        with self._locked() as data:
+            if since > data['revision']:
+                raise AnnotationConflict('客户端修订号超过当前存储，请重新读取')
+            self._content(data, content)
+            ids = [row[0] for row in data['threads'].connection.execute(
+                'SELECT DISTINCT thread_id FROM changes WHERE revision>?', (since,))]
+            return self._delta(data, content, ids, since)
 
     def inventory(self, content):
         """Audit inventory does not need anchors, histories or location computation."""
@@ -738,7 +824,8 @@ class AnnotationStore:
         for value in data['threads'].values():
             if value.get('deleted_at'):
                 continue
-            thread = deepcopy(value)
+            # JSON round-trip restores independent public anchor objects, even when a transaction reuses immutable anchors.
+            thread = json.loads(json.dumps(value, ensure_ascii=False))
             association = thread['associations'].get(content['version_id'])
             if association is None:
                 if cache is None:
@@ -778,15 +865,23 @@ class AnnotationStore:
         return {'schema_version': SCHEMA_VERSION, 'project_id': self.project_id, 'version_id': content['version_id'],
                 'revision': data['revision'], 'threads': threads}
 
-    def dispatch(self, content, request, progress=None):
+    def dispatch(self, content, request, progress=None, *, incremental=False):
         """Shared structured mutation API used unchanged by CLI and local HTTP."""
         if isinstance(request, dict) and request.get('operation') == 'batch':
-            return self.batch(content, request, progress=progress)
+            return self.batch(content, request, progress=progress, incremental=incremental)
         if isinstance(request, dict) and request.get('operation') in ('suggestion_preview', 'suggestion_apply'):
             return self._suggestion(content, request)
         self._validate_request(request)
         revision = request['expected_revision']
         with self._locked() as data:
+            request_id = request.get('request_id')
+            fingerprint = _hash({k: v for k, v in request.items() if k != 'expected_revision'}) if request_id else None
+            if request_id:
+                previous = data['requests'].get(request_id)
+                if previous:
+                    if previous['fingerprint'] != fingerprint:
+                        raise AnnotationConflict('请求 ID 已用于不同载荷')
+                    return previous['response']
             if data['revision'] != revision:
                 raise AnnotationConflict(f"批注已被其他审阅者更新（期望修订号 {revision}，实际修订号 {data['revision']}），请保留草稿并重新读取",
                     {'code': 'revision_conflict', 'reasons': ['annotation_revision_changed'],
@@ -799,12 +894,64 @@ class AnnotationStore:
                 progress('write', 1, 1)
             if request['operation'] != 'reconcile' or result['reconciled']:
                 self._write(data)
-            return {**self._view(data, content, progress=progress), 'result': result}
+            if incremental:
+                ids = result['thread_ids'] if request['operation'] == 'reconcile' else [result['thread_id']] if request['operation'] == 'create' else [request['thread_id']]
+                response = {**self._delta(data, content, ids, revision), 'result': result}
+            else:
+                response = {**self._view(data, content, progress=progress), 'result': result}
+            if request_id:
+                data['requests'][request_id] = {'fingerprint': fingerprint, 'response': response}
+                self._persist(data)
+            return response
+
+    def _delta(self, data, content, ids, start_revision):
+        affected = {key: data['threads'][key] for key in dict.fromkeys(ids)}
+        threads, anchors = [], {}
+        def page_anchor(old):
+            key = (old['unit_id'], old.get('start'), old.get('end'), old['quote'])
+            if key not in anchors:
+                selection = {'unit_id': old['unit_id']}
+                if old['kind'] == 'text':
+                    selection.update(start=old['start'], end=old['end'], quote=old['quote'])
+                anchors[key] = make_anchor(content, selection)
+            return anchors[key]
+        for key, thread in affected.items():
+            if thread.get('deleted_at'):
+                continue
+            association = thread['associations'].get(content['version_id'])
+            if association is None:
+                # Preparation/relocation is outside the normal exact-association fast path.
+                rendered = self._view({**data, 'threads': {key: thread}}, content)['threads'][0]
+                association = rendered['association']
+            else:
+                association = {**association,
+                    'anchor': page_anchor(association['anchor']) if association['anchor'] else None,
+                    'candidates': [{**candidate, 'anchor': page_anchor(candidate['anchor'])}
+                                   for candidate in association['candidates']]}
+                if association.get('container'):
+                    container = dict(association['container'])
+                    index = getattr(content, 'unit_index', None)
+                    unit = index[container['unit_id']] if index else next(u for u in content['units'] if u['id'] == container['unit_id'])
+                    container.update(selector=unit['selector'], order=unit['order'])
+                    association['container'] = container
+            # Transaction-local values are serialized before they escape; no live store graph is shared.
+            rendered = {k: v for k, v in thread.items() if k not in
+                ('original_anchor', 'current_anchor', 'associations', 'messages', 'history')}
+            rendered.update(original_anchor={k: thread['original_anchor'][k] for k in ('quote', 'kind')},
+                messages=[{k: v for k, v in message.items() if k != 'edits'} for message in thread['messages']],
+                history=[{k: event[k] for k in ('at', 'method')} for event in thread['history']], association=association)
+            threads.append(rendered)
+        threads.sort(key=lambda t: ((t['association'].get('anchor') or {}).get('order', 10**12),
+                                   (t['association'].get('anchor') or {}).get('start') or 0, t['created_at'], t['id']))
+        return {'schema_version': SCHEMA_VERSION, 'project_id': self.project_id, 'version_id': content['version_id'],
+                'revision': data['revision'], 'threads': threads, 'incremental': True,
+                'start_revision': start_revision,
+                'deleted_thread_ids': [key for key, thread in affected.items() if thread.get('deleted_at')]}
 
     @staticmethod
     def _validate_request(request):
         _keys(request, ('operation', 'expected_revision', 'thread_id', 'message_id', 'selection', 'body',
-                        'author', 'category', 'bundle', 'reply_to', 'suggested_replacement', 'title', 'tags', 'resolve'), ('operation', 'expected_revision'))
+                        'author', 'category', 'bundle', 'reply_to', 'suggested_replacement', 'title', 'tags', 'resolve', 'request_id'), ('operation', 'expected_revision'))
         revision = _integer(request['expected_revision'], 'expected_revision')
         operation = request['operation']
         fields = {
@@ -817,8 +964,10 @@ class AnnotationStore:
         }
         if not isinstance(operation, str) or operation not in fields:
             raise AnnotationError('未知批注操作')
-        _keys(request, fields[operation] | {'operation', 'expected_revision'} | ({'reply_to', 'resolve'} if operation == 'reply' else set()) | ({'suggested_replacement'} if operation in ('create', 'reply') else set()) | ({'title', 'tags'} if operation in ('create', 'update_metadata') else set()),
+        _keys(request, fields[operation] | {'operation', 'expected_revision', 'request_id'} | ({'reply_to', 'resolve'} if operation == 'reply' else set()) | ({'suggested_replacement'} if operation in ('create', 'reply') else set()) | ({'title', 'tags'} if operation in ('create', 'update_metadata') else set()),
               fields[operation] | {'operation', 'expected_revision'})
+        if 'request_id' in request:
+            _text(request['request_id'], 'request_id', 256)
         if 'resolve' in request and type(request['resolve']) is not bool:
             raise AnnotationError('resolve 须为布尔值')
         if operation in ('create', 'update_metadata'):
@@ -840,15 +989,23 @@ class AnnotationStore:
             association = {'status': 'exact', 'anchor': anchor, 'candidates': [], 'reason': None}
             data['threads'][thread_id] = {'id': thread_id, 'project_id': self.project_id,
                 'created_version_id': content['version_id'], 'created_at': now, 'updated_at': now,
-                'resolved': False, 'deleted_at': None, 'messages': [message], 'original_anchor': deepcopy(anchor),
-                'current_anchor': deepcopy(anchor), 'associations': {content['version_id']: association},
-                'history': [{'at': now, 'method': 'created', 'anchor': deepcopy(anchor)}],
+                'resolved': False, 'deleted_at': None, 'messages': [message], 'original_anchor': anchor,
+                'current_anchor': anchor, 'associations': {content['version_id']: association},
+                'history': [{'at': now, 'method': 'created', 'anchor': anchor}],
                 **thread_metadata(request)}
             result = {'thread_id': thread_id, 'message_id': message['id']}
         elif operation == 'reconcile':
             from .annotation_locations import LocationCache, expand_location
             cache, count = None, 0
-            for thread in data['threads'].values():
+            changed_ids = []
+            if hasattr(data['threads'], 'connection'):
+                path = '$.associations."' + content['version_id'] + '"'
+                ids = [row[0] for row in data['threads'].connection.execute(
+                    'SELECT id FROM threads WHERE deleted=0 AND json_type(payload,?) IS NULL', (path,))]
+                targets = (data['threads'][key] for key in ids)
+            else:
+                targets = data['threads'].values()
+            for thread in targets:
                 if thread['deleted_at'] or content['version_id'] in thread['associations']:
                     continue
                 if cache is None:
@@ -861,11 +1018,12 @@ class AnnotationStore:
                     association = expand_location(content, cached)
                 thread['associations'][content['version_id']] = association
                 count += 1
+                changed_ids.append(thread['id'])
                 if association['anchor']:
                     self._associate(thread, association['anchor'], association['status'], now)
             if cache:
                 cache.save()
-            result = {'reconciled': count}
+            result = {'reconciled': count, 'thread_ids': changed_ids}
         elif operation == 'import':
             result = self._import(data, request['bundle'])
         else:
@@ -917,7 +1075,7 @@ class AnnotationStore:
             thread['updated_at'] = now
         return result
 
-    def batch(self, content, request, progress=None):
+    def batch(self, content, request, progress=None, *, incremental=False):
         """Own batch locking, preflight reuse, receipts and revision advancement."""
         from .annotation_batch import OPERATIONS, validate_request
         revision, request_id, atomic, dry_run, items, fingerprint = validate_request(content, request)
@@ -932,16 +1090,16 @@ class AnnotationStore:
                 if previous['fingerprint'] != fingerprint:
                     raise AnnotationConflict('请求 ID 已用于不同载荷')
                 if not dry_run:
-                    return deepcopy(previous['response'])
-            plan = None if dry_run else annotation_preflight.load(self, content, request, fingerprint, data['revision'])
+                    return previous['response']
+            plan = None if dry_run else annotation_preflight.load(self, content, request, fingerprint, data['revision'], connection=data['threads'].connection)
             if revision != data['revision']:
                 raise AnnotationConflict(f"批注已被其他审阅者更新（期望修订号 {revision}，实际修订号 {data['revision']}），请保留草稿并重新读取",
                         {'code': 'revision_conflict', 'reasons': ['annotation_revision_changed'],
                          'expected_revision': revision, 'actual_revision': data['revision']})
             report('validate')
             # Copy only containers and affected threads, never all stored versions per item.
-            working = {**data, 'threads': dict(data['threads']), 'versions': dict(data['versions']),
-                       'requests': dict(data.get('requests', {}))}
+            working = {**data, 'threads': copy(data['threads']), 'versions': copy(data['versions']),
+                       'requests': copy(data['requests'])}
             self._content(working, content)
             results = deepcopy(plan['results']) if plan else []
             changed = {}
@@ -949,7 +1107,7 @@ class AnnotationStore:
                 working['threads'].update(deepcopy(plan['threads']))
                 report('reuse', len(items))
             for index, item in enumerate([] if plan else items):
-                candidate = {**working, 'threads': dict(working['threads'])}
+                candidate = {**working, 'threads': copy(working['threads'])}
                 target = item.get('thread_id')
                 if isinstance(target, str) and target in candidate['threads']:
                     candidate['threads'][target] = deepcopy(candidate['threads'][target])
@@ -995,30 +1153,35 @@ class AnnotationStore:
                         result.update(ok=False, error={'code': 'atomic_rollback', 'message': '整批校验失败，未提交'})
                         result.pop('thread_id', None)
                         result.pop('message_id', None)
-                working = {**data, 'requests': dict(data.get('requests', {}))}
+                working = {**data, 'requests': copy(data['requests'])}
                 changed = {}
             if dry_run:
-                plan = annotation_preflight.save(self, content, request, fingerprint, revision, changed, results)
+                plan = annotation_preflight.save(self, content, request, fingerprint, revision, changed, results, connection=data['threads'].connection)
                 results = deepcopy(results)
                 for result in results:
                     result.pop('thread_id', None) if result['operation'] == 'create' else None
                     result.pop('message_id', None)
             response = {'request_id': request_id, 'atomic': atomic, 'dry_run': dry_run, 'committed': committed,
                         'version_id': content['version_id'], 'revision': data['revision'] + int(committed),
-                        'start_revision': data['revision'], 'start_thread_ids': [t['id'] for t in data['threads'].values() if not t.get('deleted_at')],
+                        'start_revision': data['revision'], **({'start_thread_count': data['threads'].connection.execute('SELECT count(*) FROM threads WHERE deleted=0').fetchone()[0]}
+                           if incremental else {'start_thread_ids': data['threads'].active_ids()}),
                         'results': results, 'preflight_reused': bool(plan and not dry_run)}
             if plan:
                 response.update(preflight_token=plan['token'], preflight_expires_at=plan['expires_at'])
             if not dry_run:
                 report('write', len(items))
-                working.setdefault('requests', {})[request_id] = {'fingerprint': fingerprint, 'response': deepcopy(response)}
+                if incremental:
+                    response.update(self._delta(working, content,
+                        [r['thread_id'] for r in results if r['ok'] and r.get('thread_id')], revision))
+                    response['revision'] = data['revision'] + int(committed)
+                working.setdefault('requests', {})[request_id] = {'fingerprint': fingerprint, 'response': response}
                 if committed:
                     self._write(working)
                 else:
                     # An atomic rejection records only its receipt, without advancing annotation revision.
                     self._persist(working)
                 if plan:
-                    annotation_preflight.path_for(self, request_id).unlink(missing_ok=True)
+                    data['threads'].connection.execute('DELETE FROM preflights WHERE id=?', (request_id,))
             report('complete', len(items))
             return response
 
@@ -1050,6 +1213,10 @@ class AnnotationStore:
             result = {'thread_id': thread['id'], 'message_id': message['id'], 'diff': diff, 'source_changed': False}
             if request['operation'] == 'suggestion_apply':
                 replace(path, updated, expected=original)
+                def rollback_source():
+                    if path.read_bytes() == updated:
+                        replace(path, original)
+                data['rollback_source'] = rollback_source
                 suggestion.update(status='applied', applied_at=_now(), applied_sha256=hashlib.sha256(updated).hexdigest())
                 message['updated_at'] = thread['updated_at'] = _now()
                 try:
@@ -1087,7 +1254,7 @@ class AnnotationStore:
     def compact(self):
         """Validate and atomically rewrite storage without changing its revision."""
         with self._locked() as data:
-            bundle = {key: value for key, value in data.items() if key != 'requests'}
+            bundle = {key: deepcopy(value) for key, value in data.items() if key != 'requests'}
             self._import({'versions': {}, 'threads': {}}, bundle)
             self._persist(data)
 
@@ -1213,17 +1380,20 @@ class AnnotationStore:
             check_anchor(event['anchor'])
 
 
-def execute_request(store, content, envelope, progress=None):
+def execute_request(store, content, envelope, progress=None, *, incremental=False):
     _keys(envelope, ('project_id', 'version_id', 'request'), ('project_id', 'version_id', 'request'))
     if envelope['project_id'] != content['project_id'] or envelope['version_id'] != content['version_id']:
         raise AnnotationConflict('正文项目或版本已变化，请保留草稿并重新读取正文')
     request = envelope['request']
     if isinstance(request, dict) and request.get('operation') == 'batch':
-        return store.batch(content, request, progress=progress)
+        return store.batch(content, request, progress=progress, incremental=incremental)
     if isinstance(request, dict) and request.get('operation') == 'locate':
         _keys(request, ('operation', 'selection'), ('operation', 'selection'))
         return {'anchor': make_anchor(content, request['selection'])}
-    return store.dispatch(content, request, progress=progress) if progress else store.dispatch(content, request)
+    fast = incremental and request.get('operation') not in ('import', 'suggestion_preview', 'suggestion_apply')
+    if not fast:
+        return store.dispatch(content, request, progress=progress) if progress else store.dispatch(content, request)
+    return store.dispatch(content, request, progress=progress, incremental=True)
 
 
 def query_threads(snapshot, *, author_type=None, category=None, resolved=None,

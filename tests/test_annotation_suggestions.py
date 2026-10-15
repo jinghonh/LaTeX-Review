@@ -54,12 +54,9 @@ def test_stale_and_record_failure_preserve_source(tmp_path, monkeypatch):
     raw = path.read_bytes()
     import os
     persisted = store.path.read_bytes()
-    real_replace = os.replace
-    def fail_storage_replace(source, target):
-        if target == store.path:
-            raise OSError('disk full')
-        return real_replace(source, target)
-    monkeypatch.setattr(os, 'replace', fail_storage_replace)
+    def fail_persist(data):
+        raise OSError('disk full')
+    monkeypatch.setattr(store, '_persist', fail_persist)
     with pytest.raises(OSError, match='disk full'):
         mutate(store, content, 'suggestion_apply', **request)
     assert path.read_bytes() == raw
@@ -118,3 +115,24 @@ def test_suggestion_import_keeps_bound_source_metadata(tmp_path):
     assert 'better' in preview['result']['diff']
     mutate(store,content,'suggestion_apply',**request)
     assert 'Alpha better gamma.' in path.read_text()
+
+
+def test_sqlite_commit_failure_compensates_source(tmp_path, monkeypatch):
+    import sqlite3
+    from latex_review.annotation_storage import Database
+    content, store, path, request = setup(tmp_path)
+    before = path.read_bytes()
+    revision = store.metadata(content)['revision']
+    class FailingConnection(sqlite3.Connection):
+        def commit(self):
+            raise OSError('commit failed')
+    def connect(database):
+        return sqlite3.connect(database.path, factory=FailingConnection)
+    with monkeypatch.context() as patch:
+        patch.setattr(Database, 'connect', connect)
+        with pytest.raises(OSError, match='commit failed'):
+            store.dispatch(content, dict(operation='suggestion_apply', expected_revision=revision, **request))
+        assert path.read_bytes() == before
+    assert store.metadata(content)['revision'] == revision
+    thread = store.read(content)['threads'][0]
+    assert thread['messages'][0]['suggested_replacement']['status'] == 'pending'

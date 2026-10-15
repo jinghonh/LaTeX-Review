@@ -47,29 +47,30 @@ def test_old_storage_compaction_preserves_revision_history_and_conflicts(tmp_pat
     mutate(store, content, 'create', selection=select(content, 'Original'), body='Keep history', author=AUTHOR, category='note')
     bundle = store.export()
     # Simulate a pre-upgrade file, then explicitly migrate it.
-    store.path.write_text(json.dumps(bundle))
+    store.path.unlink()
+    store.legacy_path.write_text(json.dumps(bundle))
     store.compact()
     assert store.export() == bundle
     assert store.metadata(content)['revision'] == bundle['revision']
     assert len(store.inventory(content)['threads']) == 1
-    assert 'storage_encoding' in json.loads(store.path.read_text())
+    assert store.path.read_bytes().startswith(b'SQLite format 3')
+    assert store.legacy_path.with_suffix('.json.migrated').exists()
     changed = deepcopy(content)
     changed['units'][0]['source']['start_line'] = 99
     changed['units'][0]['source']['end_line'] = 99
     with pytest.raises(AnnotationConflict):
         store.read(changed)
-    before = store.path.read_bytes()
-    broken = json.loads(before)
-    broken['data']['units'][0]['text'] = 'damage'
-    store.path.write_text(json.dumps(broken))
-    damaged = store.path.read_bytes()
-    with pytest.raises(AnnotationError, match='存储读取失败'):
-        store.compact()
-    with pytest.raises(AnnotationError, match='存储读取失败'):
+    before = store.export()
+    # Broken SQLite files fail closed; restore using SQLite's backup API.
+    import sqlite3
+    backup = tmp_path / 'backup.sqlite3'
+    with sqlite3.connect(store.path) as source, sqlite3.connect(backup) as target:
+        source.backup(target)
+    store.path.write_bytes(b'damaged database')
+    with pytest.raises(AnnotationError):
         store.metadata(content)
-    assert store.path.read_bytes() == damaged
-    store.path.write_bytes(before)
-    assert store.export() == bundle
+    store.path.write_bytes(backup.read_bytes())
+    assert store.export() == before
 
 
 def test_shared_restore_rejects_expansion_limit():

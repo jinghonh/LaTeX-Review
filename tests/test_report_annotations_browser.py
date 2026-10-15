@@ -24,7 +24,7 @@ def annotated_page(tmp_path):
         page=browser.new_page(viewport={'width':1280,'height':900})
         page.route('https://**',lambda r:r.abort())
         page.goto(f'http://127.0.0.1:{server.server_port}/report.html')
-        page.wait_for_function('window.reviewAnnotations?.getContent() !== null')
+        page.wait_for_function('window.reviewAnnotations?.isReady() === true')
         yield page
         browser.close();server.shutdown();worker.join()
 
@@ -417,26 +417,18 @@ def test_external_annotation_updates_without_reload_preserve_draft(annotated_pag
     assert p.evaluate('id=>reviewAnnotations.getSnapshot().threads.find(t=>t.id===id).messages.at(-1).body',active)=='Unsaved draft'
 
 
-def test_background_progress_and_success_preserve_form(annotated_page):
+def test_synchronous_success_preserves_form_until_commit(annotated_page):
     p = annotated_page
-    released = False
-    def hold_progress(route):
-        if released:
-            route.continue_()
-        else:
-            route.fulfill(content_type='application/json', body=json.dumps(
-                {'state': 'running', 'phase': 'apply', 'completed': 2, 'total': 19}))
-    p.route('**/api/annotations/jobs/*', hold_progress)
-    p.evaluate('''() => {const u=reviewAnnotations.getContent().units.find(u=>u.kind==='text');
-        reviewAnnotations.openComposer('create',null,{unit_id:u.id,start:0,end:7,quote:u.text.slice(0,7)});}''')
-    p.locator('.annotation-editor > textarea').fill('Progress test')
+    requests = []
+    p.on('request', lambda request: requests.append(request.url))
+    p.evaluate("""() => {const u=reviewAnnotations.getContent().units.find(u=>u.kind==='text');
+        reviewAnnotations.openComposer('create',null,{unit_id:u.id,start:0,end:7,quote:u.text.slice(0,7)});}""")
+    p.locator('.annotation-editor > textarea').fill('Synchronous test')
     p.locator('.annotation-editor').get_by_text('保存', exact=True).click()
-    p.wait_for_function('document.querySelector("#annotation-status").textContent.includes("应用 · 2/19")')
-    assert p.locator('.annotation-editor').get_by_text('保存', exact=True).is_disabled()
-    assert p.locator('.annotation-editor > textarea').input_value() == 'Progress test'
-    released = True
-    p.wait_for_function('reviewAnnotations.getSnapshot().threads.some(t=>t.messages.some(m=>m.body==="Progress test"))')
+    p.wait_for_function('reviewAnnotations.getSnapshot().threads.some(t=>t.messages.some(m=>m.body==="Synchronous test"))')
     assert p.locator('#annotation-status').inner_text() == '批注已保存。'
+    assert any(url.endswith('/api/annotations/update') for url in requests)
+    assert not any('async=1' in url or '/jobs/' in url for url in requests)
 
 
 def test_unchanged_polling_reads_revision_without_full_threads(annotated_page):
@@ -468,3 +460,20 @@ def test_deleted_selection_navigates_to_container_without_highlight(annotated_pa
     p.locator('.annotation-card').get_by_text('定位所属段落或表格', exact=True).click()
     assert p.locator('.annotation-mark').count() == 1
     assert p.evaluate('CSS.highlights.get("annotation-active").size') == 0
+
+
+def test_compressed_batch_restores_submitted_bodies(annotated_page):
+    page=annotated_page
+    requests=[]
+    page.on('request',lambda request:requests.append(request))
+    assert page.evaluate('''async()=>{
+      const api=reviewAnnotations,u=api.getContent().units.find(u=>u.kind==='text');
+      const body='x'.repeat(10000);
+      return api.update({operation:'batch',atomic:true,items:Array.from({length:3},(_,i)=>({
+        id:String(i),operation:'create',selection:{unit_id:u.id,start:0,end:3},body,
+        author:{name:'Codex',type:'agent'},category:'note'}))});
+    }''')
+    assert page.evaluate("reviewAnnotations.getSnapshot().threads.every(t=>t.messages[0].body==='x'.repeat(10000))")
+    posted=[r for r in requests if r.method=='POST' and '/api/annotations/update' in r.url]
+    assert posted[-1].headers['content-encoding']=='gzip'
+    assert posted[-1].headers['x-latex-review-delta-encoding']=='request-bodies'

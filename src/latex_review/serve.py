@@ -6,7 +6,12 @@ import argparse
 import hmac
 import json
 import secrets
+import time
+import gzip
+import io
+import zlib
 from functools import partial
+from threading import RLock
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 import signal
@@ -30,9 +35,17 @@ class ReportHandler(SimpleHTTPRequestHandler):
 
     def _json(self, value: dict, status: int = 200):
         content = json.dumps(value, ensure_ascii=False).encode()
+        compressed = len(content) > 16384 and 'gzip' in self.headers.get('Accept-Encoding', '')
+        if compressed:
+            content = gzip.compress(content, compresslevel=1)
         self.send_response(status)
+        if compressed:
+            self.send_header('Content-Encoding', 'gzip')
+            self.send_header('Vary', 'Accept-Encoding')
         self.send_header("Content-Type", "application/json; charset=utf-8")
         self.send_header("Content-Length", str(len(content)))
+        if hasattr(self, "annotation_duration"):
+            self.send_header("Server-Timing", f"annotations;dur={self.annotation_duration:.3f}")
         self.end_headers()
         self.wfile.write(content)
 
@@ -121,8 +134,8 @@ class ReportHandler(SimpleHTTPRequestHandler):
 
     def _annotation_context(self):
         from .annotations import AnnotationStore, load_content
-        content = load_content(self.directory)
-        store = AnnotationStore.for_content(content, getattr(self.server, "annotation_project_root", None))
+        content = self.server.annotation_content(self.directory)
+        store = self.server.annotation_store(self.directory, content)
         return content, store
 
     def _annotation_get(self, path):
@@ -139,7 +152,10 @@ class ReportHandler(SimpleHTTPRequestHandler):
             elif path == "/api/annotations/status":
                 from .annotation_output import page_projection, thread_summary
                 view = parse_qs(urlsplit(self.path).query).get('view', ['summary'])[0]
-                if view == 'revision':
+                if view == 'changes':
+                    since = int(parse_qs(urlsplit(self.path).query).get('since', ['0'])[0])
+                    value = page_projection(store.changes(content, since))
+                elif view == 'revision':
                     value = store.metadata(content)
                 else:
                     value = store.read(content)
@@ -175,7 +191,18 @@ class ReportHandler(SimpleHTTPRequestHandler):
             size = int(self.headers.get("Content-Length", "0"))
             if not 0 < size <= 8 * 1024 * 1024:
                 raise ValueError("请求大小无效")
-            envelope = json.loads(self.rfile.read(size))
+            raw = self.rfile.read(size)
+            encoding = self.headers.get('Content-Encoding', 'identity')
+            if encoding == 'gzip':
+                with gzip.GzipFile(fileobj=io.BytesIO(raw)) as stream:
+                    raw = stream.read(8 * 1024 * 1024 + 1)
+                if len(raw) > 8 * 1024 * 1024:
+                    raise ValueError('解压请求超过 8 MiB')
+            elif encoding != 'identity':
+                raise ValueError('请求编码无效')
+            envelope = json.loads(raw)
+            if isinstance(envelope, dict) and isinstance(envelope.get('request'), dict) and envelope['request'].get('operation') == 'batch' and len(raw) > 1024 * 1024:
+                raise ValueError('批量请求最多 1 MiB')
             if parse_qs(urlsplit(self.path).query).get('async') == ['1']:
                 jobs = self.server.annotation_jobs
                 directory = self.directory
@@ -184,23 +211,28 @@ class ReportHandler(SimpleHTTPRequestHandler):
                 def run(progress):
                     return self._execute_annotation(envelope, progress, directory, server)
                 return self._json(jobs.submit(run), 202)
+            start = time.perf_counter()
             value = self._execute_annotation(envelope, None, self.directory, self.server)
+            if self.headers.get('X-LaTeX-Review-Delta-Encoding') == 'request-bodies':
+                from .annotation_output import request_body_projection
+                value = request_body_projection(value, envelope['request'])
+            self.annotation_duration = (time.perf_counter() - start) * 1000
             self._json(value)
         except AnnotationConflict as exc:
             self._json({"message": str(exc), "error": "conflict", **exc.details}, 409)
-        except (OSError, ValueError, TypeError, KeyError, UnicodeError) as exc:
+        except (OSError, ValueError, TypeError, KeyError, UnicodeError, EOFError, zlib.error) as exc:
             self._json({"message": str(exc), "error": "invalid_request"}, 400)
 
     @staticmethod
     def _execute_annotation(envelope, progress, directory, server):
         from .annotations import AnnotationStore, execute_request, load_content
         from .annotation_output import page_projection
-        content = load_content(directory)
-        store = AnnotationStore.for_content(content, server.annotation_project_root)
+        content = server.annotation_content(directory)
+        store = server.annotation_store(directory, content)
         if progress:
             progress('validate', 0, 0)
-        value = (execute_request(store, content, envelope, progress=progress) if progress
-                 else execute_request(store, content, envelope))
+        value = (execute_request(store, content, envelope, progress=progress, incremental=True) if progress
+                 else execute_request(store, content, envelope, incremental=True))
         if (value.get('result') or {}).get('source_changed'):
             from .report_rebuild import rebuild_report
             if progress:
@@ -210,7 +242,11 @@ class ReportHandler(SimpleHTTPRequestHandler):
                 warning = server.translation.refresh()
                 if warning:
                     value['result']['rebuild']['translation_warning'] = warning
-        return page_projection(value) if 'threads' in value else value
+        if 'threads' in value:
+            value = page_projection(value)
+        value.setdefault('project_id', content['project_id'])
+        value.setdefault('version_id', content['version_id'])
+        return value
 
     def send_head(self):
         root = Path(self.directory).resolve()
@@ -240,11 +276,41 @@ class ReportServer(ThreadingHTTPServer):
     def __init__(self, *args, **kwargs):
         from .annotation_jobs import AnnotationJobs
         self.annotation_jobs = AnnotationJobs()
+        self.annotation_content_lock = RLock()
+        self.annotation_cached_content = None
+        self.annotation_content_key = None
+        self.annotation_cached_store = None
         self.annotation_token = secrets.token_urlsafe(32)
         super().__init__(*args, **kwargs)
 
+    def annotation_content(self, directory):
+        from .annotations import load_content, MANIFEST, PreparedContent
+        path = Path(directory) / MANIFEST
+        with self.annotation_content_lock:
+            stat = path.stat()
+            key = (str(path), stat.st_ino, stat.st_mtime_ns, stat.st_size)
+            if key != self.annotation_content_key:
+                content = PreparedContent(load_content(directory))
+                if self.annotation_cached_store:
+                    self.annotation_cached_store.close()
+                self.annotation_cached_store = None
+                self.annotation_cached_content = content
+                self.annotation_content_key = key
+            return self.annotation_cached_content
+
+    def annotation_store(self, directory, content):
+        from .annotations import AnnotationStore
+        with self.annotation_content_lock:
+            if self.annotation_cached_store is None or self.annotation_cached_store._prepared_content is not content:
+                store = AnnotationStore.for_content(content, self.annotation_project_root)
+                store.prepare(content)
+                self.annotation_cached_store = store
+            return self.annotation_cached_store
+
     def server_close(self):
         self.annotation_jobs.close()
+        if self.annotation_cached_store:
+            self.annotation_cached_store.close()
         if self.translation:
             self.translation.close()
         super().server_close()

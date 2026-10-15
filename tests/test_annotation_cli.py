@@ -152,7 +152,7 @@ def test_repeated_formulas_return_candidates_before_write(tmp_path, capsys):
     report = directory, content, AnnotationStore.for_content(content)
     code, value = call(report, capsys, 'add', '--formula', '--quote', '$x+1$', '--body', 'Note', '--author', 'Codex')
     assert code == 4 and len(value['candidates']) == 2
-    assert not report[2].path.exists()
+    assert not report[2].export()['threads']
     code, value = call(report, capsys, 'add', '--formula', '--quote', '$x+1$', '--occurrence', '2',
                        '--body', 'Note', '--author', 'Codex')
     assert code == 0 and value['threads'][0]['original_anchor']['order'] == 3

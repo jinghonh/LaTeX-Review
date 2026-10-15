@@ -289,7 +289,7 @@ def test_invalid_writes_leave_store_unchanged(tmp_path, fields):
                'body': 'note', 'author': AUTHOR, 'category': 'note', **fields}
     with pytest.raises(AnnotationError):
         store.dispatch(content, request)
-    assert store.read(content)['revision'] == 0 and not store.path.exists()
+    assert store.read(content)['revision'] == 0 and not store.export()['threads']
 
 
 def test_cli_and_real_http_use_same_version_checked_contract(tmp_path, capsys):
@@ -385,7 +385,7 @@ def test_failed_atomic_replace_retains_existing_file_and_cleans_temporary(tmp_pa
     before = store.path.read_bytes()
     def fail(*args):
         raise OSError('simulated disk failure')
-    monkeypatch.setattr('latex_review.annotations.os.replace', fail)
+    monkeypatch.setattr(store, '_persist', fail)
     with pytest.raises(OSError):
         mutate(store, content, 'resolve', thread_id=tid)
     assert store.path.read_bytes() == before

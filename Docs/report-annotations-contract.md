@@ -78,9 +78,11 @@ Git 比较使用原始仓库根目录，不使用临时快照目录。实时预�
 
 ## 线程、回复与存储
 
-存储位置为 `<项目根>/.latex-review/annotations/<project_id>.json`。
+存储位置为 `<项目根>/.latex-review/annotations/<project_id>.sqlite3`。SQLite 使用 WAL 和 `synchronous=FULL`。
+线程、正文版本、请求收据、预检计划和修订变更记录独立存储。
+首次打开会一次迁移旧 JSON，校验全部数据，并保留 `.json.migrated` 备份。运行时只使用 SQLite。
 数据包含 `schema_version`、`project_id`、`revision`、`versions` 和 `threads`。
-内部 `requests` 保存批量幂等收据，不进入公开备份。相同请求 ID 的不同载荷返回冲突。
+内部 `requests` 保存单条及批量幂等收据，不进入公开备份。相同请求 ID 的不同载荷返回冲突。
 `versions` 保存历史正文清单。`threads` 按 UUID 索引。
 
 每个线程保存：
@@ -240,12 +242,12 @@ CLI 参数、返回值、退出码和示例见[智能体接口](agent-tools.md#�
 | --- | --- |
 | `GET /api/report` | 本机报告目录、地址与可用项目身份，不返回 token |
 | `GET /api/annotations/content` | 当前正文清单 |
-| `GET /api/annotations/status` | 默认线程摘要及请求 token；`view=page/full/revision` 分别读取页面视图、完整视图和修订号 |
+| `GET /api/annotations/status` | 默认线程摘要及请求 token；`view=page/full/revision/changes` 分别读取页面视图、完整视图、修订号和增量；`changes` 需要 `since` 修订号 |
 | `GET /api/annotations/history?thread_id=ID` | 指定线程完整关联历史 |
 | `GET /api/annotations/jobs` | 当前后台任务进度，不访问批注存储锁 |
 | `GET /api/annotations/jobs/ID` | 单个任务的进度、错误或最终结果 |
 | `GET /api/annotations/export` | 完整备份 |
-| `POST /api/annotations/update` | 同步执行请求信封，线程结果使用页面投影 |
+| `POST /api/annotations/update` | 同步执行请求信封，普通批注返回页面增量及删除编号 |
 | `POST /api/annotations/update?async=1` | HTTP 202 启动后台任务，返回 `task_id`、`status_url` |
 
 POST 使用 `Content-Type: application/json` 和 `X-LaTeX-Review-Token`。
@@ -315,3 +317,16 @@ HTML 导出清理运行时 DOM，内嵌图片并保留译文 JSON。公式加载
 预检文件和提交快照保存完整清单；`batch --full` 可以展开完整结果。
 `report_context` 是 CLI 与报告发现接口的附加信息，不写入备份契约。
 独立 Markdown 审查记录由 `--review-record` 导出，不修改论文源码。
+
+
+## 快速提交与性能边界
+
+性能规格及验收方法见 [批注性能](annotation-performance.md)。
+批量请求最多 100 项，解压后的请求最多 1 MiB。源码操作及重建不属于快速提交。
+增量包含 `incremental=true`、`start_revision`、`revision`、受影响的 `threads` 和 `deleted_thread_ids`。
+客户端只能将增量合并到 `start_revision` 相同的快照。
+初始加载和换版准备完成后，服务器复用已验证正文及单元索引。跨服务变更通过 SQLite 修订号和变更记录发现。
+请求可使用 gzip；服务器限制解压后的大小。响应支持 gzip。
+客户端可发送 `X-LaTeX-Review-Delta-Encoding: request-bodies`，让新建、回复或编辑消息的正文使用 `body_ref`。
+`body_ref=single` 指单条请求的正文；批量引用对应项的 `id`。客户端必须还原正文后合并增量。
+没有该请求头时，接口返回完整消息正文。后台任务和完整导出不使用正文引用。

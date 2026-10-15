@@ -153,7 +153,7 @@
   function dispatch(data,e) {
     keys(e,['project_id','version_id','request']);
     const r=e.request;if(['suggestion_preview','suggestion_apply'].includes(r.operation))fail('当前报告没有本机源码服务。建议已保留，无法回写源码。');const fields={create:['selection','body','author','category'],reply:['thread_id','body','author','category'],edit:['thread_id','message_id','body','category'],delete_message:['thread_id','message_id'],delete_thread:['thread_id'],resolve:['thread_id'],reopen:['thread_id'],update_metadata:['thread_id'],associate:['thread_id','selection'],reconcile:[],import:['bundle']};
-    if(!Object.hasOwn(fields,r.operation))fail('未知批注操作');keys(r,['operation','expected_revision',...fields[r.operation],...(r.operation==='reply'?['reply_to']:[]),...(['create','reply'].includes(r.operation)?['suggested_replacement']:[]),...(['create','update_metadata'].includes(r.operation)?['title','tags']:[])],['operation','expected_revision',...fields[r.operation]]);
+    if(!Object.hasOwn(fields,r.operation))fail('未知批注操作');keys(r,['operation','expected_revision','request_id',...fields[r.operation],...(r.operation==='reply'?['reply_to']:[]),...(['create','reply'].includes(r.operation)?['suggested_replacement']:[]),...(['create','update_metadata'].includes(r.operation)?['title','tags']:[])],['operation','expected_revision',...fields[r.operation]]);
     if(e.project_id!==content.project_id||e.version_id!==content.version_id)fail('请求项目或版本不一致');
     if(r.expected_revision!==data.revision)fail('批注已被其他窗口更新。输入已保留。');
     if(r.operation==='update_metadata'&&!('title' in r)&&!('tags' in r))fail('更新元数据需要 title 或 tags');
@@ -191,13 +191,16 @@
   async function json(url,options) {const r=await fetch(url,options);const value=await r.json();if(!r.ok)fail(value.message||value.error||'批注接口失败');return value;}
   const adapter={
     async readRevision(){if(local)return transaction(d=>({project_id:d.project_id,version_id:content.version_id,revision:d.revision}));return json('/api/annotations/status?view=revision');},
+    async readChanges(since){return local?transaction(view):json('/api/annotations/status?view=changes&since='+since);},
     async readJobs(){return local?{jobs:[]}:json('/api/annotations/jobs');},
     async readStatus(){if(local)return transaction(view);const s=await json('/api/annotations/status?view=page');token=s.token;return s;},
     async read(){if(local)return [content,await transaction(view)];const [c,s]=await Promise.all([json('/api/annotations/content'),json('/api/annotations/status?view=page')]);token=s.token;return [c,s];},
     async update(e,progress){
       if(local)return transaction(d=>dispatch(d,e),true);
-      const task=await json('/api/annotations/update?async=1',{method:'POST',headers:{'Content-Type':'application/json','X-LaTeX-Review-Token':token},body:JSON.stringify(e)});
-      if(!task.task_id)return task;
+      const slow=['suggestion_preview','suggestion_apply','import','reconcile'].includes(e.request.operation);
+      const payload=await api.encodeRequest(e);
+      const task=await json('/api/annotations/update'+(slow?'?async=1':''),{method:'POST',headers:{'Content-Type':'application/json','X-LaTeX-Review-Token':token,'X-LaTeX-Review-Delta-Encoding':'request-bodies',...payload.headers},body:payload.body});
+      if(!task.task_id)return api.restoreRequestBodies(task,e.request);
       while(true){const job=await json(task.status_url);if(job.state==='complete')return job.result;if(job.state==='failed')fail(job.message||'批注任务失败');progress?.(job);await new Promise(resolve=>setTimeout(resolve,300));}
     }
   };
@@ -253,8 +256,8 @@
   }
   if(!published)add('导出最新 HTML',exportHTML);controls.append(input,notice);document.querySelector('#annotation-overview').append(delivery);
   const draftKey='latex-review-drafts:'+content.project_id+':'+location.pathname;
-  let draftsLoaded=false;
-  function saveDrafts(){if(!draftsLoaded)return;try{localStorage.setItem(draftKey,JSON.stringify({project_id:content.project_id,version_id:content.version_id,content:api.getContent()||content,drafts:api.getDrafts()}));}catch(e){notice.textContent='草稿存储失败：'+e.message;}}
+  let draftsLoaded=false,lastDraftState=null;
+  function saveDrafts(){if(!draftsLoaded)return;try{const drafts=api.getDrafts(),state=JSON.stringify(drafts);if(state===lastDraftState)return;if(!Object.keys(drafts).length)localStorage.removeItem(draftKey);else localStorage.setItem(draftKey,JSON.stringify({project_id:content.project_id,version_id:content.version_id,content:api.getContent()||content,drafts}));lastDraftState=state;}catch(e){notice.textContent='草稿存储失败：'+e.message;}}
   document.addEventListener('annotation-draft',saveDrafts);window.addEventListener('pagehide',saveDrafts);
   async function restoreDrafts() {
     let saved;try{saved=JSON.parse(localStorage.getItem(draftKey));}catch(_){}if(!saved||saved.project_id!==content.project_id){draftsLoaded=true;return;}
