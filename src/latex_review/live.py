@@ -15,7 +15,7 @@ import webbrowser
 from .contract import ComparisonSource
 from .preview import render_preview
 from .report import _figure_assets, _pdf_converters
-from .serve import ReportServer, create_server
+from .serve import create_server
 from .translation import TranslationConfig, build_current_units
 from .sources import ProjectSource, SourceError
 from .structure import parse_project
@@ -98,12 +98,6 @@ def build(source: ProjectSource, output: Path, revision: int = 1) -> list[str]:
     return messages
 
 
-def refresh_translation(server: ReportServer, output: Path) -> None:
-    """重建后仅恢复当前内容的缓存，不自动提交翻译请求。"""
-    if server.translation is not None:
-        server.translation.refresh()
-
-
 def prepare_request(entry, *, root=None, output=None, config=None, cache=None, poll_files=False):
     from .cli import _source_roots, _config
     from .identity import paper_identity, identity_hash
@@ -178,7 +172,6 @@ def run_worker(recipe, stop):
                         with rebuild_lock(output):
                             with report_directory(output) as candidate:
                                 messages = build(source, candidate.directory, revision + 1)
-                            refresh_translation(server, output)
                         revision += 1
                         message = events.warning + f'已更新当前论文。预览诊断：{len(messages)} 项。'
                     except (OSError, ValueError, RuntimeError, SourceError) as exc:

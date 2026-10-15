@@ -157,6 +157,7 @@ def acceptance_main(argv: list[str] | None = None) -> int:
 def annotations_main(argv: list[str] | None = None) -> int:
     """Read annotations or execute a high-level/version-checked JSON request."""
     from .annotations import AnnotationStore, load_content
+    from .report_rebuild import execute_on_report
     from .annotation_cli import SelectionError, add_commands, build_request, read_text_inputs
     from .annotation_output import add_read_options, read_projection, write_summary, report_context
     from .annotation_batch_cli import add_batch_commands, run_batch, run_audit
@@ -200,10 +201,8 @@ def annotations_main(argv: list[str] | None = None) -> int:
                      'revision': snapshot['revision'],
                      'thread': thread_detail(thread, {u['id']: u for u in content['units']})}
         elif args.command:
-            value = session.execute(build_request(content, session.read_thread(args.thread_id) if args.command == 'edit' else session.metadata(), args))
-            if (value.get('result') or {}).get('source_changed'):
-                from .report_rebuild import rebuild_report
-                value['result']['rebuild'] = rebuild_report(args.report)
+            current = session.read_thread(args.thread_id) if args.command == 'edit' else session.metadata()
+            value = execute_on_report(session, build_request(content, current, args), args.report)
             if not args.full:
                 summary = write_summary(value, args.thread_id, getattr(args, 'message_id', None))
                 value = ({**summary, **(value.get('result') or {})}
@@ -216,10 +215,7 @@ def annotations_main(argv: list[str] | None = None) -> int:
             raw = sys.stdin.read() if args.request == '-' else Path(args.request).read_text(encoding='utf-8')
             if len(raw.encode('utf-8')) > 8 * 1024 * 1024:
                 raise ValueError('批注请求超过 8 MiB')
-            value = session.execute(json.loads(raw))
-            if (value.get('result') or {}).get('source_changed'):
-                from .report_rebuild import rebuild_report
-                value['result']['rebuild'] = rebuild_report(args.report)
+            value = execute_on_report(session, json.loads(raw), args.report)
         else:
             value = read_projection(session.read(), args, content)
         if not args.export:

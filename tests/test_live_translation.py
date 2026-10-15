@@ -7,7 +7,7 @@ from threading import Thread
 import pytest
 
 from latex_review.contract import ComparisonSource
-from latex_review.live import build, fingerprint, refresh_translation
+from latex_review.live import build, fingerprint
 from latex_review.serve import create_server
 from latex_review.sources import ProjectSource
 from test_translation import provider, _wait
@@ -57,8 +57,7 @@ def test_live_scope_and_content_cache_after_edits(tmp_path, provider):
         assert len(calls) == 6
         entry.write_text(entry.read_text().replace('Editable content.', 'Updated content.'))
         build(source, output, 2)
-        refresh_translation(server, output)
-        snapshot = server.translation.snapshot()
+        snapshot = server.translation.snapshot()  # The session follows the replaced report.
         assert len(snapshot['results']) == 5
         assert stable['id'] in snapshot['results']
         assert len(calls) == 6
@@ -167,7 +166,6 @@ def test_live_translation_browser_retry_full_export_and_reload(tmp_path, provide
                 before = len(calls)
                 entry.write_text(entry.read_text().replace('Editable content.', 'Updated content.'))
                 build(source, output, 2)
-                refresh_translation(server, output)
                 (output / 'live-status.json').write_text(json.dumps({'revision': 2, 'message': 'Updated'}))
                 page.goto(f'http://127.0.0.1:{server.server_port}/report.html')
                 page.wait_for_function('document.querySelectorAll(".translation-block").length === 5')

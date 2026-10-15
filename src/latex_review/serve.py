@@ -227,16 +227,8 @@ class ReportHandler(SimpleHTTPRequestHandler):
         content = session.content
         if progress:
             progress('validate', 0, 0)
-        value = session.execute(envelope, progress=progress, incremental=True)
-        if (value.get('result') or {}).get('source_changed'):
-            from .report_rebuild import rebuild_report
-            if progress:
-                progress('rebuild', 0, 0)
-            value['result']['rebuild'] = rebuild_report(directory)
-            if value['result']['rebuild']['status'] == 'updated' and server.translation:
-                warning = server.translation.refresh()
-                if warning:
-                    value['result']['rebuild']['translation_warning'] = warning
+        from .report_rebuild import execute_on_report
+        value = execute_on_report(session, envelope, directory, progress=progress, incremental=True)
         if 'threads' in value:
             value = page_projection(value)
         value.setdefault('project_id', content['project_id'])

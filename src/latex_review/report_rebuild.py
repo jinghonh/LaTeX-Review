@@ -113,6 +113,19 @@ def replay(recipe_path, output, original_report):
     return main(argv, configuration=recipe['configuration'], source_exclusions=(Path(original_report),))
 
 
+def execute_on_report(session, envelope, report, *, progress=None, incremental=False):
+    """Execute an annotation request against a report; rebuild the report when the paper source changed.
+
+    The rebuild replaces translation-units.json, which translation sessions notice on their own.
+    """
+    value = session.execute(envelope, progress=progress, incremental=incremental)
+    if (value.get('result') or {}).get('source_changed'):
+        if progress:
+            progress('rebuild', 0, 0)
+        value['result']['rebuild'] = rebuild_report(report)
+    return value
+
+
 def rebuild_report(report):
     report = Path(report).expanduser()
     report = (report if report.is_dir() else report.parent).resolve()

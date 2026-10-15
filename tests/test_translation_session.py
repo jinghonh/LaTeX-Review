@@ -6,7 +6,6 @@ from urllib.request import Request, urlopen
 
 import pytest
 
-from latex_review.live import refresh_translation
 from latex_review.serve import create_server
 from latex_review.translation import TranslationError
 from test_live_translation import paper
@@ -31,17 +30,15 @@ def test_failed_refresh_pauses_then_next_refresh_recovers(session_server):
     manifest = output / 'translation-units.json'
     original = manifest.read_text()
     manifest.write_text('{broken')
-    refresh_translation(server, output)
+    status = session.snapshot()  # Access notices the replaced manifest and reloads it.
     assert previous.closed.is_set()
-    status = session.snapshot()
     assert not status['available'] and not status['results']
     assert '刷新失败' in status['message']
     with pytest.raises(TranslationError, match='刷新失败'):
         session.submit([])
-    # A status query does not retry. Only the next report refresh does.
-    manifest.write_text(original)
+    # The failed generation is remembered: unchanged files are not retried on every access.
     assert not session.snapshot()['available']
-    refresh_translation(server, output)
+    manifest.write_text(original)  # Any further replacement of the report is seen on the next access.
     assert session.snapshot()['available']
     assert session.manager is not previous
 
@@ -153,8 +150,8 @@ def test_annotation_rebuild_refreshes_same_session_and_reports_failure(session_s
     server, output = session_server
     session = server.translation
     old_manager = session.manager
-    monkeypatch.setattr('latex_review.annotations.execute_request',
-        lambda *args: {'result': {'source_changed': True}})
+    from latex_review.annotations import AnnotationSession
+    monkeypatch.setattr(AnnotationSession, 'execute', lambda self, envelope, **options: {'result': {'source_changed': True}})
     monkeypatch.setattr('latex_review.report_rebuild.rebuild_report',
         lambda *args: {'status': 'updated'})
     manifest = output / 'translation-units.json'
@@ -168,13 +165,26 @@ def test_annotation_rebuild_refreshes_same_session_and_reports_failure(session_s
         with urlopen(request, timeout=2) as response:
             return json.load(response)['result']['rebuild']
     try:
-        assert '刷新失败' in update()['translation_warning']
+        assert update()['status'] == 'updated'
+        assert '刷新失败' in session.snapshot()['message']
         assert old_manager.closed.is_set()
         assert not session.snapshot()['available']
         manifest.write_text(original)
-        assert 'translation_warning' not in update()
+        assert update()['status'] == 'updated'
         assert server.translation is session
         assert session.snapshot()['available']
     finally:
         server.shutdown()
         serving.join(5)
+
+
+def test_report_replaced_by_another_process_is_seen_on_next_access(session_server):
+    server, output = session_server
+    session = server.translation
+    previous = session.manager
+    # Another process replaces the report directory: its manifest is a new file with new identity.
+    replacement = output / 'translation-units.json.next'
+    replacement.write_text(json.dumps(json.loads((output / 'translation-units.json').read_text())))
+    replacement.replace(output / 'translation-units.json')
+    assert session.snapshot()['available']
+    assert session.manager is not previous and previous.closed.is_set()
