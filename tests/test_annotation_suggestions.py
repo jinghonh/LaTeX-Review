@@ -80,13 +80,10 @@ def test_unreliable_and_outside_node_refused(tmp_path):
 
 
 def test_formula_environment_quote_preserves_cli_support(tmp_path):
-    from argparse import Namespace
     from latex_review.annotation_cli import find_selection, SelectionError
     content, _ = content_at(tmp_path / 'formula', r'\begin{equation}x+1=y\end{equation}')
-    args = Namespace(quote=r'\begin{equation}x+1=y\end{equation}',formula=True,unit_id=None,occurrence=None)
-    assert find_selection(content,args)['unit_id']
-    args.quote='x+1=y'
-    with pytest.raises(SelectionError): find_selection(content,args)
+    assert find_selection(content, quote=r'\begin{equation}x+1=y\end{equation}', formula=True)['unit_id']
+    with pytest.raises(SelectionError): find_selection(content, quote='x+1=y', formula=True)
 
 
 def test_crlf_preserved(tmp_path):

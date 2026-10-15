@@ -34,13 +34,13 @@ def expand_location(content, association):
 class LocationCache:
     """Access only while the project's existing storage lock is held."""
     def __init__(self, store, content):
-        from ._validation import AnnotationError, _hash
+        from ._validation import AnnotationError, digest
         self.path = store.directory / f'{store.project_id}.locations.json'
         if self.path.is_symlink():
             raise AnnotationError('定位缓存不可为符号链接')
         self.version = content['version_id']
         # Selector/order can change with rendering; source/text may not.
-        self.fingerprint = _hash([{k: v for k, v in u.items() if k not in ('selector', 'change_ids')}
+        self.fingerprint = digest([{k: v for k, v in u.items() if k not in ('selector', 'change_ids')}
                                   for u in content['units']])
         try:
             self.data = json.loads(self.path.read_text())
@@ -53,18 +53,18 @@ class LocationCache:
         self.dirty = False
 
     def get(self, anchor):
-        from ._validation import _hash
-        return self.entries.get(_hash(anchor))
+        from ._validation import digest
+        return self.entries.get(digest(anchor))
 
     def put(self, anchor, association):
-        from ._validation import _hash
-        self.entries[_hash(anchor)] = compact_location(association)
+        from ._validation import digest
+        self.entries[digest(anchor)] = compact_location(association)
         while len(self.entries) > 512:
             self.entries.pop(next(iter(self.entries)))
         self.dirty = True
 
     def save(self):
-        from ._validation import _atomic_write
+        from ._validation import atomic_write
         if self.dirty:
             self.data.update(fingerprint=self.fingerprint, version_id=self.version)
-            _atomic_write(self.path, self.data)
+            atomic_write(self.path, self.data)

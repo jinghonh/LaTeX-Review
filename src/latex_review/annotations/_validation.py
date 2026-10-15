@@ -40,7 +40,7 @@ def thread_metadata(value):
     return result
 
 
-def _hash(value):
+def digest(value):
     from ..identity import identity_hash
     return identity_hash(value)
 
@@ -61,13 +61,13 @@ def _integer(value, name, minimum=0):
     return value
 
 
-def _keys(value, allowed, required=()):
+def exact_keys(value, allowed, required=()):
     if not isinstance(value, dict) or set(value) - set(allowed) or set(required) - set(value):
         raise AnnotationError('对象字段无效或缺少必填字段')
 
 
 def _author(value):
-    _keys(value, ('name', 'type'), ('name', 'type'))
+    exact_keys(value, ('name', 'type'), ('name', 'type'))
     _text(value['name'], '作者名称', 256)
     if value['type'] not in ('user', 'agent'):
         raise AnnotationError('作者类型须为 user 或 agent')
@@ -95,7 +95,7 @@ def _slice(text, start, end):
         raise AnnotationError('选区边界不能切开 Unicode 字符') from exc
 
 
-def _atomic_write(path, data, *, compact=False):
+def atomic_write(path, data, *, compact=False):
     fd, temporary = tempfile.mkstemp(prefix='.annotations-', suffix='.tmp', dir=path.parent)
     try:
         with os.fdopen(fd, 'w', encoding='utf-8') as stream:

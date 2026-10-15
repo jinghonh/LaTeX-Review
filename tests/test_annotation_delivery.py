@@ -21,9 +21,9 @@ def test_publication_refreshes_latest_backup(live_report):
 
 def test_missing_project_does_not_create_paths(live_report,tmp_path):
     from latex_review.delivery import embed_annotations
-    from latex_review.annotations import _hash
+    from latex_review.annotations import digest
     root,entry,output,source=live_report;content=load_content(output)
-    missing=tmp_path/'missing-project';content['project_root']=str(missing);content['project_id']=_hash({'root':str(missing),'entry':content['entry']})
+    missing=tmp_path/'missing-project';content['project_root']=str(missing);content['project_id']=digest({'root':str(missing),'entry':content['entry']})
     html=embed_annotations('<html><head></head><body></body></html>',content)
     assert not missing.exists() and payload(html,'annotation-backup')['threads']=={}
 

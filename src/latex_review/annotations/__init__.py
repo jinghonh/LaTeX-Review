@@ -7,9 +7,7 @@ Range. Formula atoms count as one U+FFFC; MathJax descendants never supply offse
 annotation transaction. Modules prefixed with ``_`` are private to this package.
 """
 from ._validation import (MANIFEST, MAX_BODY, SCHEMA_VERSION, AnnotationConflict, AnnotationError,
-                          thread_metadata, utf16_length)
+                          atomic_write, digest, exact_keys, thread_metadata, utf16_length)
 from .content import (PreparedContent, build_content, content_meta, load_content, locate, make_anchor,
                       validate_content)
 from .store import AnnotationSession, AnnotationStore, overlapping_threads, query_threads, validate_bundle
-# Transitional: callers outside the package still use these private helpers.
-from ._validation import _atomic_write, _hash, _integer, _keys, _text

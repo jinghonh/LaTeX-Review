@@ -10,8 +10,8 @@ import tempfile
 import uuid
 
 from ..version_storage import unpack_storage
-from ._validation import (SCHEMA_VERSION, AnnotationConflict, AnnotationError, thread_metadata, _hash, _now,
-                          _text, _integer, _keys, _author, _category)
+from ._validation import (SCHEMA_VERSION, AnnotationConflict, AnnotationError, thread_metadata, digest, _now,
+                          _text, _integer, exact_keys, _author, _category)
 from .content import _semantic_units, locate, make_anchor, validate_content
 
 
@@ -39,7 +39,7 @@ class AnnotationStore:
         root = Path(project_root or content.get('project_root', '')).expanduser().resolve()
         if not root.is_dir():
             raise AnnotationError('本机论文项目不存在；请使用报告携带的浏览器批注存储')
-        if _hash({'root': str(root), 'entry': content['entry']}) != content['project_id']:
+        if digest({'root': str(root), 'entry': content['entry']}) != content['project_id']:
             raise AnnotationError('正文项目身份与本机项目目录不一致')
         return cls(root, content['project_id'])
 
@@ -131,7 +131,7 @@ class AnnotationStore:
             self._persist(data)
         self._prepared_content = content
         self._prepared_inode = self.path.stat().st_ino
-        self._prepared_content_hash = _hash(content)
+        self._prepared_content_hash = digest(content)
 
     def close(self):
         if getattr(self, '_database_keeper', None):
@@ -247,7 +247,7 @@ class AnnotationStore:
         revision = request['expected_revision']
         with self._locked() as data:
             request_id = request.get('request_id')
-            fingerprint = _hash({k: v for k, v in request.items() if k != 'expected_revision'}) if request_id else None
+            fingerprint = digest({k: v for k, v in request.items() if k != 'expected_revision'}) if request_id else None
             if request_id:
                 previous = data['requests'].get(request_id)
                 if previous:
@@ -322,7 +322,7 @@ class AnnotationStore:
 
     @staticmethod
     def _validate_request(request):
-        _keys(request, ('operation', 'expected_revision', 'thread_id', 'message_id', 'selection', 'body',
+        exact_keys(request, ('operation', 'expected_revision', 'thread_id', 'message_id', 'selection', 'body',
                         'author', 'category', 'bundle', 'reply_to', 'suggested_replacement', 'title', 'tags', 'resolve', 'request_id'), ('operation', 'expected_revision'))
         revision = _integer(request['expected_revision'], 'expected_revision')
         operation = request['operation']
@@ -336,7 +336,7 @@ class AnnotationStore:
         }
         if not isinstance(operation, str) or operation not in fields:
             raise AnnotationError('未知批注操作')
-        _keys(request, fields[operation] | {'operation', 'expected_revision', 'request_id'} | ({'reply_to', 'resolve'} if operation == 'reply' else set()) | ({'suggested_replacement'} if operation in ('create', 'reply') else set()) | ({'title', 'tags'} if operation in ('create', 'update_metadata') else set()),
+        exact_keys(request, fields[operation] | {'operation', 'expected_revision', 'request_id'} | ({'reply_to', 'resolve'} if operation == 'reply' else set()) | ({'suggested_replacement'} if operation in ('create', 'reply') else set()) | ({'title', 'tags'} if operation in ('create', 'update_metadata') else set()),
               fields[operation] | {'operation', 'expected_revision'})
         if 'request_id' in request:
             _text(request['request_id'], 'request_id', 256)
@@ -483,10 +483,10 @@ class AnnotationStore:
                     candidate['threads'][target] = deepcopy(candidate['threads'][target])
                 try:
                     if 'error' in item:
-                        _keys(item, ('id', 'operation', 'error'), ('id', 'operation', 'error'))
+                        exact_keys(item, ('id', 'operation', 'error'), ('id', 'operation', 'error'))
                         if not isinstance(item['operation'], str) or item['operation'] not in OPERATIONS:
                             raise AnnotationError('未知批量批注操作')
-                        _keys(item['error'], ('code', 'message', 'candidates'), ('code', 'message'))
+                        exact_keys(item['error'], ('code', 'message', 'candidates'), ('code', 'message'))
                         _text(item['error']['code'], 'error code', 256)
                         _text(item['error']['message'], 'error message')
                         if 'candidates' in item['error'] and not isinstance(item['error']['candidates'], list):
@@ -559,7 +559,7 @@ class AnnotationStore:
         """Commit a source suggestion, restoring source if storage fails."""
         from ._suggestions import error, inspect, replace
         import hashlib
-        _keys(request, ('operation', 'expected_revision', 'thread_id', 'message_id'),
+        exact_keys(request, ('operation', 'expected_revision', 'thread_id', 'message_id'),
               ('operation', 'expected_revision', 'thread_id', 'message_id'))
         _integer(request['expected_revision'], 'expected_revision')
         with self._locked() as data:
@@ -626,7 +626,7 @@ class AnnotationStore:
 
     def _import(self, data, bundle):
         """Atomic deduplication. Divergent same-ID records return conflicts, never overwrite."""
-        _keys(bundle, ('schema_version', 'project_id', 'revision', 'threads', 'versions'),
+        exact_keys(bundle, ('schema_version', 'project_id', 'revision', 'threads', 'versions'),
               ('schema_version', 'project_id', 'revision', 'threads', 'versions'))
         if bundle['schema_version'] != SCHEMA_VERSION or bundle['project_id'] != self.project_id:
             raise AnnotationError('导入契约版本或项目身份不一致')
@@ -652,7 +652,7 @@ class AnnotationStore:
         return {'imported': imported, 'duplicates': len(bundle['threads']) - len(imported)}
 
     def _validate_thread(self, thread_id, thread, versions):
-        _keys(thread, ('id', 'project_id', 'created_version_id', 'created_at', 'updated_at', 'resolved', 'deleted_at',
+        exact_keys(thread, ('id', 'project_id', 'created_version_id', 'created_at', 'updated_at', 'resolved', 'deleted_at',
                        'messages', 'original_anchor', 'current_anchor', 'associations', 'history', 'title', 'tags'),
               ('id', 'project_id', 'created_version_id', 'created_at', 'updated_at', 'resolved', 'deleted_at',
                'messages', 'original_anchor', 'current_anchor', 'associations', 'history'))
@@ -667,7 +667,7 @@ class AnnotationStore:
             raise AnnotationError('导入线程内容或历史无效')
         message_ids = set()
         for message in thread['messages']:
-            _keys(message, ('id', 'body', 'author', 'category', 'created_at', 'updated_at', 'deleted_at', 'edits', 'reply_to', 'suggested_replacement'),
+            exact_keys(message, ('id', 'body', 'author', 'category', 'created_at', 'updated_at', 'deleted_at', 'edits', 'reply_to', 'suggested_replacement'),
                   ('id', 'body', 'author', 'category', 'created_at', 'updated_at', 'deleted_at', 'edits'))
             _text(message['id'], 'message id', 256)
             if message['id'] in message_ids:
@@ -688,7 +688,7 @@ class AnnotationStore:
             if not isinstance(message['edits'], list):
                 raise AnnotationError('导入编辑历史无效')
             for edit in message['edits']:
-                _keys(edit, ('body', 'category', 'at'), ('body', 'category', 'at'))
+                exact_keys(edit, ('body', 'category', 'at'), ('body', 'category', 'at'))
                 _text(edit['body'], '历史正文')
                 _category(edit['category'])
                 _text(edit['at'], 'at', 256)
@@ -712,7 +712,7 @@ class AnnotationStore:
         if not isinstance(thread['associations'], dict):
             raise AnnotationError('导入关联须为对象')
         for version_id, association in thread['associations'].items():
-            _keys(association, ('status', 'anchor', 'candidates', 'reason', 'container'), ('status', 'anchor', 'candidates', 'reason'))
+            exact_keys(association, ('status', 'anchor', 'candidates', 'reason', 'container'), ('status', 'anchor', 'candidates', 'reason'))
             if version_id not in versions or association['status'] not in ('exact', 'auto_migrated', 'manual', 'needs_relocation'):
                 raise AnnotationError('导入关联状态或版本无效')
             if association['anchor']:
@@ -723,7 +723,7 @@ class AnnotationStore:
                 raise AnnotationError('导入候选须为列表')
             if 'container' in association:
                 container = association['container']
-                _keys(container, ('unit_id', 'kind', 'selector', 'order', 'source', 'section_path', 'selection_deleted', 'subunit', 'scope'),
+                exact_keys(container, ('unit_id', 'kind', 'selector', 'order', 'source', 'section_path', 'selection_deleted', 'subunit', 'scope'),
                       ('unit_id', 'kind', 'selector', 'order', 'source', 'section_path', 'selection_deleted'))
                 unit = next((u for u in versions[version_id]['units'] if u['id'] == container['unit_id']), None)
                 if not unit or type(container['selection_deleted']) is not bool or any(
@@ -733,13 +733,13 @@ class AnnotationStore:
                         unit.get('subunit', {}).get('type') not in ('cell', 'header')):
                     raise AnnotationError('导入容器范围无效')
             for candidate in association['candidates']:
-                _keys(candidate, ('anchor', 'score', 'method', 'context_score'), ('anchor', 'score', 'method'))
+                exact_keys(candidate, ('anchor', 'score', 'method', 'context_score'), ('anchor', 'score', 'method'))
                 check_anchor(candidate['anchor'])
                 if (candidate['anchor']['version_id'] != version_id or type(candidate['score']) not in (int, float)
                         or not 0 <= candidate['score'] <= 1 or candidate['method'] not in ('exact', 'fuzzy')):
                     raise AnnotationError('导入候选无效')
         for event in thread['history']:
-            _keys(event, ('at', 'method', 'anchor'), ('at', 'method', 'anchor'))
+            exact_keys(event, ('at', 'method', 'anchor'), ('at', 'method', 'anchor'))
             _text(event['at'], 'at', 256)
             if event['method'] not in ('created', 'manual', 'exact', 'auto_migrated'):
                 raise AnnotationError('导入历史类型无效')
@@ -823,7 +823,7 @@ class AnnotationSession:
 
     def execute(self, envelope, *, progress=None, incremental=False):
         content = self.content
-        _keys(envelope, ('project_id', 'version_id', 'request'), ('project_id', 'version_id', 'request'))
+        exact_keys(envelope, ('project_id', 'version_id', 'request'), ('project_id', 'version_id', 'request'))
         if envelope['project_id'] != content['project_id'] or envelope['version_id'] != content['version_id']:
             raise AnnotationConflict('正文项目或版本已变化，请保留草稿并重新读取正文')
         request = envelope['request']
@@ -831,7 +831,7 @@ class AnnotationSession:
         if operation == 'batch':
             return self._store._batch(content, request, progress=progress, incremental=incremental)
         if operation == 'locate':
-            _keys(request, ('operation', 'selection'), ('operation', 'selection'))
+            exact_keys(request, ('operation', 'selection'), ('operation', 'selection'))
             return {'anchor': make_anchor(content, request['selection'])}
         fast = incremental and operation not in ('import', 'suggestion_preview', 'suggestion_apply')
         return self._store._dispatch(content, request, progress=progress, incremental=fast)

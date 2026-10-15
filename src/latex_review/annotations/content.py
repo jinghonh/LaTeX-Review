@@ -10,8 +10,8 @@ import json
 import re
 from pathlib import Path
 
-from ._validation import (MANIFEST, SCHEMA_VERSION, AnnotationConflict, AnnotationError, _hash, _integer,
-                          _keys, _slice, _text, utf16_length)
+from ._validation import (MANIFEST, SCHEMA_VERSION, AnnotationConflict, AnnotationError, digest, _integer,
+                          exact_keys, _slice, _text, utf16_length)
 
 
 
@@ -70,7 +70,7 @@ def build_content(project, preview_html: str, *, project_root: Path | None = Non
     from ..cache import dependency_fingerprints
     root = (project_root or project.expanded.source.worktree_origin or project.expanded.source.root).resolve()
     entry = project.expanded.source.entry
-    project_id = _hash({'root': str(root), 'entry': entry})
+    project_id = digest({'root': str(root), 'entry': entry})
     nodes = {n.review.id: n for n in project.nodes}
     parser = _PreviewParser()
     parser.feed(preview_html)
@@ -191,7 +191,7 @@ def build_content(project, preview_html: str, *, project_root: Path | None = Non
     enrich_content(project, units, root)
     # Keep legacy coordinates under their old version. Different parse/render
     # options must never claim the same version with different semantic units.
-    version_id = _hash({'entry': entry, 'content_model': 3, 'files': dependency_fingerprints(project.expanded),
+    version_id = digest({'entry': entry, 'content_model': 3, 'files': dependency_fingerprints(project.expanded),
                         'macros': {k: asdict(v) for k, v in project.macros.items()},
                         'units': _semantic_units(units)})
     return {'schema_version': SCHEMA_VERSION, 'project_id': project_id, 'project_root': str(root),
@@ -200,7 +200,7 @@ def build_content(project, preview_html: str, *, project_root: Path | None = Non
 
 
 def validate_content(content):
-    _keys(content, ('schema_version', 'project_id', 'project_root', 'entry', 'version_id', 'coordinate_system', 'units'),
+    exact_keys(content, ('schema_version', 'project_id', 'project_root', 'entry', 'version_id', 'coordinate_system', 'units'),
           ('schema_version', 'project_id', 'entry', 'version_id', 'coordinate_system', 'units'))
     if content['schema_version'] != SCHEMA_VERSION or content['coordinate_system'] != 'utf16-normalized-whitespace-with-formula-atoms':
         raise AnnotationError('正文契约版本无效')
@@ -213,7 +213,7 @@ def validate_content(content):
         raise AnnotationError('units 须为列表')
     ids, orders = set(), set()
     for unit in content['units']:
-        _keys(unit, ('id', 'kind', 'node_id', 'parent_node_id', 'text', 'raw_latex', 'atoms', 'selector',
+        exact_keys(unit, ('id', 'kind', 'node_id', 'parent_node_id', 'text', 'raw_latex', 'atoms', 'selector',
                      'source', 'section_path', 'labels', 'order', 'change_ids', 'subunit', 'source_span'),
               ('id', 'kind', 'node_id', 'text', 'raw_latex', 'atoms', 'selector', 'source', 'section_path', 'labels', 'order', 'change_ids'))
         _text(unit['id'], 'unit id', 1024)
@@ -239,7 +239,7 @@ def validate_content(content):
             raise AnnotationError('正文源码位置无效') from exc
         if 'subunit' in unit:
             subunit = unit['subunit']
-            _keys(subunit, ('type', 'row', 'column', 'table_index'), ('type',))
+            exact_keys(subunit, ('type', 'row', 'column', 'table_index'), ('type',))
             if subunit['type'] not in ('caption', 'header', 'cell'):
                 raise AnnotationError('子单元类型无效')
             for key in ('row', 'column', 'table_index'):
@@ -247,12 +247,12 @@ def validate_content(content):
                     _integer(subunit[key], key, 1)
         if 'source_span' in unit:
             span = unit['source_span']
-            _keys(span, ('file', 'start', 'end', 'sha256', 'original_chunk', 'reliable', 'writable', 'reason'),
+            exact_keys(span, ('file', 'start', 'end', 'sha256', 'original_chunk', 'reliable', 'writable', 'reason'),
                   ('reliable', 'writable', 'reason'))
             if type(span['reliable']) is not bool or type(span['writable']) is not bool:
                 raise AnnotationError('源码区间可靠性无效')
             if span['reliable']:
-                _keys(span, ('file', 'start', 'end', 'sha256', 'original_chunk', 'reliable', 'writable', 'reason'),
+                exact_keys(span, ('file', 'start', 'end', 'sha256', 'original_chunk', 'reliable', 'writable', 'reason'),
                       ('file', 'start', 'end', 'sha256', 'original_chunk', 'reliable', 'writable', 'reason'))
                 _integer(span['start'], 'source start')
                 _integer(span['end'], 'source end', span['start'] + 1)
@@ -264,7 +264,7 @@ def validate_content(content):
                 raise AnnotationError('降级源码区间必须只读并提供理由')
         offsets = set()
         for atom in unit['atoms']:
-            _keys(atom, ('offset', 'formula_node_id', 'raw_latex', 'selector'),
+            exact_keys(atom, ('offset', 'formula_node_id', 'raw_latex', 'selector'),
                   ('offset', 'formula_node_id', 'raw_latex', 'selector'))
             _integer(atom['offset'], '公式原子位置')
             if atom['offset'] in offsets or _slice(unit['text'], atom['offset'], atom['offset'] + 1) != '\ufffc':
@@ -297,7 +297,7 @@ def load_content(report):
 
 def make_anchor(content, selection):
     """Reject old-side, cross-block and partial-formula selections explicitly."""
-    _keys(selection, ('unit_id', 'start', 'end', 'end_unit_id', 'side', 'quote'), ('unit_id',))
+    exact_keys(selection, ('unit_id', 'start', 'end', 'end_unit_id', 'side', 'quote'), ('unit_id',))
     if selection.get('side', 'new') != 'new':
         raise AnnotationError('只有修改后或当前正文可新建批注')
     if selection.get('end_unit_id', selection['unit_id']) != selection['unit_id']:

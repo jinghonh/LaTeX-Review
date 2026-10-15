@@ -101,20 +101,17 @@ def test_cross_file_owner_degrades(tmp_path):
 
 
 def test_strict_locator_uses_saved_include_locations_without_reading_disk(tmp_path):
-    from types import SimpleNamespace
     from latex_review.annotation_cli import find_selection
     result = content(tmp_path, '\nSame.\n\n' + r'\input{part}', include='Same.', kind='git')
     unit = next(u for u in result['units'] if u['source']['file'] == 'part.tex')
     (tmp_path / 'part.tex').unlink()
-    selection = find_selection(result, SimpleNamespace(file='part.tex', line=unit['source']['start_line'],
-                                                       quote='Same.', formula=False, unit_id=None, occurrence=None))
+    selection = find_selection(result, file='part.tex', line=unit['source']['start_line'], quote='Same.')
     assert selection['unit_id'] == unit['id']
 
 
 def test_strict_locator_preserves_ambiguity_within_same_source_line(tmp_path):
-    from types import SimpleNamespace
     from latex_review.annotation_cli import find_selection, SelectionError
     result = content(tmp_path, 'Same Same.')
     with pytest.raises(SelectionError) as caught:
-        find_selection(result, SimpleNamespace(file='main.tex', line=1, quote='Same', formula=False, unit_id=None, occurrence=None))
+        find_selection(result, file='main.tex', line=1, quote='Same')
     assert len(caught.value.candidates) == 2

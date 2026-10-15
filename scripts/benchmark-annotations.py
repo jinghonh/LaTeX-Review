@@ -7,7 +7,7 @@ from threading import Thread
 from playwright.sync_api import sync_playwright
 from latex_review.annotations import AnnotationStore, MANIFEST, load_content
 # Seeding bypasses the public interface on purpose: it builds 10000 threads in one transaction.
-from latex_review.annotations._validation import _hash
+from latex_review.annotations import digest
 from latex_review.annotations._storage import Database, encode
 from latex_review.serve import create_server
 from latex_review.version_storage import unpack_storage
@@ -30,7 +30,7 @@ results={}; errors=[]; process=psutil.Process()
 with tempfile.TemporaryDirectory(prefix='annotation-browser-perf-') as temporary:
     root=Path(temporary)/'paper';root.mkdir();root=root.resolve();report=Path(temporary)/'report';report.mkdir()
     content=copy.deepcopy(source);content['project_root']=str(root)
-    content['project_id']=_hash({'root':str(root),'entry':content['entry']})
+    content['project_id']=digest({'root':str(root),'entry':content['entry']})
     store=AnnotationStore._for_content(content)
     old_id=source['project_id'];new_id=content['project_id']
     bundle=unpack_storage(json.loads(original_bytes))
@@ -49,7 +49,7 @@ with tempfile.TemporaryDirectory(prefix='annotation-browser-perf-') as temporary
     if args.scale:
         with store._locked() as data:
             for i in range(100-len(data['versions'])):
-                v=copy.deepcopy(content);v['version_id']=_hash({'benchmark_version':i});data['versions'][v['version_id']]=v
+                v=copy.deepcopy(content);v['version_id']=digest({'benchmark_version':i});data['versions'][v['version_id']]=v
             seed_units=[u for u in content['units'] if u['kind']=='text' and len(u['text'])>40]
             for i in range(9900-seed_threads):
                 selected=seed_units[i%len(seed_units)]
