@@ -92,7 +92,7 @@ class AnnotationStore:
                         os.close(directory_fd)
             with database.transaction() as data:
                 if getattr(self, '_database_keeper', None):
-                    data['threads'].connection.execute('PRAGMA wal_autocheckpoint=0')
+                    data.defer_checkpoints()
                 yield data
         except sqlite3.DatabaseError as error:
             raise AnnotationError('批注数据库读取或提交失败') from error
@@ -111,25 +111,9 @@ class AnnotationStore:
     def prepare(self, content):
         from ._storage import Database
         if not getattr(self, '_database_keeper', None):
-            # Keep WAL open between HTTP requests; closing the final connection checkpoints it.
             with self._locked():
                 pass
-            self._database_keeper = Database(self.path, self.project_id, SCHEMA_VERSION).connect()
-            from threading import Event, Thread
-            self._checkpoint_stop = Event()
-            def checkpoint():
-                import sqlite3
-                connection = Database(self.path, self.project_id, SCHEMA_VERSION).connect()
-                try:
-                    while not self._checkpoint_stop.wait(1):
-                        try:
-                            connection.execute('PRAGMA wal_checkpoint(PASSIVE)')
-                        except sqlite3.OperationalError:
-                            pass  # Another writer/checkpointer owns the database; retry next interval.
-                finally:
-                    connection.close()
-            self._checkpoint_thread = Thread(target=checkpoint, name='annotation-checkpoint', daemon=True)
-            self._checkpoint_thread.start()
+            self._database_keeper = Database(self.path, self.project_id, SCHEMA_VERSION).keep_alive()
         with self._locked() as data:
             self._content(data, content)
             self._persist(data)
@@ -139,8 +123,6 @@ class AnnotationStore:
 
     def close(self):
         if getattr(self, '_database_keeper', None):
-            self._checkpoint_stop.set()
-            self._checkpoint_thread.join()
             self._database_keeper.close()
             self._database_keeper = None
 
@@ -182,8 +164,7 @@ class AnnotationStore:
             if since > data['revision']:
                 raise AnnotationConflict('客户端修订号超过当前存储，请重新读取')
             self._content(data, content)
-            ids = [row[0] for row in data['threads'].connection.execute(
-                'SELECT DISTINCT thread_id FROM changes WHERE revision>?', (since,))]
+            ids = data['threads'].changed_since(since)
             return self._delta(data, content, ids, since)
 
     def inventory(self, content):
@@ -377,10 +358,8 @@ class AnnotationStore:
             from ._locations import LocationCache, expand_location
             cache, count = None, 0
             changed_ids = []
-            if hasattr(data['threads'], 'connection'):
-                path = '$.associations."' + content['version_id'] + '"'
-                ids = [row[0] for row in data['threads'].connection.execute(
-                    'SELECT id FROM threads WHERE deleted=0 AND json_type(payload,?) IS NULL', (path,))]
+            if hasattr(data['threads'], 'missing_association'):
+                ids = data['threads'].missing_association(content['version_id'])
                 targets = (data['threads'][key] for key in ids)
             else:
                 targets = data['threads'].values()
@@ -470,7 +449,7 @@ class AnnotationStore:
                     raise AnnotationConflict('请求 ID 已用于不同载荷')
                 if not dry_run:
                     return previous['response']
-            plan = None if dry_run else annotation_preflight.load(self, content, request, fingerprint, data['revision'], connection=data['threads'].connection)
+            plan = None if dry_run else annotation_preflight.load(self, content, request, fingerprint, data['revision'], transaction=data)
             if revision != data['revision']:
                 raise AnnotationConflict(f"批注已被其他审阅者更新（期望修订号 {revision}，实际修订号 {data['revision']}），请保留草稿并重新读取",
                         {'code': 'revision_conflict', 'reasons': ['annotation_revision_changed'],
@@ -535,14 +514,14 @@ class AnnotationStore:
                 working = {**data, 'requests': copy(data['requests'])}
                 changed = {}
             if dry_run:
-                plan = annotation_preflight.save(self, content, request, fingerprint, revision, changed, results, connection=data['threads'].connection)
+                plan = annotation_preflight.save(self, content, request, fingerprint, revision, changed, results, transaction=data)
                 results = deepcopy(results)
                 for result in results:
                     result.pop('thread_id', None) if result['operation'] == 'create' else None
                     result.pop('message_id', None)
             response = {'request_id': request_id, 'atomic': atomic, 'dry_run': dry_run, 'committed': committed,
                         'version_id': content['version_id'], 'revision': data['revision'] + int(committed),
-                        'start_revision': data['revision'], **({'start_thread_count': data['threads'].connection.execute('SELECT count(*) FROM threads WHERE deleted=0').fetchone()[0]}
+                        'start_revision': data['revision'], **({'start_thread_count': data['threads'].active_count()}
                            if incremental else {'start_thread_ids': data['threads'].active_ids()}),
                         'results': results, 'preflight_reused': bool(plan and not dry_run)}
             if plan:
@@ -560,7 +539,7 @@ class AnnotationStore:
                     # An atomic rejection records only its receipt, without advancing annotation revision.
                     self._persist(working)
                 if plan:
-                    data['threads'].connection.execute('DELETE FROM preflights WHERE id=?', (request_id,))
+                    data.drop_preflight(request_id)
             report('complete', len(items))
             return response
 
@@ -592,19 +571,14 @@ class AnnotationStore:
             result = {'thread_id': thread['id'], 'message_id': message['id'], 'diff': diff, 'source_changed': False}
             if request['operation'] == 'suggestion_apply':
                 replace(path, updated, expected=original)
-                def rollback_source():
+                def restore_source():
+                    # Restore only while the file still holds this replacement.
                     if path.read_bytes() == updated:
                         replace(path, original)
-                data['rollback_source'] = rollback_source
+                data.on_rollback(restore_source)
                 suggestion.update(status='applied', applied_at=_now(), applied_sha256=hashlib.sha256(updated).hexdigest())
                 message['updated_at'] = thread['updated_at'] = _now()
-                try:
-                    self._write(data)
-                except Exception:
-                    # Restore the original source if recording the applied state fails.
-                    if path.read_bytes() == updated:
-                        replace(path, original)
-                    raise
+                self._write(data)
                 result.update(source_changed=True, source_file=str(path))
             return {**self._view(data, content), 'result': result}
 

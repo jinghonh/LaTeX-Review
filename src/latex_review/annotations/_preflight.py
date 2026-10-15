@@ -14,16 +14,16 @@ def content_hash(store, content):
     return _hash(content)
 
 
-def load(store, content, request, fingerprint, revision, *, connection):
-    row = connection.execute('SELECT payload FROM preflights WHERE id=?', (request['request_id'],)).fetchone()
-    if row is None:
+def load(store, content, request, fingerprint, revision, *, transaction):
+    payload = transaction.preflight(request['request_id'])
+    if payload is None:
         if request.get('preflight_token'):
             raise AnnotationConflict('预检不存在，请重新预检',
                 {'code': 'preflight_missing', 'reasons': ['cache_missing'],
                  'expected_revision': request['expected_revision'], 'actual_revision': revision})
         return None
     try:
-        plan = json.loads(row[0])
+        plan = json.loads(payload)
     except (ValueError, TypeError) as exc:
         raise AnnotationConflict('预检缓存无效，请重新预检',
             {'code': 'preflight_invalid', 'reasons': ['cache_invalid'],
@@ -57,14 +57,12 @@ def load(store, content, request, fingerprint, revision, *, connection):
     return plan
 
 
-def save(store, content, request, fingerprint, revision, changed_threads, results, *, connection):
+def save(store, content, request, fingerprint, revision, changed_threads, results, *, transaction):
     plan = {'token': secrets.token_urlsafe(24), 'fingerprint': fingerprint, 'revision': revision,
             'content_hash': content_hash(store, content), 'expires_at': time.time() + TTL,
             'version_id': content['version_id'],
             'payload_hash': _hash({'project_id': content['project_id'], 'items': request['items'],
                                    'atomic': request.get('atomic', False)}),
             'threads': changed_threads, 'results': results}
-    from ._storage import encode
-    connection.execute('INSERT INTO preflights(id,payload) VALUES(?,?) '
-        'ON CONFLICT(id) DO UPDATE SET payload=excluded.payload', (request['request_id'], encode(plan)))
+    transaction.save_preflight(request['request_id'], plan)
     return plan

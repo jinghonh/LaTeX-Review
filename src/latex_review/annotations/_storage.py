@@ -4,6 +4,7 @@ from contextlib import contextmanager, closing
 from copy import deepcopy
 import json
 import sqlite3
+from threading import Event, Thread
 import zlib
 
 
@@ -59,6 +60,20 @@ class Records(MutableMapping):
     def __deepcopy__(self, memo):
         return {key: deepcopy(self[key], memo) for key in self}
 
+    def changed_since(self, revision):
+        """Thread ids recorded by persist after ``revision``."""
+        return [row[0] for row in self.connection.execute(
+            'SELECT DISTINCT thread_id FROM changes WHERE revision>?', (revision,))]
+
+    def missing_association(self, version_id):
+        """Active thread ids without an association for ``version_id``, without loading other threads."""
+        path = '$.associations."' + version_id + '"'
+        return [row[0] for row in self.connection.execute(
+            'SELECT id FROM threads WHERE deleted=0 AND json_type(payload,?) IS NULL', (path,))]
+
+    def active_count(self):
+        return self.connection.execute('SELECT count(*) FROM threads WHERE deleted=0').fetchone()[0]
+
     def active_ids(self):
         ids = dict.fromkeys(row[0] for row in self.connection.execute(
             'SELECT id FROM threads WHERE deleted=0 ORDER BY rowid'))
@@ -93,6 +108,46 @@ class Records(MutableMapping):
         return changed
 
 
+class Transaction(dict):
+    """Records of one locked transaction, plus compensations for effects outside SQLite."""
+    def __init__(self, connection, values):
+        super().__init__(values)
+        self.connection = connection
+        self.compensations = []
+
+    def __copy__(self):
+        return dict(self)
+
+    def __deepcopy__(self, memo):
+        return {key: deepcopy(value, memo) for key, value in self.items()}
+
+    def on_rollback(self, compensation):
+        """Run ``compensation`` if this transaction does not commit; later registrations run first."""
+        self.compensations.append(compensation)
+
+    def preflight(self, request_id):
+        row = self.connection.execute('SELECT payload FROM preflights WHERE id=?', (request_id,)).fetchone()
+        return None if row is None else row[0]
+
+    def save_preflight(self, request_id, plan):
+        self.connection.execute('INSERT INTO preflights(id,payload) VALUES(?,?) '
+            'ON CONFLICT(id) DO UPDATE SET payload=excluded.payload', (request_id, encode(plan)))
+
+    def drop_preflight(self, request_id):
+        self.connection.execute('DELETE FROM preflights WHERE id=?', (request_id,))
+
+    def defer_checkpoints(self):
+        """A long-lived reader checkpoints instead; per-commit autocheckpoints would stall writes."""
+        self.connection.execute('PRAGMA wal_autocheckpoint=0')
+
+    def compensate(self, error):
+        for compensation in reversed(self.compensations):
+            try:
+                compensation()
+            except Exception as failure:
+                error.add_note(f'回滚补偿失败：{failure}')
+
+
 class Database:
     def __init__(self, path, project_id, schema_version):
         self.path, self.project_id, self.schema_version = path, project_id, schema_version
@@ -124,22 +179,27 @@ class Database:
                     records.flush()
             connection.commit()
 
+    def keep_alive(self):
+        return _Keeper(self)
+
     @contextmanager
     def transaction(self):
         connection = self.connect()
+        transaction = None
         try:
             connection.execute('BEGIN IMMEDIATE')
             row = connection.execute('SELECT project_id,schema_version,revision FROM metadata WHERE id=1').fetchone()
             if row is None or row[:2] != (self.project_id, self.schema_version):
                 raise ValueError('批注数据库身份无效')
-            data = {'schema_version': row[1], 'project_id': row[0], 'revision': row[2],
-                    **{table: Records(connection, table) for table in ('threads', 'versions', 'requests')}}
-            yield data
+            transaction = Transaction(connection, {
+                'schema_version': row[1], 'project_id': row[0], 'revision': row[2],
+                **{table: Records(connection, table) for table in ('threads', 'versions', 'requests')}})
+            yield transaction
             connection.commit()
-        except BaseException:
+        except BaseException as error:
             connection.rollback()
-            if "rollback_source" in locals().get("data", {}):
-                data["rollback_source"]()
+            if transaction is not None:
+                transaction.compensate(error)
             raise
         finally:
             connection.close()
@@ -152,3 +212,31 @@ class Database:
         data['threads'].connection.executemany('INSERT OR IGNORE INTO changes(revision,thread_id) VALUES(?,?)',
                                              [(data['revision'], key) for key in changed])
         data['threads'].connection.execute('UPDATE metadata SET revision=? WHERE id=1', (data['revision'],))
+
+
+class _Keeper:
+    """Keep WAL open between HTTP requests and checkpoint it in the background.
+
+    Closing the final connection checkpoints the WAL.
+    """
+    def __init__(self, database):
+        self.connection = database.connect()
+        self.stop = Event()
+        self.thread = Thread(target=self._checkpoint, args=(database,), name='annotation-checkpoint', daemon=True)
+        self.thread.start()
+
+    def _checkpoint(self, database):
+        connection = database.connect()
+        try:
+            while not self.stop.wait(1):
+                try:
+                    connection.execute('PRAGMA wal_checkpoint(PASSIVE)')
+                except sqlite3.OperationalError:
+                    pass  # Another writer/checkpointer owns the database; retry next interval.
+        finally:
+            connection.close()
+
+    def close(self):
+        self.stop.set()
+        self.thread.join()
+        self.connection.close()
