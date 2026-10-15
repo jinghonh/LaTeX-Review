@@ -35,13 +35,25 @@ class AnnotationStore:
         self.lock_path = self.directory / f'{project_id}.lock'
 
     @classmethod
-    def for_content(cls, content, project_root=None):
+    def _for_content(cls, content, project_root=None):
         root = Path(project_root or content.get('project_root', '')).expanduser().resolve()
         if not root.is_dir():
             raise AnnotationError('本机论文项目不存在；请使用报告携带的浏览器批注存储')
         if _hash({'root': str(root), 'entry': content['entry']}) != content['project_id']:
             raise AnnotationError('正文项目身份与本机项目目录不一致')
         return cls(root, content['project_id'])
+
+    @classmethod
+    def open(cls, content, project_root=None, *, keep_alive=False):
+        """Bind the annotation transaction to one annotation content manifest.
+
+        ``keep_alive`` keeps the database open between requests for long-running servers;
+        close the session (or use it as a context manager) to release it.
+        """
+        store = cls._for_content(content, project_root)
+        if keep_alive:
+            store._prepare(content)
+        return AnnotationSession(store, content)
 
     @contextmanager
     def _locked(self, *, restore_versions=True):
@@ -108,7 +120,7 @@ class AnnotationStore:
         from ._storage import Database
         Database.persist(data)
 
-    def prepare(self, content):
+    def _prepare(self, content):
         from ._storage import Database
         if not getattr(self, '_database_keeper', None):
             with self._locked():
@@ -140,25 +152,25 @@ class AnnotationStore:
         data['versions'][content['version_id']] = deepcopy(content)
         return existing
 
-    def read(self, content, progress=None):
+    def _read(self, content, progress=None):
         if progress:
             progress('read', 0, 0)
         with self._locked() as data:
             self._content(data, content)
             return self._view(data, content, progress=progress)
 
-    def read_thread(self, content, thread_id):
+    def _read_thread(self, content, thread_id):
         with self._locked() as data:
             self._content(data, content)
             thread = data['threads'].get(thread_id)
             return self._view({**data, 'threads': {thread_id: thread} if thread else {}}, content)
 
-    def metadata(self, content):
+    def _metadata(self, content):
         """Read identity/revision without constructing or relocating any thread."""
         with self._locked(restore_versions=False) as data:
             return {'project_id': self.project_id, 'version_id': content['version_id'], 'revision': data['revision']}
 
-    def changes(self, content, since):
+    def _changes(self, content, since):
         _integer(since, 'since')
         with self._locked() as data:
             if since > data['revision']:
@@ -167,7 +179,7 @@ class AnnotationStore:
             ids = data['threads'].changed_since(since)
             return self._delta(data, content, ids, since)
 
-    def inventory(self, content):
+    def _inventory(self, content):
         """Audit inventory does not need anchors, histories or location computation."""
         with self._locked(restore_versions=False) as data:
             threads = [{**{k: deepcopy(v) for k, v in t.items() if k in ('id', 'resolved', 'title', 'tags')}, 'messages': [{k: v for k, v in m.items() if k in
@@ -225,10 +237,10 @@ class AnnotationStore:
         return {'schema_version': SCHEMA_VERSION, 'project_id': self.project_id, 'version_id': content['version_id'],
                 'revision': data['revision'], 'threads': threads}
 
-    def dispatch(self, content, request, progress=None, *, incremental=False):
+    def _dispatch(self, content, request, progress=None, *, incremental=False):
         """Shared structured mutation API used unchanged by CLI and local HTTP."""
         if isinstance(request, dict) and request.get('operation') == 'batch':
-            return self.batch(content, request, progress=progress, incremental=incremental)
+            return self._batch(content, request, progress=progress, incremental=incremental)
         if isinstance(request, dict) and request.get('operation') in ('suggestion_preview', 'suggestion_apply'):
             return self._suggestion(content, request)
         self._validate_request(request)
@@ -433,7 +445,7 @@ class AnnotationStore:
             thread['updated_at'] = now
         return result
 
-    def batch(self, content, request, progress=None, *, incremental=False):
+    def _batch(self, content, request, progress=None, *, incremental=False):
         """Own batch locking, preflight reuse, receipts and revision advancement."""
         from ._batch import OPERATIONS, validate_request
         revision, request_id, atomic, dry_run, items, fingerprint = validate_request(content, request)
@@ -600,11 +612,12 @@ class AnnotationStore:
         thread['current_anchor'] = deepcopy(anchor)
         thread['updated_at'] = now
 
-    def export(self):
+    def _export(self, content):
         with self._locked() as data:
+            self._content(data, content)
             return {key: deepcopy(value) for key, value in data.items() if key != 'requests'}
 
-    def compact(self):
+    def _compact(self):
         """Validate and atomically rewrite storage without changing its revision."""
         with self._locked() as data:
             bundle = {key: deepcopy(value) for key, value in data.items() if key != 'requests'}
@@ -733,22 +746,6 @@ class AnnotationStore:
             check_anchor(event['anchor'])
 
 
-def execute_request(store, content, envelope, progress=None, *, incremental=False):
-    _keys(envelope, ('project_id', 'version_id', 'request'), ('project_id', 'version_id', 'request'))
-    if envelope['project_id'] != content['project_id'] or envelope['version_id'] != content['version_id']:
-        raise AnnotationConflict('正文项目或版本已变化，请保留草稿并重新读取正文')
-    request = envelope['request']
-    if isinstance(request, dict) and request.get('operation') == 'batch':
-        return store.batch(content, request, progress=progress, incremental=incremental)
-    if isinstance(request, dict) and request.get('operation') == 'locate':
-        _keys(request, ('operation', 'selection'), ('operation', 'selection'))
-        return {'anchor': make_anchor(content, request['selection'])}
-    fast = incremental and request.get('operation') not in ('import', 'suggestion_preview', 'suggestion_apply')
-    if not fast:
-        return store.dispatch(content, request, progress=progress) if progress else store.dispatch(content, request)
-    return store.dispatch(content, request, progress=progress, incremental=True)
-
-
 def query_threads(snapshot, *, author_type=None, category=None, resolved=None,
                   location_status=None, search='', sort='position'):
     """Filter/sort the version-specific view; a UI can retain its own cursor."""
@@ -796,3 +793,85 @@ def overlapping_threads(snapshot, unit_id, start=None, end=None):
             result.append(thread)
     return result
 
+
+class AnnotationSession:
+    """The annotation transaction for one annotation content manifest.
+
+    ``execute`` is the only mutation entry. Every result carries the current revision;
+    a stale ``expected_revision`` raises ``AnnotationConflict`` and changes nothing.
+    A committed ``suggestion_apply`` reports ``result.source_changed``; callers owning a
+    report decide whether to rebuild it.
+    """
+    def __init__(self, store, content):
+        self._store = store
+        self.content = content
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc):
+        self.close()
+
+    @property
+    def stored(self):
+        """Whether project storage already exists; reading never creates it."""
+        return self._store.path.is_file()
+
+    @property
+    def batch_directory(self):
+        return self._store.directory.parent / 'annotation-batches'
+
+    def execute(self, envelope, *, progress=None, incremental=False):
+        content = self.content
+        _keys(envelope, ('project_id', 'version_id', 'request'), ('project_id', 'version_id', 'request'))
+        if envelope['project_id'] != content['project_id'] or envelope['version_id'] != content['version_id']:
+            raise AnnotationConflict('正文项目或版本已变化，请保留草稿并重新读取正文')
+        request = envelope['request']
+        operation = request.get('operation') if isinstance(request, dict) else None
+        if operation == 'batch':
+            return self._store._batch(content, request, progress=progress, incremental=incremental)
+        if operation == 'locate':
+            _keys(request, ('operation', 'selection'), ('operation', 'selection'))
+            return {'anchor': make_anchor(content, request['selection'])}
+        fast = incremental and operation not in ('import', 'suggestion_preview', 'suggestion_apply')
+        return self._store._dispatch(content, request, progress=progress, incremental=fast)
+
+    def read(self, *, progress=None):
+        return self._store._read(self.content, progress=progress)
+
+    def read_thread(self, thread_id):
+        return self._store._read_thread(self.content, thread_id)
+
+    def changes(self, since):
+        return self._store._changes(self.content, since)
+
+    def inventory(self):
+        return self._store._inventory(self.content)
+
+    def metadata(self):
+        return self._store._metadata(self.content)
+
+    def export(self):
+        """A portable bundle of all threads and versions, including this content's version."""
+        return self._store._export(self.content)
+
+    def close(self):
+        self._store.close()
+
+
+def validate_bundle(content, bundle=None):
+    """Return a portable bundle for ``content`` after validating a carried ``bundle``.
+
+    Reads and writes no project files: a carried bundle may come from another machine.
+    """
+    validate_content(content)
+    checker = AnnotationStore(Path('/'), content['project_id'])  # Validation never touches its root.
+    result = {'schema_version': SCHEMA_VERSION, 'project_id': content['project_id'],
+              'revision': 0, 'versions': {}, 'threads': {}}
+    if bundle is not None:
+        checker._import(result, bundle)
+        if type(bundle['revision']) is not int or bundle['revision'] < 0:
+            raise AnnotationError('携带批注修订号无效')
+        result['revision'] = bundle['revision']
+    checker._content(result, content)
+    return result

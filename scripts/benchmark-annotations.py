@@ -5,7 +5,9 @@ import psutil
 from pathlib import Path
 from threading import Thread
 from playwright.sync_api import sync_playwright
-from latex_review.annotations import AnnotationStore, MANIFEST, load_content, _hash
+from latex_review.annotations import AnnotationStore, MANIFEST, load_content
+# Seeding bypasses the public interface on purpose: it builds 10000 threads in one transaction.
+from latex_review.annotations._validation import _hash
 from latex_review.annotations._storage import Database, encode
 from latex_review.serve import create_server
 from latex_review.version_storage import unpack_storage
@@ -29,7 +31,7 @@ with tempfile.TemporaryDirectory(prefix='annotation-browser-perf-') as temporary
     root=Path(temporary)/'paper';root.mkdir();root=root.resolve();report=Path(temporary)/'report';report.mkdir()
     content=copy.deepcopy(source);content['project_root']=str(root)
     content['project_id']=_hash({'root':str(root),'entry':content['entry']})
-    store=AnnotationStore.for_content(content)
+    store=AnnotationStore._for_content(content)
     old_id=source['project_id'];new_id=content['project_id']
     bundle=unpack_storage(json.loads(original_bytes))
     bundle['project_id']=new_id
@@ -149,7 +151,7 @@ with tempfile.TemporaryDirectory(prefix='annotation-browser-perf-') as temporary
                     concurrent=[]
                     for i in range(args.samples):
                         peer=peers[i%3];peer.bring_to_front();peer.evaluate('reviewAnnotations.synchronize()')
-                        revision=store.metadata(content)['revision']
+                        revision=AnnotationStore.open(content).metadata()['revision']
                         measured=peer.evaluate("""async ({revision,create,count,scenario})=>{
                             if(reviewAnnotations.getSnapshot().revision!==revision)throw Error('revision synchronization failed');
                             let request=create;

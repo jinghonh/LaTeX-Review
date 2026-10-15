@@ -7,6 +7,7 @@ from threading import Thread
 
 from latex_review.delivery import prepare_publication
 from test_annotation_delivery_browser import live_report, chrome, ready, create
+from test_annotations import envelope
 
 
 def test_static_publication_annotations_and_export_policy(live_report, chrome):
@@ -151,19 +152,19 @@ def test_compressed_publication_preserves_history_and_location(live_report, chro
     from latex_review.live import build
     root, entry, output, source = live_report
     content = load_content(output)
-    store = AnnotationStore.for_content(content)
+    store = AnnotationStore.open(content)
     u = next(u for u in content['units'] if u['text'].startswith('Stable'))
-    created = store.dispatch(content, {'operation': 'create', 'expected_revision': 0,
+    created = store.execute(envelope(content, {'operation': 'create', 'expected_revision': 0,
         'selection': {'unit_id': u['id'], 'start': 0, 'end': 6, 'quote': 'Stable'},
-        'body': 'History remains', 'author': {'name': 'Tester', 'type': 'user'}, 'category': 'question'})
+        'body': 'History remains', 'author': {'name': 'Tester', 'type': 'user'}, 'category': 'question'}))
     tid = created['result']['thread_id']
     entry.write_text(entry.read_text().replace('Other unique words.', 'Other updated unique words.'))
     build(source, output, 2)
     current = load_content(output)
     u = next(u for u in current['units'] if u['text'].startswith('Other'))
     revision = store.export()['revision']
-    store.dispatch(current, {'operation': 'associate', 'expected_revision': revision,
-        'thread_id': tid, 'selection': {'unit_id': u['id'], 'start': 0, 'end': 5, 'quote': 'Other'}})
+    AnnotationStore.open(current).execute(envelope(current, {'operation': 'associate', 'expected_revision': revision,
+        'thread_id': tid, 'selection': {'unit_id': u['id'], 'start': 0, 'end': 5, 'quote': 'Other'}}))
     (output / 'diff.json').write_text('{}')
     target = output / 'packed.html'
     target.write_bytes(prepare_publication(output, 'paper').html)

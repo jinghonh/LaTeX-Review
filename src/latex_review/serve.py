@@ -132,11 +132,8 @@ class ReportHandler(SimpleHTTPRequestHandler):
         except (ValueError, UnicodeError) as exc:
             self._json({"message": str(exc) if isinstance(exc, TranslationError) else "翻译请求格式无效"}, 400)
 
-    def _annotation_context(self):
-        from .annotations import AnnotationStore, load_content
-        content = self.server.annotation_content(self.directory)
-        store = self.server.annotation_store(self.directory, content)
-        return content, store
+    def _annotation_session(self):
+        return self.server.annotation_session(self.directory)
 
     def _annotation_get(self, path):
         if not self._local_request():
@@ -146,19 +143,19 @@ class ReportHandler(SimpleHTTPRequestHandler):
                 return self._json(self.server.annotation_jobs.active())
             if path.startswith('/api/annotations/jobs/'):
                 return self._json(self.server.annotation_jobs.snapshot(path.rsplit('/', 1)[-1]))
-            content, store = self._annotation_context()
+            session = self._annotation_session()
             if path == "/api/annotations/content":
-                self._json(content)
+                self._json(session.content)
             elif path == "/api/annotations/status":
                 from .annotation_output import page_projection, thread_summary
                 view = parse_qs(urlsplit(self.path).query).get('view', ['summary'])[0]
                 if view == 'changes':
                     since = int(parse_qs(urlsplit(self.path).query).get('since', ['0'])[0])
-                    value = page_projection(store.changes(content, since))
+                    value = page_projection(session.changes(since))
                 elif view == 'revision':
-                    value = store.metadata(content)
+                    value = session.metadata()
                 else:
-                    value = store.read(content)
+                    value = session.read()
                     if view == 'page':
                         value = page_projection(value)
                     elif view != 'full':
@@ -166,12 +163,12 @@ class ReportHandler(SimpleHTTPRequestHandler):
                 self._json({**value, "token": self.server.annotation_token})
             elif path == '/api/annotations/history':
                 thread_id = parse_qs(urlsplit(self.path).query).get('thread_id', [''])[0]
-                thread = store.export()['threads'].get(thread_id)
+                thread = session.export()['threads'].get(thread_id)
                 if not thread:
                     return self._json({'message': '批注不存在'}, 404)
                 self._json({'thread_id': thread_id, 'history': thread['history']})
             elif path == "/api/annotations/export":
-                self._json(store.export())
+                self._json(session.export())
             else:
                 self._json({"message": "未知批注接口"}, 404)
         except (OSError, ValueError, TypeError, KeyError) as exc:
@@ -225,14 +222,12 @@ class ReportHandler(SimpleHTTPRequestHandler):
 
     @staticmethod
     def _execute_annotation(envelope, progress, directory, server):
-        from .annotations import AnnotationStore, execute_request, load_content
         from .annotation_output import page_projection
-        content = server.annotation_content(directory)
-        store = server.annotation_store(directory, content)
+        session = server.annotation_session(directory)
+        content = session.content
         if progress:
             progress('validate', 0, 0)
-        value = (execute_request(store, content, envelope, progress=progress, incremental=True) if progress
-                 else execute_request(store, content, envelope, incremental=True))
+        value = session.execute(envelope, progress=progress, incremental=True)
         if (value.get('result') or {}).get('source_changed'):
             from .report_rebuild import rebuild_report
             if progress:
@@ -277,40 +272,32 @@ class ReportServer(ThreadingHTTPServer):
         from .annotation_jobs import AnnotationJobs
         self.annotation_jobs = AnnotationJobs()
         self.annotation_content_lock = RLock()
-        self.annotation_cached_content = None
         self.annotation_content_key = None
-        self.annotation_cached_store = None
+        self.annotation_cached_session = None
         self.annotation_token = secrets.token_urlsafe(32)
         super().__init__(*args, **kwargs)
 
-    def annotation_content(self, directory):
-        from .annotations import load_content, MANIFEST, PreparedContent
+    def annotation_session(self, directory):
+        """One kept-alive annotation session per current report content; a rebuilt report replaces it."""
+        from .annotations import AnnotationStore, MANIFEST, PreparedContent, load_content
         path = Path(directory) / MANIFEST
         with self.annotation_content_lock:
             stat = path.stat()
             key = (str(path), stat.st_ino, stat.st_mtime_ns, stat.st_size)
-            if key != self.annotation_content_key:
+            if key != self.annotation_content_key or self.annotation_cached_session is None:
                 content = PreparedContent(load_content(directory))
-                if self.annotation_cached_store:
-                    self.annotation_cached_store.close()
-                self.annotation_cached_store = None
-                self.annotation_cached_content = content
+                if self.annotation_cached_session:
+                    self.annotation_cached_session.close()
+                self.annotation_cached_session = None
+                self.annotation_cached_session = AnnotationStore.open(
+                    content, self.annotation_project_root, keep_alive=True)
                 self.annotation_content_key = key
-            return self.annotation_cached_content
-
-    def annotation_store(self, directory, content):
-        from .annotations import AnnotationStore
-        with self.annotation_content_lock:
-            if self.annotation_cached_store is None or self.annotation_cached_store._prepared_content is not content:
-                store = AnnotationStore.for_content(content, self.annotation_project_root)
-                store.prepare(content)
-                self.annotation_cached_store = store
-            return self.annotation_cached_store
+            return self.annotation_cached_session
 
     def server_close(self):
         self.annotation_jobs.close()
-        if self.annotation_cached_store:
-            self.annotation_cached_store.close()
+        if self.annotation_cached_session:
+            self.annotation_cached_session.close()
         if self.translation:
             self.translation.close()
         super().server_close()

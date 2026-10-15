@@ -76,7 +76,8 @@ def prepare_batch(content, state, value, args):
     return request
 
 
-def run_batch(store, content, args):
+def run_batch(session, args):
+    content = session.content
     import sys
     labels = {'read': '读取批注', 'lock': '等待存储锁', 'validate': '检查版本',
               'preflight': '预检', 'apply': '应用', 'reuse': '复用预检', 'write': '写入',
@@ -85,7 +86,7 @@ def run_batch(store, content, args):
         if not args.quiet_progress:
             print(f"{labels.get(phase, phase)} {completed}/{total}", file=sys.stderr, flush=True)
     progress('read', 0, 0)
-    before = store.inventory(content)
+    before = session.inventory()
     submitted = _read_json(args.file)
     request = prepare_batch(content, before, submitted, args)
     originals = submitted if isinstance(submitted, list) else submitted['items']
@@ -95,7 +96,7 @@ def run_batch(store, content, args):
     if not isinstance(request_id, str) or not request_id.strip():
         raise AnnotationError('批量写入需要 --request-id 或 JSON request_id')
     filename = hashlib.sha256(request_id.encode('utf-8')).hexdigest() + '.json'
-    snapshot_path = args.snapshot or store.directory.parent / 'annotation-batches' / filename
+    snapshot_path = args.snapshot or session.batch_directory / filename
     snapshot_path = snapshot_path.expanduser()
     if snapshot_path.is_symlink():
         raise AnnotationError('快照文件不可为符号链接')
@@ -116,7 +117,8 @@ def run_batch(store, content, args):
             snapshot['before'] = saved['before']
         snapshot_path.parent.mkdir(parents=True, exist_ok=True)
         _atomic_write(snapshot_path, snapshot)
-    result = store.batch(content, request, progress=progress)
+    result = session.execute({'project_id': content['project_id'], 'version_id': content['version_id'],
+                              'request': request}, progress=progress)
     if args.dry_run:
         preflight_path = snapshot_path.with_suffix('.preflight.json')
         if preflight_path.is_symlink():
@@ -129,14 +131,14 @@ def run_batch(store, content, args):
         progress('audit', 0, len(request['items']))
         successful = {item['id'] for item in result['results'] if item['ok']}
         expected = [item for item in request['items'] if item['id'] in successful]
-        verification = audit(snapshot['before'], store.inventory(content), result, expected_items=expected)
+        verification = audit(snapshot['before'], session.inventory(), result, expected_items=expected)
         snapshot.update(result=result, audit=verification)
         _atomic_write(snapshot_path, snapshot)
         result = {**result, 'audit': verification, 'snapshot_file': str(snapshot_path.resolve())}
         if args.review_record:
             from .annotation_review_record import write_record
             try:
-                result['review_record'] = write_record(args.review_record, content, request, result, store.read(content), originals)
+                result['review_record'] = write_record(args.review_record, content, request, result, session.read(), originals)
             except OSError as exc:
                 result['review_record_error'] = str(exc)
         progress('complete', len(request['items']), len(request['items']))
@@ -146,7 +148,8 @@ def run_batch(store, content, args):
     return result
 
 
-def run_audit(store, content, path):
+def run_audit(session, path):
+    content = session.content
     snapshot = _read_json(str(path))
     if snapshot.get('project_id') != content['project_id']:
         raise AnnotationError('复核快照属于其他论文项目')
@@ -155,4 +158,4 @@ def run_audit(store, content, path):
         raise AnnotationError('快照没有成功返回的批量收据；请用相同请求 ID 核对原请求')
     successful = {item['id'] for item in result['results'] if item['ok']}
     expected = [item for item in snapshot['expected_items'] if item['id'] in successful]
-    return audit(snapshot['before'], store.inventory(content), result, expected_items=expected)
+    return audit(snapshot['before'], session.inventory(), result, expected_items=expected)

@@ -2,6 +2,7 @@ import json
 from latex_review.agent_tools import annotations_main
 from latex_review.annotations import AnnotationStore, MANIFEST
 from test_annotations import content_at
+from test_annotations import envelope
 
 
 def test_batch_partial_preflight_retry_audit_and_external_changes(tmp_path, capsys):
@@ -18,17 +19,17 @@ def test_batch_partial_preflight_retry_audit_and_external_changes(tmp_path, caps
     output = capsys.readouterr()
     preview = json.loads(output.out)
     assert '预检 2/2' in output.err
-    store = AnnotationStore.for_content(content)
-    assert preview['dry_run'] and store.read(content)['revision'] == 0
+    store = AnnotationStore.open(content)
+    assert preview['dry_run'] and store.read()['revision'] == 0
     assert annotations_main(arguments) == 4
     output = capsys.readouterr()
     receipt = json.loads(output.out)
     assert '复用预检 2/2' in output.err and receipt['preflight_reused']
     assert receipt['committed'] and [item['ok'] for item in receipt['results']] == [True, False]
-    assert receipt['audit']['ok'] and len(store.read(content)['threads']) == 1
+    assert receipt['audit']['ok'] and len(store.read()['threads']) == 1
     assert annotations_main(arguments) == 4
     retry = json.loads(capsys.readouterr().out)
-    assert retry['results'] == receipt['results'] and store.read(content)['revision'] == 1
+    assert retry['results'] == receipt['results'] and store.read()['revision'] == 1
     assert annotations_main([str(report), 'add', '--quote', 'Second sentence.', '--body', 'Human arrived.', '--author', 'Other']) == 0
     capsys.readouterr()
     assert annotations_main([str(report), 'audit', receipt['snapshot_file']]) == 0
@@ -94,7 +95,7 @@ def test_cli_preflight_diagnostics_and_fixed_retry(tmp_path, capsys):
     assert annotations_main(args) == 0
     receipt = json.loads(capsys.readouterr().out)
     assert receipt['preflight_reused'] and receipt['revision'] == 2 and receipt['audit']['ok']
-    assert len(AnnotationStore.for_content(content).read(content)['threads']) == 2
+    assert len(AnnotationStore.open(content).read()['threads']) == 2
 
 
 def test_preflight_11_items_hides_63_existing_ids_and_saves_full_snapshot(tmp_path, capsys):
@@ -102,11 +103,11 @@ def test_preflight_11_items_hides_63_existing_ids_and_saves_full_snapshot(tmp_pa
     report = tmp_path / 'report'
     report.mkdir()
     (report / MANIFEST).write_text(json.dumps(content))
-    store = AnnotationStore.for_content(content)
+    store = AnnotationStore.open(content)
     unit = content['units'][0]
-    store.batch(content, {'operation': 'batch', 'expected_revision': 0, 'request_id': 'seed',
+    store.execute(envelope(content, {'operation': 'batch', 'expected_revision': 0, 'request_id': 'seed',
                          'items': [{'id': str(i), 'operation': 'create', 'selection': {'unit_id': unit['id'], 'start': 0, 'end': 8},
-                                    'body': 'Existing', 'author': {'name': 'Other', 'type': 'agent'}, 'category': 'note'} for i in range(63)]})
+                                    'body': 'Existing', 'author': {'name': 'Other', 'type': 'agent'}, 'category': 'note'} for i in range(63)]}))
     batch = tmp_path / 'batch.json'
     batch.write_text(json.dumps([{'id': str(i), 'operation': 'add', 'quote': 'Sentence.', 'body': 'Review',
                                  'file': 'main.tex', 'line': unit['source']['start_line']} for i in range(11)]))
@@ -144,7 +145,7 @@ def test_review_record_and_batch_source_location(tmp_path, capsys):
     assert source.read_bytes() == before
     assert annotations_main(args) == 4
     assert json.loads(capsys.readouterr().out)['results'] == result['results']
-    assert len(AnnotationStore.for_content(content).read(content)['threads']) == 1
+    assert len(AnnotationStore.open(content).read()['threads']) == 1
 
 
 def test_record_export_failure_retains_committed_receipt(tmp_path, capsys, monkeypatch):
@@ -167,4 +168,4 @@ def test_record_export_failure_retains_committed_receipt(tmp_path, capsys, monke
     monkeypatch.setattr(annotation_review_record, 'write_record', original)
     assert annotations_main(args) == 0
     capsys.readouterr()
-    assert len(AnnotationStore.for_content(content).read(content)['threads']) == 1
+    assert len(AnnotationStore.open(content).read()['threads']) == 1

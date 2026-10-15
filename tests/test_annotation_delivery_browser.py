@@ -13,6 +13,7 @@ from latex_review.contract import ComparisonSource
 from latex_review.serve import create_server
 from latex_review.annotations import AnnotationStore, load_content
 from latex_review.delivery import publication_html
+from test_annotations import envelope
 
 @pytest.fixture
 def live_report(tmp_path):
@@ -63,8 +64,8 @@ def test_offline_lifecycle_reopen_export_import(live_report,chrome,scheme,tmp_pa
         assert bundle['threads'][tid]['tags']==['non-experiment','review']
         assert bundle['threads'][tid]['messages'][1]['edits'][0]['body']=='Reply $x$'
         # The portable metadata contract is also accepted by the Python store.
-        content=load_content(output);store=AnnotationStore.for_content(content)
-        imported=store.dispatch(content,{'operation':'import','expected_revision':0,'bundle':bundle})
+        content=load_content(output);store=AnnotationStore.open(content)
+        imported=store.execute(envelope(content,{'operation':'import','expected_revision':0,'bundle':bundle}))
         assert imported['threads'][0]['title']=='Topic title'
         assert p.evaluate('async b=>reviewAnnotationDelivery.importBundle(b)',bundle)
         conflict=json.loads(json.dumps(bundle));conflict['threads'][tid]['messages'][0]['body']='conflict'
@@ -122,7 +123,7 @@ def test_restored_http_edit_draft_can_be_saved(live_report,chrome):
             p.wait_for_function('reviewAnnotations.getSnapshot().threads[0].messages[0].body==="Restored edit can be saved"')
             assert p.locator('.annotation-editor').is_hidden()
             assert p.evaluate('Object.keys(reviewAnnotations.getDrafts()).length')==0
-            assert AnnotationStore.for_content(load_content(output)).read(load_content(output))['threads'][0]['messages'][0]['body']=='Restored edit can be saved'
+            assert AnnotationStore.open(load_content(output)).read()['threads'][0]['messages'][0]['body']=='Restored edit can be saved'
             p.close()
         finally:server.shutdown();worker.join()
 
@@ -142,8 +143,8 @@ def test_same_project_windows_and_contract(live_report,chrome):
     assert p.evaluate('reviewAnnotations.getSnapshot().threads.length')==4
     bundle=p.evaluate('reviewAnnotationDelivery.backup()')
     # Python accepts browser-generated lifecycle records unchanged.
-    c=load_content(output);store=AnnotationStore.for_content(c)
-    result=store.dispatch(c,{'operation':'import','expected_revision':0,'bundle':bundle});assert len(result['threads'])==4
+    c=load_content(output);store=AnnotationStore.open(c)
+    result=store.execute(envelope(c,{'operation':'import','expected_revision':0,'bundle':bundle}));assert len(result['threads'])==4
     assert p.evaluate('reviewAnnotations.getContent().units.filter(u=>u.kind==="text").every(u=>reviewAnnotations.coordinates(document.querySelector(u.selector)).text===u.text)')
     before=p.evaluate('reviewAnnotationDelivery.backup()');bad=json.loads(json.dumps(before));tid=next(iter(bad['threads']));bad['threads'][tid]['original_anchor']['quote']='invalid'
     error=p.evaluate('async b=>{try{await reviewAnnotationDelivery.importBundle(b);return null;}catch(e){return e.message;}}',bad);assert '原文与版本不一致' in error
@@ -164,7 +165,7 @@ def test_live_ambiguity_manual_history_and_old_report(live_report,chrome,tmp_pat
             p.evaluate('''()=>{const u=reviewAnnotations.getContent().units.find(u=>u.text.startsWith('Other'));const r=reviewAnnotations.coordinates(document.querySelector(u.selector)).range(0,5);getSelection().removeAllRanges();getSelection().addRange(r);document.querySelector(u.selector).dispatchEvent(new MouseEvent('mouseup',{bubbles:true}));}''')
             p.wait_for_function('reviewAnnotations.getSnapshot().threads[0].association.status==="manual"')
             t=p.evaluate('reviewAnnotations.getSnapshot().threads[0]');assert t['original_anchor']['quote']=='Stable' and t['association']['anchor']['quote']=='Other' and len(t['history'])==2
-            store=AnnotationStore.for_content(load_content(output));latest=store.export()['threads'][tid]['current_anchor']
+            store=AnnotationStore.open(load_content(output));latest=store.export()['threads'][tid]['current_anchor']
             historical=tmp_path/'historical';historical.mkdir();(historical/'report.html').write_text(old_html.replace('reading-view live-view','reading-view'));(historical/'annotation-content.json').write_text(json.dumps(old_content))
             with create_server(historical,annotation_project_root=root) as oldserver:
                 oldworker=Thread(target=oldserver.serve_forever);oldworker.start()
@@ -203,7 +204,7 @@ def test_live_fuzzy_migration_and_unbound_draft(live_report,chrome):
             p.locator('.annotation-editor').get_by_text('保存',exact=True).click();p.wait_for_function('reviewAnnotations.getSnapshot().threads.length===2')
             # Ordinary reopen restores edit input while refusing a changed target.
             p.evaluate('''()=>{const t=reviewAnnotations.getSnapshot().threads[0];reviewAnnotations.openComposer('edit',t,null,t.messages[0]);}''');p.locator('.annotation-editor > textarea').fill('Stale edit input')
-            c=load_content(output);store=AnnotationStore.for_content(c);snapshot=store.read(c);t=snapshot['threads'][0];store.dispatch(c,{'operation':'edit','expected_revision':snapshot['revision'],'thread_id':t['id'],'message_id':t['messages'][0]['id'],'body':'External change','category':'note'})
+            c=load_content(output);store=AnnotationStore.open(c);snapshot=store.read();t=snapshot['threads'][0];store.execute(envelope(c,{'operation':'edit','expected_revision':snapshot['revision'],'thread_id':t['id'],'message_id':t['messages'][0]['id'],'body':'External change','category':'note'}))
             p.reload();p.wait_for_function('window.reviewAnnotationDeliveryReady===true');assert p.locator('.annotation-editor > textarea').input_value()=='Stale edit input'
             assert '操作对象' in p.locator('#annotation-status').text_content()
             p.locator('.annotation-editor > textarea').fill('Edited restored input');p.reload();p.wait_for_function('window.reviewAnnotationDeliveryReady===true')

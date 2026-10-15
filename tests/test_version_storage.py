@@ -6,6 +6,7 @@ import pytest
 from latex_review.version_storage import pack_versions, unpack_versions, pack_storage, unpack_storage
 from latex_review.annotations import AnnotationStore, AnnotationError, AnnotationConflict
 from test_annotations import content_at, mutate, select, AUTHOR
+from test_annotations import storage_path
 
 
 def test_shared_units_round_trip_and_independent_coordinates():
@@ -43,33 +44,33 @@ def test_corrupt_pool_and_storage_checksum():
 
 def test_old_storage_compaction_preserves_revision_history_and_conflicts(tmp_path):
     content, _ = content_at(tmp_path / 'paper', 'Original paragraph.')
-    store = AnnotationStore.for_content(content)
-    mutate(store, content, 'create', selection=select(content, 'Original'), body='Keep history', author=AUTHOR, category='note')
+    store = AnnotationStore.open(content)
+    mutate(store, 'create', selection=select(content, 'Original'), body='Keep history', author=AUTHOR, category='note')
     bundle = store.export()
     # Simulate a pre-upgrade file, then explicitly migrate it.
-    store.path.unlink()
-    store.legacy_path.write_text(json.dumps(bundle))
-    store.compact()
+    storage_path(content).unlink()
+    storage_path(content).with_suffix('.json').write_text(json.dumps(bundle))
+    store.metadata()  # Any access migrates the pre-upgrade file.
     assert store.export() == bundle
-    assert store.metadata(content)['revision'] == bundle['revision']
-    assert len(store.inventory(content)['threads']) == 1
-    assert store.path.read_bytes().startswith(b'SQLite format 3')
-    assert store.legacy_path.with_suffix('.json.migrated').exists()
+    assert store.metadata()['revision'] == bundle['revision']
+    assert len(store.inventory()['threads']) == 1
+    assert storage_path(content).read_bytes().startswith(b'SQLite format 3')
+    assert storage_path(content).with_suffix('.json').with_suffix('.json.migrated').exists()
     changed = deepcopy(content)
     changed['units'][0]['source']['start_line'] = 99
     changed['units'][0]['source']['end_line'] = 99
     with pytest.raises(AnnotationConflict):
-        store.read(changed)
+        AnnotationStore.open(changed).read()
     before = store.export()
     # Broken SQLite files fail closed; restore using SQLite's backup API.
     import sqlite3
     backup = tmp_path / 'backup.sqlite3'
-    with sqlite3.connect(store.path) as source, sqlite3.connect(backup) as target:
+    with sqlite3.connect(storage_path(content)) as source, sqlite3.connect(backup) as target:
         source.backup(target)
-    store.path.write_bytes(b'damaged database')
+    storage_path(content).write_bytes(b'damaged database')
     with pytest.raises(AnnotationError):
-        store.metadata(content)
-    store.path.write_bytes(backup.read_bytes())
+        store.metadata()
+    storage_path(content).write_bytes(backup.read_bytes())
     assert store.export() == before
 
 

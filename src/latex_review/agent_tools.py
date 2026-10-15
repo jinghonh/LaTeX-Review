@@ -156,7 +156,7 @@ def acceptance_main(argv: list[str] | None = None) -> int:
 
 def annotations_main(argv: list[str] | None = None) -> int:
     """Read annotations or execute a high-level/version-checked JSON request."""
-    from .annotations import AnnotationStore, execute_request, load_content
+    from .annotations import AnnotationStore, load_content
     from .annotation_cli import SelectionError, add_commands, build_request, read_text_inputs
     from .annotation_output import add_read_options, read_projection, write_summary, report_context
     from .annotation_batch_cli import add_batch_commands, run_batch, run_audit
@@ -180,18 +180,18 @@ def annotations_main(argv: list[str] | None = None) -> int:
             raise ValueError('子命令不能与 --content、--export 或 --request 同时使用')
         read_text_inputs(args)
         content = load_content(args.report)
-        store = AnnotationStore.for_content(content, args.project_root)
+        session = AnnotationStore.open(content, args.project_root)
         context = report_context(args.report, content)
         if args.command == 'batch':
-            value = run_batch(store, content, args)
+            value = run_batch(session, args)
             emit({**value, 'report_context': context})
             return 0 if all(item['ok'] for item in value['results']) and not value.get('review_record_error') else 4
         elif args.command == 'audit':
-            value = run_audit(store, content, args.snapshot)
+            value = run_audit(session, args.snapshot)
         elif args.command in ('show', 'get'):
             if args.summary or args.full or args.fields or args.history:
                 raise ValueError('show/get 固定返回详情；请移除 --summary、--full、--fields 和 --history')
-            snapshot = store.read(content)
+            snapshot = session.read()
             thread = next((t for t in snapshot['threads'] if t['id'] == args.thread_id), None)
             if thread is None:
                 raise ValueError(f'批注线程 {args.thread_id} 不存在或已删除')
@@ -200,7 +200,7 @@ def annotations_main(argv: list[str] | None = None) -> int:
                      'revision': snapshot['revision'],
                      'thread': thread_detail(thread, {u['id']: u for u in content['units']})}
         elif args.command:
-            value = execute_request(store, content, build_request(content, store.read_thread(content, args.thread_id) if args.command == 'edit' else store.metadata(content), args))
+            value = session.execute(build_request(content, session.read_thread(args.thread_id) if args.command == 'edit' else session.metadata(), args))
             if (value.get('result') or {}).get('source_changed'):
                 from .report_rebuild import rebuild_report
                 value['result']['rebuild'] = rebuild_report(args.report)
@@ -211,17 +211,17 @@ def annotations_main(argv: list[str] | None = None) -> int:
         elif args.content:
             value = read_projection(content, args)
         elif args.export:
-            value = store.export()
+            value = session.export()
         elif args.request:
             raw = sys.stdin.read() if args.request == '-' else Path(args.request).read_text(encoding='utf-8')
             if len(raw.encode('utf-8')) > 8 * 1024 * 1024:
                 raise ValueError('批注请求超过 8 MiB')
-            value = execute_request(store, content, json.loads(raw))
+            value = session.execute(json.loads(raw))
             if (value.get('result') or {}).get('source_changed'):
                 from .report_rebuild import rebuild_report
                 value['result']['rebuild'] = rebuild_report(args.report)
         else:
-            value = read_projection(store.read(content), args, content)
+            value = read_projection(session.read(), args, content)
         if not args.export:
             value = {**value, 'report_context': context}
         emit(value)

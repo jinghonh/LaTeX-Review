@@ -4,6 +4,7 @@ from pathlib import Path
 from latex_review.annotations import AnnotationStore, load_content
 from latex_review.delivery import publication_html
 from test_annotation_delivery_browser import live_report
+from test_annotations import envelope
 
 
 def payload(html,id):
@@ -12,8 +13,8 @@ def payload(html,id):
 
 def test_publication_refreshes_latest_backup(live_report):
     root,entry,output,source=live_report
-    content=load_content(output);store=AnnotationStore.for_content(content);u=next(u for u in content['units'] if u['kind']=='text')
-    store.dispatch(content,{'operation':'create','expected_revision':0,'selection':{'unit_id':u['id'],'start':0,'end':6},'body':'latest','author':{'name':'A','type':'user'},'category':'note'})
+    content=load_content(output);store=AnnotationStore.open(content);u=next(u for u in content['units'] if u['kind']=='text')
+    store.execute(envelope(content,{'operation':'create','expected_revision':0,'selection':{'unit_id':u['id'],'start':0,'end':6},'body':'latest','author':{'name':'A','type':'user'},'category':'note'}))
     html=publication_html(output);assert len(payload(html,'annotation-backup')['threads'])==1
     assert payload(html,'annotation-content')==content
 
@@ -31,8 +32,8 @@ def test_publication_retains_portable_backup_without_local_project(live_report,t
     from latex_review.delivery import embed_annotations
     import shutil
     root,entry,output,source=live_report
-    c=load_content(output);store=AnnotationStore.for_content(c);u=next(u for u in c['units'] if u['kind']=='text')
-    store.dispatch(c,{'operation':'create','expected_revision':0,'selection':{'unit_id':u['id'],'start':0,'end':6},'body':'portable','author':{'name':'A','type':'user'},'category':'note'})
+    c=load_content(output);store=AnnotationStore.open(c);u=next(u for u in c['units'] if u['kind']=='text')
+    store.execute(envelope(c,{'operation':'create','expected_revision':0,'selection':{'unit_id':u['id'],'start':0,'end':6},'body':'portable','author':{'name':'A','type':'user'},'category':'note'}))
     html=publication_html(output);(output/'report.html').write_text(html)
     shutil.rmtree(root)
     republished=publication_html(output)
