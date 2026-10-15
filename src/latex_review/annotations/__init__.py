@@ -10,4 +10,4 @@ from ._validation import (MANIFEST, MAX_BODY, SCHEMA_VERSION, AnnotationConflict
                           atomic_write, digest, exact_keys, thread_metadata, utf16_length)
 from .content import (PreparedContent, build_content, content_meta, load_content, locate, make_anchor,
                       validate_content)
-from .store import AnnotationSession, AnnotationStore, overlapping_threads, query_threads, validate_bundle
+from .store import AnnotationSession, AnnotationStore, validate_bundle

@@ -11,7 +11,7 @@ import pytest
 
 from latex_review.annotations import (
     AnnotationConflict, AnnotationError, AnnotationStore, MANIFEST, build_content,
-    locate, make_anchor, overlapping_threads, query_threads, utf16_length,
+    locate, make_anchor, utf16_length,
 )
 from latex_review.agent_tools import annotations_main
 from latex_review.contract import ComparisonSource
@@ -142,10 +142,7 @@ def test_lifecycle_overlap_authors_filters_and_persistence(tmp_path):
     rid = reply['result']['message_id']
     mutate(store, 'edit', thread_id=tid, message_id=rid, body='Revised reply', category='note')
     value = mutate(store, 'resolve', thread_id=tid)
-    resolved = query_threads(value, resolved=True, author_type='agent', category='note', search='REVISED')
-    assert len(resolved) == 1 and resolved[0]['messages'][1]['edits'][0]['category'] == 'suggestion'
-    anchor = make_anchor(content, select(content, 'long'))
-    assert len(overlapping_threads(value, anchor['unit_id'], anchor['start'], anchor['end'])) == 2
+    assert value['threads'][0]['resolved'] and value['threads'][0]['messages'][1]['body'] == 'Revised reply'
     mutate(store, 'reopen', thread_id=tid)
     mutate(store, 'delete_message', thread_id=tid, message_id=rid)
     with pytest.raises(AnnotationError):

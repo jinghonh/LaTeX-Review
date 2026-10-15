@@ -56,7 +56,7 @@ class AnnotationStore:
         return AnnotationSession(store, content)
 
     @contextmanager
-    def _locked(self, *, restore_versions=True):
+    def _locked(self):
         from ._storage import Database
         if any(p.is_symlink() for p in (self.directory, self.directory.parent, self.path,
                                        self.legacy_path, self.legacy_path.with_suffix('.json.migrated'), self.lock_path,
@@ -167,7 +167,7 @@ class AnnotationStore:
 
     def _metadata(self, content):
         """Read identity/revision without constructing or relocating any thread."""
-        with self._locked(restore_versions=False) as data:
+        with self._locked() as data:
             return {'project_id': self.project_id, 'version_id': content['version_id'], 'revision': data['revision']}
 
     def _changes(self, content, since):
@@ -181,7 +181,7 @@ class AnnotationStore:
 
     def _inventory(self, content):
         """Audit inventory does not need anchors, histories or location computation."""
-        with self._locked(restore_versions=False) as data:
+        with self._locked() as data:
             threads = [{**{k: deepcopy(v) for k, v in t.items() if k in ('id', 'resolved', 'title', 'tags')}, 'messages': [{k: v for k, v in m.items() if k in
                        ('id', 'author', 'body', 'reply_to', 'deleted_at')} for m in t['messages']]}
                        for t in data['threads'].values() if not t.get('deleted_at')]
@@ -324,7 +324,7 @@ class AnnotationStore:
     def _validate_request(request):
         exact_keys(request, ('operation', 'expected_revision', 'thread_id', 'message_id', 'selection', 'body',
                         'author', 'category', 'bundle', 'reply_to', 'suggested_replacement', 'title', 'tags', 'resolve', 'request_id'), ('operation', 'expected_revision'))
-        revision = _integer(request['expected_revision'], 'expected_revision')
+        _integer(request['expected_revision'], 'expected_revision')
         operation = request['operation']
         fields = {
             'create': {'selection', 'body', 'author', 'category'},
@@ -744,54 +744,6 @@ class AnnotationStore:
             if event['method'] not in ('created', 'manual', 'exact', 'auto_migrated'):
                 raise AnnotationError('导入历史类型无效')
             check_anchor(event['anchor'])
-
-
-def query_threads(snapshot, *, author_type=None, category=None, resolved=None,
-                  location_status=None, search='', sort='position'):
-    """Filter/sort the version-specific view; a UI can retain its own cursor."""
-    if author_type is not None and author_type not in ('user', 'agent'):
-        raise AnnotationError('作者筛选无效')
-    if category is not None:
-        _category(category)
-    if resolved is not None and type(resolved) is not bool:
-        raise AnnotationError('解决状态筛选无效')
-    if location_status is not None and location_status not in ('exact', 'auto_migrated', 'manual', 'needs_relocation'):
-        raise AnnotationError('定位状态筛选无效')
-    if sort not in ('position', 'created_at', 'updated_at') or not isinstance(search, str):
-        raise AnnotationError('排序或搜索无效')
-    result = []
-    for thread in snapshot['threads']:
-        messages = [m for m in thread['messages'] if not m['deleted_at']]
-        if author_type and not any(m['author']['type'] == author_type for m in messages):
-            continue
-        if category and not any(m['category'] == category for m in messages):
-            continue
-        if resolved is not None and thread['resolved'] != resolved:
-            continue
-        if location_status and thread['association']['status'] != location_status:
-            continue
-        haystack = '\n'.join([thread['original_anchor']['quote'],
-                              (thread['association'].get('anchor') or {}).get('quote', ''),
-                              *(m['body'] + '\n' + m['author']['name'] for m in messages)])
-        if search.casefold() not in haystack.casefold():
-            continue
-        result.append(thread)
-    if sort != 'position':
-        result.sort(key=lambda t: (t[sort], t['id']))
-    return result
-
-
-def overlapping_threads(snapshot, unit_id, start=None, end=None):
-    """Return every overlapping thread, including resolved threads."""
-    result = []
-    for thread in snapshot['threads']:
-        anchor = thread['association'].get('anchor')
-        if not anchor or anchor['unit_id'] != unit_id:
-            continue
-        if anchor['kind'] == 'formula' or (start is not None and end is not None and
-                anchor['start'] < end and start < anchor['end']):
-            result.append(thread)
-    return result
 
 
 class AnnotationSession:

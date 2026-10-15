@@ -170,16 +170,13 @@ Python 公开入口：
 | `load_content(report)` / `validate_content(content)` | 读取与验证清单 |
 | `make_anchor(content, selection)` | 验证并生成选区锚点 |
 | `locate(content, anchor)` | 获取匹配结果及候选 |
-| `AnnotationStore.for_content(content, project_root=None)` | 打开项目共享存储 |
-| `store.read(content)` / `store.dispatch(content, request)` | 读取线程与执行修改 |
-| `store.export()` | 导出含删除记录、历史及正文版本的备份 |
-| `execute_request(store, content, envelope)` | CLI/HTTP 共用的版本检查入口 |
-| `query_threads(snapshot, …)` | 作者、分类、解决状态、定位状态、搜索及排序 |
-| `overlapping_threads(snapshot, unit_id, start, end)` | 获取全部重叠线程 |
+| `AnnotationStore.open(content, project_root=None, *, keep_alive=False)` | 打开绑定正文内容的批注会话 |
+| `session.read()` / `session.read_thread(id)` / `session.metadata()` | 读取线程与修订号 |
+| `session.execute(envelope, *, progress=None, incremental=False)` | CLI/HTTP 共用的版本检查入口，是唯一的修改入口 |
+| `session.export()` | 导出含删除记录、历史及正文版本的备份 |
+| `validate_bundle(content, bundle=None)` | 校验携带的备份，不读写项目文件 |
 
-`query_threads` 默认正文位置排序。创建和更新时间排序使用 `created_at`、`updated_at`，均为升序。
-作者及分类筛选检查未删除的初始批注和回复。正文搜索包含原文、当前关联文字、作者和内容。
-解决线程仍进入列表。上一条/下一条导航可以在过滤后的数组上实现。
+`session.execute` 对 `suggestion_apply` 成功提交的结果返回 `result.source_changed`；是否重建报告由调用方决定（`report_rebuild.execute_on_report`）。
 
 修改操作字段如下。每个操作都必须包含 `operation` 和 `expected_revision`。
 接口拒绝未知或多余字段。
@@ -224,7 +221,7 @@ CLI 的精简输出、预检缓存及批量快照见 [智能体接口](agent-too
 }
 ```
 
-`execute_request` 还接受 `{"operation":"locate","selection":…}`，返回锚点而不修改存储。
+`session.execute` 还接受 `{"operation":"locate","selection":…}`，返回锚点而不修改存储。
 其信封仍须包含项目和版本 ID，但该只读操作不要求 `expected_revision`。
 修改成功返回线程视图、最新 `revision` 和 `result`。
 创建结果提供线程和初始内容 ID；回复结果提供内容 ID。
