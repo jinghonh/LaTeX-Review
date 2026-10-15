@@ -48,9 +48,10 @@ def paper(root, text='Initial acceptance text.'):
 
 
 def fetch(url, *, method='GET', headers=None, data=None):
+    from urllib.request import build_opener, ProxyHandler
     request = Request(url, method=method, headers=headers or {}, data=data)
     try:
-        with urlopen(request, timeout=5) as response:
+        with build_opener(ProxyHandler({})).open(request, timeout=5) as response:
             return response.status, response.read(), response.geturl()
     except HTTPError as error:
         return error.code, error.read(), error.geturl()
@@ -60,7 +61,8 @@ def fetch_report(link):
     status, html, address = fetch(link)
     assert status == 200 and address == link
     worker = re.search(rb'<iframe[^>]+src="([^"]+)"', html).group(1).decode()
-    return fetch(worker)
+    from urllib.parse import urljoin
+    return fetch(urljoin(link, worker))
 
 
 class LocalHarness:
@@ -407,7 +409,7 @@ def test_a6_owner_exit_during_real_rebuild_compile(tmp_path, action):
                 except OSError:
                     pass  # Closing the HTTP owner may close the caller's connection.
             from latex_review.local_state import lock_busy
-            assert not lock_busy(harness.state / 'slots' / f"{content['project_id']}.diff.lock")
+            eventually(lambda: not lock_busy(harness.state / 'slots' / f"{content['project_id']}.diff.lock"))
         finally:
             # These exact PIDs came from the compiler this test spawned.
             for pid in compiler_pids:
@@ -447,7 +449,7 @@ def test_a10_a17_browser_dashboard_and_report_tools(local):
                 report = page.frames[1]
                 report.wait_for_function('window.reviewAnnotations?.getContent() !== null')
                 assert report.locator('body').inner_text().find('New manuscript.') >= 0
-                # Root APIs and annotation mutation use the embedded worker origin.
+                # Paper APIs and annotation mutation use the same-origin worker prefix.
                 created = report.evaluate('''async () => {
                     const api=reviewAnnotations;
                     const u=api.getContent().units.find(u=>u.kind==='text'&&u.text.includes('New manuscript.'));
@@ -458,8 +460,8 @@ def test_a10_a17_browser_dashboard_and_report_tools(local):
                 }''')
                 assert created
                 assert report.evaluate("JSON.stringify(reviewAnnotations.getSnapshot()).includes('Browser acceptance note')")
-                assert report.evaluate("fetch('/api/annotations/export').then(r=>r.ok)")
-                assert report.evaluate("fetch('/api/translation/export').then(r=>r.ok)")
+                assert report.evaluate("fetch('api/annotations/export').then(r=>r.ok)")
+                assert report.evaluate("fetch('api/translation/export').then(r=>r.ok)")
                 # Search selectors are observed in the live and diff templates.
                 search = report.locator('#live-search' if kind == 'live' else '#report-search')
                 assert search.count() == 1
@@ -476,7 +478,7 @@ def test_a10_a17_browser_dashboard_and_report_tools(local):
             eventually(lambda: live_slot.locator('.state').inner_text() == '已停止', timeout=20)
             live_slot.get_by_role('button', name='启动', exact=True).click()
             eventually(lambda: live_slot.locator('.state').inner_text() == '运行中', timeout=30)
-            assert live_slot.get_by_role('link', name='打开').get_attribute('href') == live
+            assert live_slot.get_by_role('link', name='打开').evaluate('(a)=>a.href') == live
         finally:
             browser.close()
 

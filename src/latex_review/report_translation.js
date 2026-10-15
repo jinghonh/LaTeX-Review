@@ -205,7 +205,7 @@
 
   async function api(path, body) {
     if (!localService) throw new Error('请通过本机预览服务打开报告后继续翻译；已有译文仍可阅读。');
-    const response = await fetch('/api/translation/' + path, body === undefined ? {} : {
+    const response = await fetch('api/translation/' + path, body === undefined ? {} : {
       method: 'POST', headers: {'Content-Type': 'application/json', 'X-LaTeX-Review-Token': token},
       body: JSON.stringify(body)
     });
@@ -371,7 +371,7 @@
   exportButton.addEventListener('click', async () => {
     if (!localService) { showStatus('请通过本机服务导出含图片等阅读资源的译文报告。'); return; }
     try {
-      const response = await fetch('/api/translation/export');
+      const response = await fetch('api/translation/export');
       if (!response.ok) throw new Error('导出失败，请检查报告资源是否完整。');
       const url = URL.createObjectURL(await response.blob());
       const anchor = document.createElement('a'); anchor.href = url; anchor.download = 'report-translated.html';

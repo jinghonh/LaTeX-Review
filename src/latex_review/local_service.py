@@ -3,6 +3,8 @@ from collections import deque
 from copy import deepcopy
 from dataclasses import dataclass
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from http.client import HTTPConnection
+
 from importlib.resources import files
 import json
 import logging
@@ -26,6 +28,7 @@ from .local_client import child_environment
 from .local_paths import state_directory
 from .local_protocol import HEADER_TOKEN, LocalError, MAX_BODY, PROTOCOL_VERSION, valid_id
 from .local_reports import copy_report, report_identity
+from .local_security import local_request
 from .local_state import file_lock, lock_busy, read_json, write_json
 
 
@@ -503,8 +506,7 @@ class Handler(BaseHTTPRequestHandler):
         self.server.manager.logger.info('http %s', format % args)
 
     def local(self, *, write=False):
-        expected = f'127.0.0.1:{self.server.server_port}'
-        if self.headers.get('Host') != expected or self.headers.get('Origin') not in (None, 'http://' + expected):
+        if not local_request(self.headers, self.client_address[0]):
             raise LocalError('仅允许当前本机入口访问', 403)
         if write and not secrets.compare_digest(self.headers.get(HEADER_TOKEN, ''), self.server.token):
             raise LocalError('入口令牌无效', 403)
@@ -537,6 +539,8 @@ class Handler(BaseHTTPRequestHandler):
                 if operation is None:
                     raise LocalError('操作不存在', 404)
                 return self.send(manager.public_operation(operation))
+            if self.proxy_worker():
+                return
             if path.startswith('/papers/'):
                 parts = path.strip('/').split('/')
                 if len(parts) != 3 or not valid_id(parts[1]) or parts[2] not in ('live', 'diff'):
@@ -558,17 +562,71 @@ class Handler(BaseHTTPRequestHandler):
         self.send(html, content_type='text/html; charset=utf-8')
 
     def report_frame(self, paper_id, kind, snapshot):
-        origin = f"http://127.0.0.1:{snapshot['port']}"
+        worker_base = f"/papers/{paper_id}/{kind}/worker"
         html = files('latex_review').joinpath('local_report.html').read_text(encoding='utf-8')
-        html = (html.replace('__WORKER_ORIGIN__', origin)
+        html = (html.replace('__WORKER_BASE__', worker_base)
                 .replace('__PAPER_ID__', paper_id)
                 .replace('__KIND__', kind)
                 .replace('__GENERATION__', json.dumps(snapshot['generation']))
                 .replace('__TITLE__', '持续预览' if kind == 'live' else '差异报告'))
-        self.send(html, content_type='text/html; charset=utf-8', frame_origin=origin)
+        self.send(html, content_type='text/html; charset=utf-8', frame_origin="'self'")
+
+    def proxy_worker(self):
+        parts = urlsplit(self.path).path.split('/')
+        if len(parts) < 6 or parts[1] != 'papers' or parts[4] != 'worker':
+            return False
+        if not valid_id(parts[2]) or parts[3] not in ('live', 'diff'):
+            raise LocalError('论文链接无效', 404)
+        slot = self.server.manager.slots.get((parts[2], parts[3]))
+        snapshot = slot.snapshot() if slot else {}
+        if snapshot.get('state') not in ('ready', 'updating') or not snapshot.get('port'):
+            raise LocalError('论文服务不可用', 503)
+        length = int(self.headers.get('Content-Length', '0'))
+        if self.headers.get('Transfer-Encoding') or not 0 <= length <= 8 * 1024 * 1024:
+            raise LocalError('请求大小无效', 413)
+        body = self.rfile.read(length) if length else None
+        prefix = '/'.join(parts[:5])
+        target = self.path[len(prefix):]
+        # Never use a client-supplied host or forwarded header as a proxy target.
+        headers = {key: self.headers[key] for key in (
+            'Content-Type', 'Content-Encoding', HEADER_TOKEN, 'X-LaTeX-Review-Delta-Encoding',
+            'Range', 'If-Modified-Since') if key in self.headers}
+        if self.headers.get('Origin'):
+            headers['Origin'] = f"http://127.0.0.1:{snapshot['port']}"
+        connection = HTTPConnection('127.0.0.1', snapshot['port'], timeout=60)
+        try:
+            connection.request(self.command, target, body=body, headers=headers)
+            response = connection.getresponse()
+            metadata = None
+            if target == '/api/report' and response.status == 200:
+                value = json.loads(response.read())
+                value['report_url'] = 'http://' + self.headers['Host'] + prefix + '/report.html'
+                metadata = json.dumps(value, ensure_ascii=False).encode()
+            self.send_response(response.status)
+            for key, value in response.getheaders():
+                if metadata is not None and key.lower() == 'content-length':
+                    value = str(len(metadata))
+                if key.lower() in ('content-type', 'content-length', 'content-encoding',
+                                   'content-disposition', 'last-modified', 'server-timing',
+                                   'content-range', 'accept-ranges'):
+                    self.send_header(key, value)
+            self.send_header('Cache-Control', 'no-store')
+            self.send_header('X-Content-Type-Options', 'nosniff')
+            self.end_headers()
+            if metadata is not None:
+                self.wfile.write(metadata)
+            else:
+                while chunk := response.read(65536):
+                    self.wfile.write(chunk)
+        finally:
+            connection.close()
+        return True
 
     def do_POST(self):
         try:
+            self.local()
+            if self.proxy_worker():
+                return
             self.local(write=True)
             if self.headers.get('Content-Type', '').split(';')[0] != 'application/json':
                 raise LocalError('需要JSON请求')

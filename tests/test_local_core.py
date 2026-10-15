@@ -55,8 +55,9 @@ def report_url(stable_url):
         assert response.status == 200 and response.url == stable_url
         html = response.read().decode()
         worker_url = re.search(r'<iframe[^>]+src="([^"]+)"', html).group(1)
-        origin = worker_url.rsplit('/', 1)[0]
-        assert 'frame-src ' + origin in response.headers['Content-Security-Policy']
+        from urllib.parse import urljoin
+        worker_url = urljoin(stable_url, worker_url)
+        assert "frame-src 'self'" in response.headers['Content-Security-Policy']
     return worker_url
 
 
@@ -84,10 +85,12 @@ def test_diff_replacement_does_not_rewrite_original(tmp_path):
     root, entry = paper(tmp_path)
     request = diff_request(root, entry, tmp_path / 'report', tmp_path / 'missing.toml')
     first = local_client.ensure(request)
+    original_worker_url = report_url(first['url'])
     original = Path(request['directory']) / 'report.html'
     original.write_text('<h1>Second baseline</h1>')
     second = local_client.ensure(request)
     assert first['url'] == second['url'] and first['pid'] != second['pid']
+    assert report_url(second['url']) == original_worker_url
     with urlopen(report_url(second['url'])) as response:
         assert b'Second baseline' in response.read()
     assert original.read_text() == '<h1>Second baseline</h1>'
@@ -224,6 +227,7 @@ def test_missing_resource_candidate_and_corrupt_registry_recovery(tmp_path):
         assert b'First report' in response.read()
     local_client.stop()
     state = state_directory()
+    wait_until(lambda: not lock_busy(state / 'local.lock'))
     (state / 'registry.json').write_text('{broken')
     (state / 'endpoint.json').write_text('{broken')
     local_client.start()
@@ -296,3 +300,42 @@ assert result[0] != 0, result
         if proc.poll() is None:
             proc.kill()
             proc.wait()
+
+
+def test_forwarded_entry_uses_same_origin_worker_routes(tmp_path):
+    from urllib.parse import urljoin
+    urlopen = build_opener(ProxyHandler({})).open
+    root, entry = paper(tmp_path)
+    result = local_client.ensure(prepare_request(entry, root=root, poll_files=True))
+    headers = {'Host': 'localhost:49123', 'Origin': 'http://localhost:49123'}
+    with urlopen(Request(result['url'], headers=headers)) as response:
+        html = response.read().decode()
+    frame = re.search(r'<iframe[^>]+src="([^"]+)"', html).group(1)
+    assert frame.startswith('/') and '127.0.0.1:' not in frame
+    worker = urljoin(result['url'], frame)
+    with urlopen(Request(worker, headers=headers)) as response:
+        assert b'Current paper.' in response.read()
+    with urlopen(Request(urljoin(worker, 'api/report'), headers=headers)) as response:
+        assert json.load(response)['report_url'] == 'http://localhost:49123' + frame
+    status = urljoin(worker, 'api/translation/status')
+    with urlopen(Request(status, headers=headers)) as response:
+        token = json.load(response)['token']
+        assert token
+    with urlopen(Request(urljoin(worker, 'live-status.json'), headers=headers)) as response:
+        assert response.status == 200
+    # The worker, not the entry management API, validates paper write tokens.
+    with pytest.raises(HTTPError) as error:
+        urlopen(Request(urljoin(worker, 'api/translation/start'), data=b'{}',
+                        headers={**headers, 'Content-Type': 'application/json',
+                                 'X-LaTeX-Review-Token': token}))
+    assert error.value.code == 400
+    for bad in ({'Host': 'evil.example'},
+                {'Host': 'localhost:49123', 'Origin': 'http://localhost:49124'},
+                {'Host': 'localhost:49123', 'Sec-Fetch-Site': 'cross-site'}):
+        with pytest.raises(HTTPError) as error:
+            urlopen(Request(status, headers=bad))
+        assert error.value.code == 403
+    with pytest.raises(HTTPError) as error:
+        urlopen(Request(urljoin(worker, 'api/translation/start'), data=b'{}',
+                        headers={**headers, 'Content-Type': 'application/json'}))
+    assert error.value.code == 403

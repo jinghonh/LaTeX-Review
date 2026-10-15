@@ -128,7 +128,7 @@
   async function readAndRender() {
     const generation=++readGeneration; ready=false;
     try {
-      const [c,s]=adapter?await adapter.read():await Promise.all([json('/api/annotations/content'),json('/api/annotations/status?view=page')]);
+      const [c,s]=adapter?await adapter.read():await Promise.all([json('api/annotations/content'),json('api/annotations/status?view=page')]);
       if(generation!==readGeneration) return;
       check(c,s); document.querySelectorAll('.annotation-card,.annotation-mark').forEach(e=>e.remove()); content=c; roots=new Map(c.units.map(u=>[u.id,document.querySelector(u.selector)])); snapshot=s; token=s.token||token; render(); status.textContent=`${s.threads.length} 条批注`;
       await document.fonts?.ready;
@@ -141,12 +141,12 @@
     if(polling||busy||!ready||!content||document.hidden)return;
     polling=true;const generation=readGeneration;
     try {
-      let s=adapter?.readRevision?await adapter.readRevision():adapter?.readStatus?await adapter.readStatus():adapter?(await adapter.read())[1]:await json('/api/annotations/status?view=revision');
+      let s=adapter?.readRevision?await adapter.readRevision():adapter?.readStatus?await adapter.readStatus():adapter?(await adapter.read())[1]:await json('api/annotations/status?view=revision');
       if(generation!==readGeneration||busy)return;
       check(content,s);
       if(s.revision===snapshot.revision)return;
       if(adapter?.readChanges)s=await adapter.readChanges(snapshot.revision);
-      else if(!adapter)s=await json('/api/annotations/status?view=changes&since='+snapshot.revision);
+      else if(!adapter)s=await json('api/annotations/status?view=changes&since='+snapshot.revision);
       else s=adapter.readStatus?await adapter.readStatus():(await adapter.read())[1];
       if(generation!==readGeneration||busy)return;
       check(content,s);remember(false);
@@ -165,7 +165,7 @@
   async function pollJobs() {
     if((adapter&&!adapter.readJobs)||busy||jobsPolling||document.hidden||!ready)return;
     jobsPolling=true;
-    try {const data=adapter?await adapter.readJobs():await json('/api/annotations/jobs');if(busy)return;if(data.jobs.length){externalJob=true;showProgress(data.jobs.at(-1));}else if(externalJob){externalJob=false;status.textContent='批注任务已结束。';pollUpdates();}}
+    try {const data=adapter?await adapter.readJobs():await json('api/annotations/jobs');if(busy)return;if(data.jobs.length){externalJob=true;showProgress(data.jobs.at(-1));}else if(externalJob){externalJob=false;status.textContent='批注任务已结束。';pollUpdates();}}
     catch(e) {} finally {jobsPolling=false;}
   }
   setInterval(pollJobs,1000);
@@ -190,7 +190,7 @@
     if(adapter)return adapter.update(envelope,showProgress);
     const slow=['suggestion_preview','suggestion_apply','import','reconcile'].includes(envelope.request.operation);
     const payload=await encodeRequest(envelope);
-    let response=await json('/api/annotations/update'+(slow?'?async=1':''),{method:'POST',headers:{'Content-Type':'application/json','X-LaTeX-Review-Token':token,'X-LaTeX-Review-Delta-Encoding':'request-bodies',...payload.headers},body:payload.body});
+    let response=await json('api/annotations/update'+(slow?'?async=1':''),{method:'POST',headers:{'Content-Type':'application/json','X-LaTeX-Review-Token':token,'X-LaTeX-Review-Delta-Encoding':'request-bodies',...payload.headers},body:payload.body});
     if(!response.task_id)return restoreRequestBodies(response,envelope.request);
     const url=response.status_url;
     while(true){
@@ -213,7 +213,7 @@
     if(busy||!ready)throw Error('批注接口或版本不可用');
     busy=true;++readGeneration;
     try{
-      const s=adapter?.readChanges?await adapter.readChanges(snapshot.revision):await json('/api/annotations/status?view=changes&since='+snapshot.revision);
+      const s=adapter?.readChanges?await adapter.readChanges(snapshot.revision):await json('api/annotations/status?view=changes&since='+snapshot.revision);
       check(content,s);render(acceptSnapshot(s));token=s.token||token;
     }finally{busy=false;}
   }
@@ -359,7 +359,7 @@
         const suggestion=m.suggested_replacement,box=el('details',null,'annotation-suggestion');box.append(el('summary',suggestion.status==='applied'?'源码建议 · 已应用':'源码替换建议'));
         box.append(el('pre',suggestion.original_chunk),el('pre',suggestion.replacement_chunk));
         const diff=el('pre',suggestion.reason||'点击预览检查源码差异。');box.append(diff);
-        const preview=button('预览源码差异',async()=>{try{const envelope={project_id:content.project_id,version_id:content.version_id,request:{operation:'suggestion_preview',thread_id:t.id,message_id:m.id,expected_revision:snapshot.revision}};const response=adapter?await adapter.update(envelope):await json('/api/annotations/update',{method:'POST',headers:{'Content-Type':'application/json','X-LaTeX-Review-Token':token},body:JSON.stringify(envelope)});diff.textContent=response.result.diff;}catch(e){diff.textContent=e.message;}});
+        const preview=button('预览源码差异',async()=>{try{const envelope={project_id:content.project_id,version_id:content.version_id,request:{operation:'suggestion_preview',thread_id:t.id,message_id:m.id,expected_revision:snapshot.revision}};const response=adapter?await adapter.update(envelope):await json('api/annotations/update',{method:'POST',headers:{'Content-Type':'application/json','X-LaTeX-Review-Token':token},body:JSON.stringify(envelope)});diff.textContent=response.result.diff;}catch(e){diff.textContent=e.message;}});
         box.append(preview); if(suggestion.status!=='applied')box.append(button('接受并应用源码建议',()=>update({operation:'suggestion_apply',thread_id:t.id,message_id:m.id})));row.append(box);
       }
       const edit=button('编辑',()=>openComposer('edit',t,null,m));

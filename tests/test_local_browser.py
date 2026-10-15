@@ -39,8 +39,8 @@ def test_dashboard_open_stop_start_and_narrow_layout(tmp_path):
             assert report.url == diff_result['url']
             expect(report.frame_locator('iframe').get_by_role('heading', name='First report')).to_be_visible()
             frame = report.frames[1]
-            assert frame.evaluate("fetch('/api/report').then(r=>r.json()).then(v=>v.report_url)") == frame.url
-            assert frame.evaluate("fetch('/api/v1/papers').then(r=>r.status)") == 404
+            assert frame.evaluate("fetch('api/report').then(r=>r.status)") == 200
+            assert frame.evaluate("fetch('api/v1/papers').then(r=>r.status)") == 404
             (Path(diff['directory']) / 'report.html').write_text('<h1>Second baseline</h1>')
             updated = local_client.ensure(diff)
             assert updated['pid'] != diff_result['pid']

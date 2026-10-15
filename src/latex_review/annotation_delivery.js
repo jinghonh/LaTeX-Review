@@ -63,7 +63,7 @@
   if(!api)return;
   if(!content){
     if(location.protocol==='file:'){document.getElementById('annotation-status').textContent='请使用 latex-review-preview 打开本机报告，或使用独立导出的 HTML。';return;}
-    try{const response=await fetch('/api/annotations/content');if(!response.ok)throw Error('正文读取失败');content=await response.json();}
+    try{const response=await fetch('api/annotations/content');if(!response.ok)throw Error('正文读取失败');content=await response.json();}
     catch(e){document.getElementById('annotation-status').textContent=e.message;return;}
   }
   const copy=value=>structuredClone(value),stable=value=>JSON.stringify(value,(_,v)=>v&&typeof v==='object'&&!Array.isArray(v)?Object.fromEntries(Object.keys(v).sort().map(k=>[k,v[k]])):v);
@@ -190,21 +190,21 @@
   let local=false,token=null;
   async function json(url,options) {const r=await fetch(url,options);const value=await r.json();if(!r.ok)fail(value.message||value.error||'批注接口失败');return value;}
   const adapter={
-    async readRevision(){if(local)return transaction(d=>({project_id:d.project_id,version_id:content.version_id,revision:d.revision}));return json('/api/annotations/status?view=revision');},
-    async readChanges(since){return local?transaction(view):json('/api/annotations/status?view=changes&since='+since);},
-    async readJobs(){return local?{jobs:[]}:json('/api/annotations/jobs');},
-    async readStatus(){if(local)return transaction(view);const s=await json('/api/annotations/status?view=page');token=s.token;return s;},
-    async read(){if(local)return [content,await transaction(view)];const [c,s]=await Promise.all([json('/api/annotations/content'),json('/api/annotations/status?view=page')]);token=s.token;return [c,s];},
+    async readRevision(){if(local)return transaction(d=>({project_id:d.project_id,version_id:content.version_id,revision:d.revision}));return json('api/annotations/status?view=revision');},
+    async readChanges(since){return local?transaction(view):json('api/annotations/status?view=changes&since='+since);},
+    async readJobs(){return local?{jobs:[]}:json('api/annotations/jobs');},
+    async readStatus(){if(local)return transaction(view);const s=await json('api/annotations/status?view=page');token=s.token;return s;},
+    async read(){if(local)return [content,await transaction(view)];const [c,s]=await Promise.all([json('api/annotations/content'),json('api/annotations/status?view=page')]);token=s.token;return [c,s];},
     async update(e,progress){
       if(local)return transaction(d=>dispatch(d,e),true);
       const slow=['suggestion_preview','suggestion_apply','import','reconcile'].includes(e.request.operation);
       const payload=await api.encodeRequest(e);
-      const task=await json('/api/annotations/update'+(slow?'?async=1':''),{method:'POST',headers:{'Content-Type':'application/json','X-LaTeX-Review-Token':token,'X-LaTeX-Review-Delta-Encoding':'request-bodies',...payload.headers},body:payload.body});
+      const task=await json('api/annotations/update'+(slow?'?async=1':''),{method:'POST',headers:{'Content-Type':'application/json','X-LaTeX-Review-Token':token,'X-LaTeX-Review-Delta-Encoding':'request-bodies',...payload.headers},body:payload.body});
       if(!task.task_id)return api.restoreRequestBodies(task,e.request);
       while(true){const job=await json(task.status_url);if(job.state==='complete')return job.result;if(job.state==='failed')fail(job.message||'批注任务失败');progress?.(job);await new Promise(resolve=>setTimeout(resolve,300));}
     }
   };
-  async function backup(){return local?transaction(copy):json('/api/annotations/export');}
+  async function backup(){return local?transaction(copy):json('api/annotations/export');}
   function download(value,name,type){const url=URL.createObjectURL(new Blob([value],{type})),a=document.createElement('a');a.href=url;a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);}
   const controls=document.createElement('div');controls.className='annotation-portable-tools';const delivery=document.createElement('details');delivery.className='annotation-delivery';const summary=document.createElement('summary');summary.textContent='导入与导出';delivery.append(summary,controls);
   const notice=document.createElement('p');notice.setAttribute('role','status');
