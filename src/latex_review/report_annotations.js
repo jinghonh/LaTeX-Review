@@ -15,7 +15,7 @@
       if(n.nodeType===3) { for(let i=0;i<n.data.length;i++) raw.push({c:n.data[i],a:[n,i],b:[n,i+1]}); }
       else if(n.nodeType===1 && n.hasAttribute('data-annotation-latex')) {
         const p=n.parentNode,i=Array.prototype.indexOf.call(p.childNodes,n); raw.push({c:'\ufffc',a:[p,i],b:[p,i+1],atom:n});
-      } else if(!n.classList?.contains('annotation-card')&&!n.classList?.contains('annotation-mark')) for(const child of n.childNodes) walk(child);
+      } else if(!n.classList?.contains('annotation-card')&&!n.classList?.contains('annotation-mark')&&!n.classList?.contains('structure-number')) for(const child of n.childNodes) walk(child);
     }
     walk(root);
     const entries=[];

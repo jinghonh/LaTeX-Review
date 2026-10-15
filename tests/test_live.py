@@ -141,7 +141,7 @@ def test_live_navigation_and_refresh_preserve_reading_state(tmp_path):
                     page.evaluate('window.scrollTo(0,0)')
                     if not page.locator('#sections-side').is_visible():
                         page.locator('#toggle-sections').click()
-                    page.get_by_role('button', name='Replacement', exact=True).click()
+                    page.get_by_role('button', name='3 Replacement', exact=True).click()
                     assert page.evaluate('scrollY') > 0
                     assert page.evaluate('document.documentElement.scrollWidth <= innerWidth')
                 page.locator('.live-controls a[href="#live-diagnostics"]').click()
@@ -206,18 +206,18 @@ def test_live_section_tree_restores_expansion(tmp_path):
         page.goto((output / 'report.html').as_uri())
         api.expect(page.locator('#sections-side')).to_be_visible()
         assert page.locator('.section-count').count() == 0
-        api.expect(page.get_by_role('button', name='Deep', exact=True)).to_be_hidden()
+        api.expect(page.get_by_role('button', name='1.1.1 Deep', exact=True)).to_be_hidden()
         page.locator('#section-tree details > summary').nth(1).click(position={'x': 3, 'y': 10})
-        api.expect(page.get_by_role('button', name='Deep', exact=True)).to_be_visible()
+        api.expect(page.get_by_role('button', name='1.1.1 Deep', exact=True)).to_be_visible()
         page.reload()
-        api.expect(page.get_by_role('button', name='Deep', exact=True)).to_be_visible()
+        api.expect(page.get_by_role('button', name='1.1.1 Deep', exact=True)).to_be_visible()
         page.locator('#close-sections').click()
         page.reload()
         api.expect(page.locator('#sections-side')).to_be_hidden()
         page.set_viewport_size({'width': 390, 'height': 900})
         page.locator('#toggle-sections').click()
-        page.get_by_role('button', name='Second', exact=True).click()
+        page.get_by_role('button', name='1.1 Second', exact=True).click()
         api.expect(page.locator('#sections-side')).to_be_hidden()
-        api.expect(page.get_by_role('button', name='Second', exact=True, include_hidden=True)).to_have_attribute('aria-current', 'location')
+        api.expect(page.get_by_role('button', name='1.1 Second', exact=True, include_hidden=True)).to_have_attribute('aria-current', 'location')
         assert not errors
         browser.close()

@@ -20,7 +20,7 @@ def test_live_section_click_keeps_clicked_heading_active(tmp_path, browser_page)
     page.set_viewport_size({'width': 2048, 'height': 1157})
     page.goto((output / 'report.html').as_uri())
     page.evaluate("document.getElementById('translation-status').hidden = true")
-    button = page.get_by_role('button', name='Second', exact=True)
+    button = page.get_by_role('button', name='2 Second', exact=True)
     button.click()
     # Let the scroll handler run after the click's immediate highlight.
     page.evaluate('() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))')
@@ -68,7 +68,7 @@ def test_sections_hierarchy_deleted_and_mobile(tmp_path, browser_page):
     page.goto(report.html.as_uri())
     buttons = page.locator('.section-jump')
     assert buttons.count() == 6
-    assert ['First', 'Deleted', 'Last'] == [buttons.nth(i).inner_text().split(' · ')[0].split('\n')[0] for i in range(3)]
+    assert ['1 First', '2 Deleted', '2 Last'] == [buttons.nth(i).inner_text().split(' · ')[0].split('\n')[0] for i in range(3)]
     expect(page.get_by_role('button', name='Deep', exact=False)).to_be_hidden()
     summary = page.locator('#section-tree details > summary').nth(1)
     summary.click(position={'x': 3, 'y': 10})
@@ -86,7 +86,7 @@ def test_sections_hierarchy_deleted_and_mobile(tmp_path, browser_page):
     page.locator('#layout-mode').select_option('reading')
     page.evaluate('''() => {
       const headings = [...document.querySelectorAll('.preview-side[data-side="new"] h2')];
-      headings.find(node => node.textContent.trim() === 'Last').scrollIntoView({block: 'start'});
+      headings.find(node => node.textContent.trim().endsWith('Last')).scrollIntoView({block: 'start'});
     }''')
     expect(page.get_by_role('button', name='Last', exact=False)).to_have_attribute('aria-current', 'location')
     page.set_viewport_size({'width': 600, 'height': 800})

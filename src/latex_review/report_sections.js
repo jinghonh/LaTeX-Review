@@ -54,7 +54,9 @@
       const li = document.createElement('li');
       const row = document.createElement('div'); row.className = 'section-row';
       const button = document.createElement('button'); button.type = 'button'; button.className = 'section-jump';
-      const label = entry.node.section.at(-1) || '未命名章节';
+      const target = document.getElementById(entry.node.side + '-' + entry.node.id);
+      const title = target && Array.from(target.children).find(child => /^H[1-6]$/.test(child.tagName));
+      const label = title?.textContent.trim().replace(/\s+/g, ' ') || entry.node.section.at(-1) || '未命名章节';
       const name = document.createElement('span'); name.textContent = label + (entry.node.side === 'old' ? ' · 已删除' : '');
       const count = document.createElement('span'); count.className = 'section-count';
       button.append(name);

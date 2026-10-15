@@ -90,7 +90,7 @@ def build_content(project, preview_html: str, *, project_root: Path | None = Non
 
     def display_only(element):
         while element:
-            if {'asset', 'asset-card', 'asset-metadata', 'asset-fallback'} & set(element.attrs.get('class', '').split()):
+            if {'asset', 'asset-card', 'asset-metadata', 'asset-fallback', 'structure-number'} & set(element.attrs.get('class', '').split()):
                 return True
             element = element.parent
         return False

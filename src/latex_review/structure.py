@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field, replace
 from hashlib import sha1
+from functools import cached_property
 import logging
 import re
 
@@ -19,11 +20,14 @@ from .latex_commands import MATH_COMMANDS, REFERENCE_COMMANDS, TEXT_COMMANDS
 _COMMAND = re.compile(r"\\([A-Za-z@]+|.)")
 _ENV = re.compile(r"\\(begin|end)\s*\{([^{}\s]+)\}")
 _HEADING = {"part": 0, "chapter": 1, "section": 2, "subsection": 3, "subsubsection": 4}
-_MATH_ENV = {"equation", "equation*", "align", "align*", "gather", "gather*", "multline", "multline*", "displaymath", "math"}
+_MATH_ENV = {"equation", "equation*", "align", "align*", "alignat", "alignat*", "flalign", "flalign*", "gather", "gather*", "multline", "multline*", "displaymath", "math"}
+_NUMBERING_COMMANDS = {'appendix': 0, 'setcounter': 2, 'addtocounter': 2, 'stepcounter': 1,
+                       'refstepcounter': 1, 'counterwithin': 2, 'counterwithout': 2,
+                       'numberwithin': 2, 'newcounter': 1}
 _LIST_ENV = {"itemize", "enumerate", "description"}
 _TABLE_ENV = {"table", "table*", "tabular", "tabular*", "longtable"}
 _MATH_ARRAY_ENV = {"array", "matrix", "pmatrix", "bmatrix", "Bmatrix", "vmatrix", "Vmatrix"}
-_CONTAINER_ENV = {"frontmatter", "abstract", "keyword", "keywords"}
+_CONTAINER_ENV = {"frontmatter", "abstract", "keyword", "keywords", "subequations"}
 _FIGURE_ENV = {"figure", "figure*"}
 _THEOREM_ENV = {"theorem", "lemma", "proposition", "corollary", "definition", "remark", "proof", "example", "claim"}
 _SAFE_COMMANDS = {
@@ -35,6 +39,7 @@ _SAFE_COMMANDS = {
     "maketitle", "title", "author", "date", "abstract", "thanks", "today", "and", "quad", "qquad", "ldots", "cdots",
     "newcommand", "renewcommand", "providecommand", "DeclareRobustCommand", "newenvironment", "renewenvironment", "provideenvironment",
     "newtheorem", "def", "gdef", "edef", "xdef", "setlength", "setcounter", "numberwithin", "tableofcontents",
+    *_NUMBERING_COMMANDS,
     *MATH_COMMANDS, *TEXT_COMMANDS,
 }
 
@@ -60,6 +65,12 @@ class ParsedProject:
     labels: dict[str, str]
     bibliography: dict[str, BibliographyEntry] = field(default_factory=dict)
     macros: dict[str, MacroPlaceholder] = field(default_factory=dict)
+    compiled_numbering: dict = field(default_factory=dict, repr=False, compare=False)
+
+    @cached_property
+    def numbering(self):
+        from .numbering import resolve_numbering
+        return resolve_numbering(self, self.compiled_numbering)
 
     @property
     def review_nodes(self) -> tuple[ReviewNode, ...]:
@@ -487,6 +498,26 @@ class _Builder:
             command = _COMMAND.match(self.mask, i)
             if command:
                 name = command.group(1)
+                if name in _NUMBERING_COMMANDS:
+                    self._flush(pending, i, parent)
+                    finish = command.end()
+                    for _ in range(_NUMBERING_COMMANDS[name]):
+                        arg = _argument(self.mask, finish)
+                        if arg:
+                            finish = arg[0]
+                    self.add('metadata', i, finish, parent)
+                    i = pending = finish
+                    continue
+                if name in {'newcommand', 'renewcommand', 'providecommand', 'DeclareRobustCommand', 'def', 'gdef', 'edef', 'xdef'}:
+                    target = _argument(self.mask, command.end())
+                    direct = re.match(r'\s*\\[A-Za-z@]+', self.mask[command.end():])
+                    after = command.end() + direct.end() if direct else target[0] if target else command.end()
+                    body = _argument(self.mask, after)
+                    if body:
+                        self._flush(pending, i, parent)
+                        self.add('metadata', i, body[0], parent)
+                        i = pending = body[0]
+                        continue
                 if frontmatter and name in {"title", "author", "date", "affiliation", "address", "ead", "corref", "cortext", "fnref", "fntext", "journal"}:
                     arg = _argument(self.mask, command.end())
                     finish = arg[0] if arg else command.end()

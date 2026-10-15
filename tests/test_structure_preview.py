@@ -133,8 +133,8 @@ def test_nested_captions_and_underscored_unknown_environment(tmp_path):
     with resolve_sources(entry="main.tex", old_dir=old, new_dir=new) as pair:
         before, after = parse_project(pair.old.expand()), parse_project(pair.new.expand())
         preview = render_preview(before, after)
-    assert re.search(r"<figcaption>\s*A caption with <em>nested emphasis</em>\.\s*</figcaption>", preview.html)
-    assert re.search(r'<p class="table-caption">\s*A table with <em>nested text</em>\.\s*</p>', preview.html)
+    assert re.search(r'<figcaption><span class="structure-number">Figure 1</span>\s*A caption with <em>nested emphasis</em>\.\s*</figcaption>', preview.html)
+    assert re.search(r'<p class="table-caption"><span class="structure-number">Table 1</span>\s*A table with <em>nested text</em>\.\s*</p>', preview.html)
     fallback = next(node for node in before.nodes if node.review.type == "fallback" and "odd_env_name" in node.review.raw_latex)
     assert fallback.review.raw_latex == r"\begin{odd_env_name}Unknown content\end{odd_env_name}"
     assert fallback.review.source.file == "main.tex" and fallback.origins

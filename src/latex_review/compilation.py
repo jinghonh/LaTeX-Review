@@ -236,6 +236,8 @@ def compile_side(source: ProjectSource, output_dir: Path, *, engine: str = "pdfl
             project = Path(temporary).resolve()
             try:
                 _copy_project(source, project, output_dir.resolve())
+                from .compile_numbering import collect, instrument
+                numbering_mapping = instrument(source, project)
                 entry = project / source.entry
                 if not entry.is_file():
                     raise OSError("隔离副本缺少入口文件")
@@ -281,6 +283,8 @@ def compile_side(source: ProjectSource, output_dir: Path, *, engine: str = "pdfl
                     _write_managed(output_dir, Path(synctex_rel), source=synctex_path)
                 if exit_code == 0 and pdf_rel is not None and reason is None:
                     status = "success"
+                    _write_managed(output_dir, Path(f'compiled/{side}/numbering.json'),
+                                   content=collect(out, numbering_mapping))
                 else:
                     status = "failed"
                     reason = reason or f"latexmk 退出状态 {exit_code}；详见编译日志"

@@ -59,13 +59,15 @@ class PreviewResult:
             before_main = ('<header><h1>LaTeX 内容预览</h1><p class="notice">用于审阅正文内容，不代表最终编译版式。</p>\n'
                            '<p id="math-status" role="status">正在加载在线公式排版。</p></header>')
         body = '<body class="' + _e(body_class) + '">' if body_class else '<body>'
+        from importlib.resources import files
+        position_script = files('latex_review').joinpath('reading_position.js').read_text(encoding='utf-8')
         return f'''<!doctype html>
 <html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>{_e(title)}</title>
 <style>{self._style}{style}</style>{head}</head>{body}
 {before_main}
 <main>{self._content}{main_end}</main>
-{after_main}{scripts_before_math}{self._math_scripts}{scripts_after_math}
+{after_main}<script>{position_script}</script>{scripts_before_math}{self._math_scripts}{scripts_after_math}
 </body></html>'''
 
     def anchors(self) -> set[str]:
@@ -113,6 +115,30 @@ def _e(value: object) -> str:
 
 def _anchor(side: str, node_id: str) -> str:
     return f"{side}-{node_id}"
+
+
+def _reference_html(key: str, raw: str, project: ParsedProject, side: str, anchor: str = '') -> str:
+    target = project.labels.get(key)
+    if not target:
+        return f'<span class="unresolved-ref"{anchor}>?? ({_e(key)})</span>'
+    node = project.by_id()[target].review
+    label = project.numbering.labels.get(key, project.numbering.nodes.get(target))
+    if label is None:
+        label = node.section_path[-1] if node.type in {'part', 'chapter', 'section', 'subsection', 'subsubsection'} and node.section_path else key
+    elif raw.startswith(r'\eqref'):
+        label = '(' + label + ')'
+    elif raw.startswith(r'\autoref'):
+        label = {'figure': 'Figure', 'table': 'Table', 'equation': 'Equation', 'section': 'section',
+                 'subsection': 'subsection', 'subsubsection': 'subsubsection', 'chapter': 'chapter', 'part': 'part'}.get(node.type, '') + ' ' + label
+    # A source-only preview cannot infer page numbers.
+    if raw.startswith(r'\pageref'):
+        label = key
+    return f'<a class="cross-ref" href="#{_e(_anchor(side, target))}"{anchor}>{_e(label)}</a>'
+
+
+def _number_prefix(node: ParsedNode, project: ParsedProject, name: str = '') -> str:
+    number = project.numbering.nodes.get(node.review.id)
+    return f'<span class="structure-number">{_e(name + number)}</span> ' if number else ''
 
 
 def _citation_html(keys: tuple[str, ...], project: ParsedProject, side: str, anchor: str = "", author_only: bool = False) -> str:
@@ -304,14 +330,7 @@ def _dom_html(node: object, project: ParsedProject, side: str, inline: list[Pars
                         diagnostics.append(diagnostic)
             return _citation_html(tuple(keys), project, side, anchor, name == "citeauthor")
         key = keys[0].strip() if keys else ""
-        target = project.labels.get(key)
-        label = key
-        if target:
-            node_info = project.by_id()[target].review
-            if node_info.type in {"part", "chapter", "section", "subsection", "subsubsection"} and node_info.section_path:
-                label = node_info.section_path[-1]
-            return f'<a class="cross-ref" href="#{_e(_anchor(side, target))}"{anchor}>{_e(label)}</a>'
-        return f'<span class="unresolved-ref"{anchor}>?? ({_e(key)})</span>'
+        return _reference_html(key, raw, project, side, anchor)
     if type(node).__module__ == "plasTeX.Context":
         return '<span class="preview-unavailable">此处暂无法预览</span>'
     children = "".join(_dom_html(child, project, side, inline, cursors, diagnostics, source)
@@ -389,13 +408,7 @@ def _inline_html(raw: str, project: ParsedProject, side: str, inline: list[Parse
                 pieces.append(_citation_html(item.citations, project, side, anchor, bool(re.match(r"\\citeauthor(?![A-Za-z@])", item.review.raw_latex))))
             else:
                 key = item.references[0] if item.references else ""
-                target = project.labels.get(key)
-                if target:
-                    node_info = project.by_id()[target].review
-                    label = node_info.section_path[-1] if node_info.type in {"part", "chapter", "section", "subsection", "subsubsection"} and node_info.section_path else key
-                    pieces.append(f'<a class="cross-ref" href="#{_e(_anchor(side, target))}"{anchor}>{_e(label)}</a>')
-                else:
-                    pieces.append(f'<span class="unresolved-ref"{anchor}>?? ({_e(key)})</span>')
+                pieces.append(_reference_html(key, item.review.raw_latex, project, side, anchor))
             cursor = relative + len(item.review.raw_latex)
         suffix = [child for child in inline if child.review.type not in {"citation", "reference"} and
                   (base_start is None or child.expanded_start >= base_start + cursor)]
@@ -579,7 +592,7 @@ def _body(node: ParsedNode, project: ParsedProject, side: str, by_id: dict[str, 
         depth = {"title": 1, "part": 1, "chapter": 1, "section": 2, "subsection": 3, "subsubsection": 4}[kind]
         title_html = _inline_html(title, project, side, title_children, diagnostics, node.review.source,
                                   node.expanded_start + arg[2] if arg else None)
-        heading = f"<h{depth}>{title_html}</h{depth}>"
+        heading = f"<h{depth}>{_number_prefix(node, project)}{title_html}</h{depth}>"
         return heading + "".join(_render_node(child, project, side, by_id, diagnostics, figure_assets, sentence_highlights) for child in children)
     if kind == "paragraph":
         changed = (sentence_highlights or {}).get((side, node.review.id))
@@ -615,7 +628,12 @@ def _body(node: ParsedNode, project: ParsedProject, side: str, by_id: dict[str, 
         arrays = "".join(_render_node(child, project, side, by_id, diagnostics, figure_assets, sentence_highlights)
                          for child in children if child.review.type == "math_array")
         fallback_url = (figure_assets or {}).get((side, node.review.id))
-        return _math_preview(node.review.raw_latex, project, side, node.review.source, diagnostics, True, fallback_url) + arrays
+        raw = project.numbering.equations.get(node.review.id, node.review.raw_latex)
+        rendered = _math_preview(raw, project, side, node.review.source, diagnostics, True, fallback_url)
+        # Annotation selectors always use the unmodified source.
+        rendered = rendered.replace('data-annotation-latex="' + _e(raw) + '"',
+                                    'data-annotation-latex="' + _e(node.review.raw_latex) + '"')
+        return rendered + arrays
     if kind == "math_array":
         return ""  # 已由父公式预览，保留独立来源锚点。
     if kind == "frontmatter":
@@ -665,7 +683,7 @@ def _body(node: ParsedNode, project: ParsedProject, side: str, by_id: dict[str, 
                 original_pieces.append(suffix)
                 if re.sub(r'\s+', ' ', ''.join(original_pieces)).strip() == re.sub(r'\s+', ' ', caption_html).strip():
                     caption_html = "".join(pieces)
-        return assets + missing + (f'<figcaption>{caption_html}</figcaption>' if caption else "") + _embedded_fallbacks(children, side)
+        return assets + missing + (f'<figcaption>{_number_prefix(node, project, "Figure ")}{caption_html}</figcaption>' if caption else "") + _embedded_fallbacks(children, side)
     if kind == "table":
         caption = _caption(node.review.raw_latex)
         caption_children = [child for child in children if child.review.type != "fallback"]
@@ -673,7 +691,7 @@ def _body(node: ParsedNode, project: ParsedProject, side: str, by_id: dict[str, 
         table_html = None if compiled and not display_tables(node.review.raw_latex) else _table_preview(node, project, side, diagnostics)
         if table_html is None and compiled:
             table_html = f'<img class="compiled-fragment" src="{_e(compiled)}" alt="表格预览" loading="lazy">'
-        return ((f'<p class="table-caption">{_inline_html(caption[0], project, side, caption_children, diagnostics, node.review.source, node.expanded_start + caption[1])}</p>' if caption else "")
+        return ((f'<p class="table-caption">{_number_prefix(node, project, "Table ")}{_inline_html(caption[0], project, side, caption_children, diagnostics, node.review.source, node.expanded_start + caption[1])}</p>' if caption else "")
                 + (table_html or '<p class="preview-unavailable">此处暂无法预览</p>')
                 + _embedded_fallbacks(children, side))
     if kind == "bibliography" and not children and project.bibliography:
@@ -760,6 +778,11 @@ def render_preview(old: ParsedProject | None, new: ParsedProject, *,
         if project is None:
             continue
         by_id = project.by_id()
+        for node_id in sorted(project.numbering.unknown):
+            location = by_id[node_id].review.source
+            diagnostics.append(Diagnostic('preview_number_unknown', 'warning', '编号规则无法从源码确认；请提供当前 LaTeX 编译的辅助文件。',
+                                          source_old=location if side == 'old' else None,
+                                          source_new=location if side == 'new' else None))
         seen_citations: set[str] = set()
         for node in project.nodes:
             if node.review.type == "citation":

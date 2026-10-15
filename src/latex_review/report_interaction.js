@@ -463,7 +463,8 @@
     const entry = geometry?.[activeSide].find(item => item.node === stableNode[activeSide]);
     const offset = entry ? panel.scrollTop + panel.clientHeight / 2 - entry.top : null;
     geometry = null;
-    if (entry && sync.checked && !readingView()) {
+    // Width changes use the shared character anchor. Keep block anchors for other layout changes.
+    if (entry && sync.checked && !readingView() && !window.reviewReadingPosition?.isResizing()) {
       measure();
       const updated = geometry[activeSide].find(item => item.node === entry.node);
       if (updated) {

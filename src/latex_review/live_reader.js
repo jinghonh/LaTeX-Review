@@ -2,7 +2,11 @@
   const paper = document.querySelector('.preview-side');
   const search = document.getElementById('live-search');
   const sections = paper ? Array.from(paper.querySelectorAll('.node-part,.node-chapter,.node-section,.node-subsection,.node-subsubsection')) : [];
-  const heading = node => node.querySelector('h1,h2,h3,h4')?.textContent.trim() || '';
+  const heading = node => {
+    const title = node.querySelector('h1,h2,h3,h4')?.cloneNode(true);
+    title?.querySelector('.structure-number')?.remove();
+    return title?.textContent.trim() || '';
+  };
   const storageKey = 'latex-live:' + location.pathname;
   let saved = null;
   try { saved = JSON.parse(sessionStorage.getItem(storageKey)); } catch (_) {}

@@ -55,7 +55,7 @@ def test_sentence_copy_preserves_rendering_without_duplicate_interaction(project
     raw = paragraph.review.raw_latex
     html = render_sentence_copy(raw, project, 'new', paragraph.review.id, (1,))
     assert '<strong>bold</strong>' in html
-    assert 'x+1' in html and 'citation' in html and 'Method' in html
+    assert 'x+1' in html and 'citation' in html and '<span>1</span>' in html
     assert ' id=' not in html and '<a' not in html and 'href=' not in html
     assert render_sentence_copy(None, project, 'new', None, ()) == '该侧无内容'
     for unsafe in ('<script>alert(1)</script>', r'\href{javascript:alert(1)}{click}'):

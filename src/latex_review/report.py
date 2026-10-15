@@ -595,6 +595,13 @@ def write_report(old: ParsedProject, new: ParsedProject, comparison: ComparisonR
         raise ReportPathError("报告输出目录不可为符号链接")
     directory = requested_directory.resolve()
     directory.mkdir(parents=True, exist_ok=True)
+    if statuses:
+        projects = {'old': old, 'new': new}
+        for status in statuses:
+            path = directory / 'compiled' / status.side / 'numbering.json'
+            if status.status == 'success' and path.is_file():
+                projects[status.side] = replace(projects[status.side], compiled_numbering=json.loads(path.read_text(encoding='utf-8')))
+        old, new = projects['old'], projects['new']
     if pdf_converter is None:
         converters = _pdf_converters((old.expanded.source, new.expanded.source), directory)
     else:
