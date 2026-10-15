@@ -55,3 +55,22 @@ def test_source_changes_while_math_extension_is_loading(chrome):
     page.evaluate('reviewMath.complete()')
     assert page.locator('.math-tex mjx-container').text_content()=='latest'
     page.close()
+
+
+def test_stylesheet_refreshes_after_batches_for_tagged_layouts(chrome):
+    # tex2chtml does not insert CSS for newly used structures such as \tag tables.
+    page=chrome.new_page();page.set_content(document(30))
+    page.evaluate("""()=>{window.updates=0;window.MathJax={startup:{promise:Promise.resolve(),document:{clear(){},updateDocument(){updates++;let s=document.getElementById('MJX-CHTML-styles');if(!s){s=document.createElement('style');s.id='MJX-CHTML-styles';document.head.append(s);}s.textContent='mjx-mtd{display:table-cell}';}}},tex2chtmlPromise:async latex=>{const n=document.createElement('mjx-container');n.textContent=latex;return n;}};mathDependencyReady();}""")
+    page.evaluate('reviewMath.complete()')
+    assert page.evaluate('updates')>=1
+    assert 'mjx-mtd' in page.locator('#MJX-CHTML-styles').text_content()
+    page.close()
+
+
+def test_stylesheet_refresh_failure_keeps_rendered_formulas(chrome):
+    page=chrome.new_page();page.set_content(document(5))
+    page.evaluate("""()=>{window.MathJax={startup:{promise:Promise.resolve(),document:{updateDocument(){throw Error('style failure');}}},tex2chtmlPromise:async latex=>{const n=document.createElement('mjx-container');n.textContent=latex;return n;}};mathDependencyReady();}""")
+    result=page.evaluate('reviewMath.complete()')
+    assert result['errors']==0 and page.locator('.math-tex mjx-container').count()==5
+    assert page.evaluate("reviewRenderDiagnostics.some(d=>d.kind==='math-style')")
+    page.close()

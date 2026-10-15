@@ -13,6 +13,8 @@
     node.style.visibility='visible';node.dataset.renderError=String(reason);
     window.reviewRenderDiagnostics.push({kind:'math',reason:String(reason)});
   }
+  // tex2chtml only returns DOM; CSS for newly used structures (e.g. \tag tables) needs a stylesheet update.
+  function refreshStyles(){const doc=window.MathJax?.startup?.document;if(!doc?.updateDocument)return;try{doc.clear?.();doc.updateDocument();}catch(error){window.reviewRenderDiagnostics.push({kind:'math-style',reason:String(error.message||error)});}}
   function pending(){return [...document.querySelectorAll('.math-tex')].filter(node=>!states.has(node)&&!node.querySelector('mjx-container'));}
   function update(){status.dataset.state=failed?'failed':errors?'partial':'ready';status.textContent=failed?'在线公式排版不可用；保留公式原文。':errors?'部分公式暂无法预览；保留公式原文。':'公式排版完成。';window.dispatchEvent(new Event('review-math-ready'));}
   async function drain(){
@@ -38,6 +40,7 @@
           states.set(node,'done');
           if(++count>=(failed?64:24)||performance.now()-start>=12)break;
         }
+        if(engine&&!failed)refreshStyles();
         await pause();if(index>=nodes.length){nodes=pending();index=0;}
       }
       update();
