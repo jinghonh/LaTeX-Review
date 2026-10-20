@@ -10,7 +10,8 @@ from test_annotation_delivery_browser import live_report, chrome, ready, create
 from test_annotations import envelope
 
 
-def test_static_publication_annotations_and_export_policy(live_report, chrome):
+@pytest.mark.parametrize('stored_encoding', ['complete', 'shared-units-v1'])
+def test_static_publication_annotations_and_export_policy(live_report, chrome, stored_encoding):
     _, _, output, _ = live_report
     (output / 'diff.json').write_text('{}')
     (output / 'assets').mkdir()
@@ -41,8 +42,10 @@ def test_static_publication_annotations_and_export_policy(live_report, chrome):
             page.reload()
             page.wait_for_function('window.reviewAnnotationDeliveryReady===true')
             assert page.evaluate('reviewAnnotationDelivery.backup()') == bundle
-            # An old complete IndexedDB record migrates on the next transaction.
-            page.evaluate('''async b=>{const db=await new Promise((ok,no)=>{const r=indexedDB.open('latex-review-annotations',1);r.onsuccess=()=>ok(r.result);r.onerror=()=>no(r.error);});await new Promise((ok,no)=>{const tx=db.transaction('projects','readwrite');tx.objectStore('projects').put(b,b.project_id);tx.oncomplete=ok;tx.onerror=no;});db.close();}''', bundle)
+            # Both historical storage shapes become the complete shape on the next write.
+            from latex_review.version_storage import pack_versions
+            stored_bundle = pack_versions(bundle) if stored_encoding == 'shared-units-v1' else bundle
+            page.evaluate('''async value=>{const db=await new Promise((ok,no)=>{const r=indexedDB.open('latex-review-annotations',1);r.onsuccess=()=>ok(r.result);r.onerror=()=>no(r.error);});await new Promise((ok,no)=>{const tx=db.transaction('projects','readwrite');tx.objectStore('projects').put(value.bundle,value.project_id);tx.oncomplete=ok;tx.onerror=no;});db.close();}''', {'bundle': stored_bundle, 'project_id': bundle['project_id']})
             page.reload()
             page.wait_for_function('window.reviewAnnotationDeliveryReady===true')
             assert page.evaluate('reviewAnnotationDelivery.backup()') == bundle
@@ -147,7 +150,119 @@ def test_local_content_read_failure_is_visible(live_report, chrome):
             worker.join()
 
 
-def test_compressed_publication_preserves_history_and_location(live_report, chrome):
+@pytest.mark.parametrize('storage,failure', [
+    (storage, failure) for storage in ('disk', 'legacy')
+    for failure in (403, 404, 405, 409, 503, 'network', 'invalid_json')
+    if storage == 'disk' or failure not in (404, 405)
+])
+def test_http_annotation_failure_keeps_disk_storage(live_report, chrome, storage, failure):
+    import re
+    from latex_review.annotations import AnnotationStore, load_content
+    from latex_review.delivery import embed_annotations
+    from latex_review.serve import create_server
+    root, _, output, _ = live_report
+    content = load_content(output)
+    target = output / 'report.html'
+    html = embed_annotations(target.read_text(), content)
+    if storage == 'legacy':
+        html = re.sub(r'<meta name="latex-review-annotation-storage"[^>]*>', '', html)
+    target.write_text(html)
+    with create_server(output, annotation_project_root=root) as server:
+        worker = Thread(target=server.serve_forever)
+        worker.start()
+        try:
+            page = chrome.new_page()
+            page.route('https://**', lambda route: route.abort())
+            url = f'http://127.0.0.1:{server.server_port}/report.html'
+            draft_key = f'latex-review-drafts:{content["project_id"]}:/report.html'
+            saved_draft = None
+            if storage == 'disk' and failure == 503:
+                ready(page, url)
+                page.evaluate('''()=>{const u=reviewAnnotations.getContent().units.find(u=>u.text.startsWith('Stable'));reviewAnnotations.openComposer('create',null,{unit_id:u.id,start:0,end:6,quote:'Stable'});}''')
+                page.locator('.annotation-editor > textarea').fill('Draft survives backend outage')
+                saved_draft = page.evaluate('key=>localStorage.getItem(key)', draft_key)
+                assert saved_draft is not None
+            def fail_status(route):
+                if failure == 'network':
+                    route.abort()
+                elif failure == 'invalid_json':
+                    route.fulfill(status=200, content_type='application/json', body='broken JSON')
+                else:
+                    route.fulfill(status=failure, content_type='application/json', body='{"message":"批注暂不可用"}')
+            page.route('**/api/annotations/status?*', fail_status)
+            page.goto(url)
+            page.wait_for_function('document.querySelector(".annotation-portable-tools [role=status]")?.textContent.includes("输入已保留")')
+            assert not page.evaluate('Boolean(window.reviewAnnotationDeliveryReady)')
+            assert page.evaluate('indexedDB.databases()') == []
+            assert not AnnotationStore.open(content).export()['threads']
+            if saved_draft:
+                assert page.evaluate('key=>localStorage.getItem(key)', draft_key) == saved_draft
+            # Recovery uses the same disk store, without leaving a browser-only branch.
+            page.unroute('**/api/annotations/status?*', fail_status)
+            ready(page, url)
+            if saved_draft:
+                assert page.locator('.annotation-editor > textarea').input_value() == 'Draft survives backend outage'
+            create(page)
+            assert len(AnnotationStore.open(content).export()['threads']) == 1
+            assert page.evaluate('indexedDB.databases()') == []
+            page.close()
+        finally:
+            server.shutdown()
+            worker.join()
+
+
+@pytest.mark.parametrize('status', [404, 405])
+def test_unmarked_static_http_report_uses_browser_storage(live_report, chrome, status):
+    import re
+    from latex_review.delivery import publication_html
+    _, _, output, _ = live_report
+    html = re.sub(r'<meta name="latex-review-annotation-storage"[^>]*>', '', publication_html(output))
+    (output / 'report.html').write_text(html)
+    with ThreadingHTTPServer(('127.0.0.1', 0), partial(SimpleHTTPRequestHandler, directory=str(output))) as server:
+        worker = Thread(target=server.serve_forever)
+        worker.start()
+        try:
+            page = chrome.new_page()
+            page.route('**/api/annotations/status?*', lambda route: route.fulfill(status=status, content_type='text/html', body='<h1>No annotation API</h1>'))
+            ready(page, f'http://127.0.0.1:{server.server_port}/report.html')
+            create(page)
+            assert len(page.evaluate('reviewAnnotationDelivery.backup()')['threads']) == 1
+            page.close()
+        finally:
+            server.shutdown()
+            worker.join()
+
+
+def test_portable_http_report_does_not_probe_disk_api(live_report, chrome):
+    from latex_review.annotations import AnnotationStore, load_content
+    from latex_review.delivery import publication_html
+    from latex_review.serve import create_server
+    root, _, output, _ = live_report
+    (output / 'report.html').write_text(publication_html(output))
+    content = load_content(output)
+    with create_server(output, annotation_project_root=root) as server:
+        worker = Thread(target=server.serve_forever)
+        worker.start()
+        try:
+            page = chrome.new_page()
+            requests = []
+            def reject_api(route):
+                requests.append(route.request.url)
+                route.fulfill(status=503, content_type='application/json', body='{}')
+            page.route('**/api/annotations/**', reject_api)
+            ready(page, f'http://127.0.0.1:{server.server_port}/report.html')
+            create(page)
+            assert len(page.evaluate('reviewAnnotationDelivery.backup()')['threads']) == 1
+            assert not AnnotationStore.open(content).export()['threads']
+            assert requests == []
+            page.close()
+        finally:
+            server.shutdown()
+            worker.join()
+
+
+@pytest.mark.parametrize('encoding', ['gzip-shared-units-v1', 'gzip-base64-v1'])
+def test_compressed_publication_preserves_history_and_location(live_report, chrome, encoding):
     from latex_review.annotations import AnnotationStore, load_content
     from latex_review.live import build
     root, entry, output, source = live_report
@@ -167,7 +282,17 @@ def test_compressed_publication_preserves_history_and_location(live_report, chro
         'thread_id': tid, 'selection': {'unit_id': u['id'], 'start': 0, 'end': 5, 'quote': 'Other'}}))
     (output / 'diff.json').write_text('{}')
     target = output / 'packed.html'
-    target.write_bytes(prepare_publication(output, 'paper').html)
+    html = prepare_publication(output, 'paper').html.decode()
+    if encoding == 'gzip-base64-v1':
+        import gzip
+        import json
+        import re
+        from latex_review.delivery import decode_annotation_backup
+        pattern = r'(<script type="application/json" id="annotation-backup-gzip">)(.*?)(</script>)'
+        raw = json.dumps(decode_annotation_backup(json.loads(re.search(pattern, html, re.S)[2]))).encode()
+        backup_envelope = {'encoding': encoding, 'size': len(raw), 'data': base64.b64encode(gzip.compress(raw)).decode()}
+        html = re.sub(pattern, lambda match: match[1] + json.dumps(backup_envelope) + match[3], html, flags=re.S)
+    target.write_text(html)
     page = chrome.new_page()
     ready(page, target.as_uri())
     backup = page.evaluate('reviewAnnotationDelivery.backup()')

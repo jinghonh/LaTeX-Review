@@ -40,6 +40,33 @@ def test_preflight_reused_across_store_instances_without_apply(tmp_path, monkeyp
     assert len(store.read()['threads']) == 1
 
 
+@pytest.mark.parametrize('change', ['missing_format', 'future_format', 'boolean_format', 'version_id', 'payload_hash'])
+def test_obsolete_preflight_requires_new_preview_without_committing(tmp_path, change):
+    import json
+    import sqlite3
+    from test_annotations import storage_path
+    store, content, request = setup(tmp_path)
+    preview = store.execute(envelope(content, {**request, 'dry_run': True}))
+    with sqlite3.connect(storage_path(content)) as connection:
+        plan = json.loads(connection.execute('SELECT payload FROM preflights WHERE id=?', (request['request_id'],)).fetchone()[0])
+        if change == 'future_format':
+            plan['format_version'] += 1
+        elif change == 'boolean_format':
+            plan['format_version'] = True
+        else:
+            plan.pop('format_version' if change == 'missing_format' else change)
+        connection.execute('UPDATE preflights SET payload=? WHERE id=?', (json.dumps(plan), request['request_id']))
+    with pytest.raises(AnnotationConflict) as caught:
+        store.execute(envelope(content, {**request, 'preflight_token': preview['preflight_token']}))
+    assert caught.value.details['code'] == 'preflight_invalid'
+    assert store.metadata()['revision'] == 0
+    assert not store.read()['threads']
+    store.execute(envelope(content, {**request, 'dry_run': True}))
+    result = store.execute(envelope(content, request))
+    assert result['committed'] and result['preflight_reused']
+    assert len(store.read()['threads']) == 1
+
+
 @pytest.mark.parametrize('changed', ['revision', 'body', 'version', 'same_version_content'])
 def test_stale_preflight_rejected(tmp_path, changed):
     store, content, request = setup(tmp_path)

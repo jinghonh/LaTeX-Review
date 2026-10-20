@@ -15,9 +15,10 @@ _validator = Draft7Validator(SCHEMA)
 
 
 def delivery_script():
-    """Embed the same suggestion contract used by Python into portable reports."""
+    """Inline the storage codec and shared suggestion contract for portable reports."""
     script = files('latex_review').joinpath('annotation_delivery.js').read_text(encoding='utf-8')
-    return script.replace('__SUGGESTION_SCHEMA__', json.dumps(SCHEMA).replace('<', '\\u003c'))
+    codec = files('latex_review').joinpath('annotation_codec.js').read_text(encoding='utf-8')
+    return script.replace('__ANNOTATION_CODEC__', codec).replace('__SUGGESTION_SCHEMA__', json.dumps(SCHEMA).replace('<', '\\u003c'))
 
 
 def error(message):

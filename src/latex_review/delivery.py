@@ -119,10 +119,18 @@ def embed_annotations(html: str, content: dict, directory: Path | None = None, *
     return html
 
 
+def _annotation_storage(html: str, mode: str) -> str:
+    html = re.sub(r'''<meta\b(?=[^>]*\bname=["']latex-review-annotation-storage["'])[^>]*>''',
+                  '', html, flags=re.I)
+    tag = f'<meta name="latex-review-annotation-storage" content="{mode}">'
+    return html.replace('</head>', tag + '</head>', 1)
+
+
 def local_report_html(html: str) -> str:
     """本机报告从服务读取批注；仅独立交付携带备份和资源。"""
-    return re.sub(r'<script type="application/json" id="annotation-(?:content|backup|assets)">.*?</script>',
+    html = re.sub(r'<script type="application/json" id="annotation-(?:content|backup|assets|current-version|backup-gzip)">.*?</script>',
                   '', html, flags=re.S)
+    return _annotation_storage(html, 'disk')
 
 
 def decode_annotation_backup(envelope: dict) -> dict:
@@ -206,7 +214,7 @@ def publication_html(directory: Path, translation_config: dict | None = None, *,
     if warnings:
         notice = '<p role="status" class="delivery-warning">' + escape("；".join(warnings)) + '</p>'
         html = html.replace('</body>', notice + '</body>') if '</body>' in html else html + notice
-    return html
+    return _annotation_storage(html, 'browser')
 
 
 def single_file_html(html: str, directory: Path) -> str:

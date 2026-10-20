@@ -274,7 +274,7 @@ POST 使用 `Content-Type: application/json` 和 `X-LaTeX-Review-Token`。
 
 ## 阶段 3 接线
 
-生成报告与持续预览内嵌 `annotation-content`、`annotation-backup` 和 `annotation-assets` JSON 脚本。
+生成报告与持续预览通过本机接口读取正文和批注。独立交付内嵌 `annotation-content`、`annotation-backup` 和 `annotation-assets` JSON 脚本。
 发布时 `publication_html` 重新读取共享磁盘备份。生成单文件报告也携带批注。
 `embed_annotations(html, content, directory)` 不创建不存在的项目路径。
 资产内嵌沿用交付的路径验证和大小上限。
@@ -285,6 +285,12 @@ POST 使用 `Content-Type: application/json` 和 `X-LaTeX-Review-Token`。
 每次读写仍检查页面项目、版本及 `expected_revision`。
 
 `annotation_delivery.js` 选择本机 HTTP 或浏览器 IndexedDB 适配器。
+新报告通过 `<meta name="latex-review-annotation-storage" content="disk|browser">` 明确存储方式。
+本机报告使用 `disk`；发布、单文件报告和浏览器 HTML 导出使用 `browser`。
+磁盘接口返回错误、断网或返回无效 JSON 时，页面保留草稿并显示错误，不切换存储。
+未声明存储方式的历史 HTTP 报告仅在携带完整备份且接口返回 404/405 时使用浏览器存储。
+历史文件报告和静态发布继续使用浏览器存储。IndexedDB 仅在需要浏览器存储时打开。
+`annotation_codec.js` 集中处理历史完整记录、整数引用池、对象共享和压缩备份；业务处理使用完整备份结构。
 离线存储采用阶段 1 的完整备份结构，按携带的 `project_id` 索引。
 IndexedDB 的 readwrite 事务覆盖读取、修订号检查及写入，防止多窗口覆盖。
 浏览器导入验证项目、正文版本、锚点、删除记录和历史。冲突拒绝整批导入。

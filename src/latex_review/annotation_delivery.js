@@ -4,33 +4,7 @@
   const api=window.reviewAnnotations;
   const readJSON=id=>JSON.parse(document.getElementById(id)?.textContent||'null');
   if(!api)return;
-  function unpackVersions(value){
-    if(!value||!('encoding' in value)){
-      // Structured-clone storage can share identical units without changing the legacy shape.
-      const seen=new WeakSet();
-      if(value?.versions&&typeof value.versions==='object'&&!Array.isArray(value.versions))for(const c of Object.values(value.versions))if(Array.isArray(c?.units))c.units=c.units.map(u=>{if(u&&typeof u==='object'){if(seen.has(u))return structuredClone(u);seen.add(u);}return u;});
-      return value;
-    }
-    if(value.encoding!=='shared-units-v1'||Object.keys(value).sort().join(',')!=='bundle,encoding,units'||!Array.isArray(value.units)||value.units.some(u=>!u||typeof u!=='object'||Array.isArray(u))||!value.bundle?.versions||typeof value.bundle.versions!=='object'||Array.isArray(value.bundle.versions))throw Error('正文共享表示无效');
-    const result=structuredClone(value.bundle),encoder=new TextEncoder();
-    const sizes=value.units.map(u=>encoder.encode(JSON.stringify(u)).length);let expanded=encoder.encode(JSON.stringify(value.bundle)).length;
-    for(const c of Object.values(result.versions)){
-      if(!Array.isArray(c.units)||c.units.some(i=>!Number.isInteger(i)||i<0||i>=value.units.length))throw Error('正文单元引用无效');
-      expanded+=c.units.reduce((n,i)=>n+sizes[i],0);if(expanded>200*1024*1024)throw Error('恢复正文超过 200 MiB 上限');
-      c.units=c.units.map(i=>structuredClone(value.units[i]));
-    }
-    return result;
-  }
-  function packVersions(value){
-    const bundle={...value,versions:{}},indices=new Map(),encoder=new TextEncoder();let expanded=0;
-    for(const [id,c] of Object.entries(value.versions)){
-      const units=c.units.map(u=>{const key=stable(u);expanded+=encoder.encode(key).length;if(expanded>200*1024*1024)throw Error('恢复正文超过 200 MiB 上限');if(!indices.has(key))indices.set(key,u);return indices.get(key);});
-      expanded+=Math.max(0,units.length-1);bundle.versions[id]={...c,units};
-    }
-    const metadata={...bundle,versions:Object.fromEntries(Object.entries(bundle.versions).map(([id,c])=>[id,{...c,units:[]}]))};
-    expanded+=encoder.encode(JSON.stringify(metadata)).length;if(expanded>200*1024*1024)throw Error('恢复正文超过 200 MiB 上限');
-    return bundle;
-  }
+  const codec=__ANNOTATION_CODEC__;
   const packed=document.getElementById('annotation-backup-gzip');
   let embedded;
   if(packed){
@@ -45,16 +19,7 @@
     });
     performance.mark('annotation-decode-start');
     try{
-      const envelope=JSON.parse(packed.textContent);
-      if(!['gzip-base64-v1','gzip-shared-units-v1'].includes(envelope.encoding)||!Number.isInteger(envelope.size)||envelope.size<0||envelope.size>200*1024*1024)throw Error('压缩备份格式无效');
-      if(typeof DecompressionStream==='undefined')throw Error('浏览器不支持 gzip 批注，请使用新版 Chrome');
-      const bytes=Uint8Array.from(atob(envelope.data),c=>c.charCodeAt(0));
-      const reader=new Blob([bytes]).stream().pipeThrough(new DecompressionStream('gzip')).getReader();
-      const chunks=[];let size=0;
-      while(true){const {value,done}=await reader.read();if(done)break;size+=value.length;if(size>envelope.size){await reader.cancel();throw Error('压缩备份大小不一致');}chunks.push(value);}
-      if(size!==envelope.size)throw Error('压缩备份大小不一致');
-      embedded=unpackVersions(JSON.parse(await new Blob(chunks).text()));
-      if(!embedded||typeof embedded!=='object'||Array.isArray(embedded)||!embedded.versions||!embedded.threads)throw Error('压缩备份契约无效');
+      embedded=await codec.decodeBackup(JSON.parse(packed.textContent));
       performance.mark('annotation-decode-end');performance.measure('annotation-decode','annotation-decode-start','annotation-decode-end');
     }catch(e){document.getElementById('annotation-status').textContent='批注备份读取失败：'+e.message+'。浏览器记录未覆盖。';window.reviewAnnotationDeliveryError=e.message;return;}
   }else embedded=readJSON('annotation-backup');
@@ -198,17 +163,25 @@
     }
     data.revision++;return {...view(data),result};
   }
-  const dbPromise=new Promise((resolve,reject)=>{const r=indexedDB.open('latex-review-annotations',1);r.onupgradeneeded=()=>r.result.createObjectStore('projects');r.onsuccess=()=>resolve(r.result);r.onerror=()=>reject(r.error);});
+  let dbPromise;
   async function transaction(fn,write=false) {
+    dbPromise||=new Promise((resolve,reject)=>{const r=indexedDB.open('latex-review-annotations',1);r.onupgradeneeded=()=>r.result.createObjectStore('projects');r.onsuccess=()=>resolve(r.result);r.onerror=()=>reject(r.error);});
     const db=await dbPromise;
     return new Promise((resolve,reject)=>{
       const tx=db.transaction('projects',write?'readwrite':'readonly'),store=tx.objectStore('projects'),r=store.get(content.project_id);let result,error;
-      r.onsuccess=()=>{try {const data=unpackVersions(r.result)||copy(embedded);validateBundle(data);validateContent(content);const existing=data.versions[content.version_id];if(existing&&stable(existing.units.map(unitSemantic))!==stable(content.units.map(unitSemantic)))fail('同版本正文坐标不一致');data.versions[content.version_id]=copy(content);result=fn(data,Boolean(r.result));if(write)store.put(packVersions(data),content.project_id);}catch(e){error=e;tx.abort();}};
+      r.onsuccess=()=>{try {const data=codec.decodeVersions(r.result)||copy(embedded);validateBundle(data);validateContent(content);const existing=data.versions[content.version_id];if(existing&&stable(existing.units.map(unitSemantic))!==stable(content.units.map(unitSemantic)))fail('同版本正文坐标不一致');data.versions[content.version_id]=copy(content);result=fn(data,Boolean(r.result));if(write)store.put(codec.encodeStorage(data),content.project_id);}catch(e){error=e;tx.abort();}};
       tx.oncomplete=()=>resolve(result);tx.onabort=tx.onerror=()=>reject(error||tx.error);
     });
   }
   let local=false,token=null;
-  async function json(url,options) {const r=await fetch(url,options);const value=await r.json();if(!r.ok)fail(value.message||value.error||'批注接口失败');return value;}
+  async function json(url,options) {
+    const r=await fetch(url,options);
+    if(!r.ok) {
+      let value;try{value=await r.json();}catch(_){}
+      const error=new Error(value?.message||value?.error||'批注接口失败');error.status=r.status;throw error;
+    }
+    return r.json();
+  }
   const adapter={
     async readRevision(){if(local)return transaction(d=>({project_id:d.project_id,version_id:content.version_id,revision:d.revision}));return json('api/annotations/status?view=revision');},
     async readChanges(since){return local?transaction(view):json('api/annotations/status?view=changes&since='+since);},
@@ -238,6 +211,8 @@
     if(published)fail('在线报告不提供独立 HTML 导出。请使用本机报告导出。');
     await window.reviewMath?.complete();
     const b=await backup(),clone=document.documentElement.cloneNode(true);
+    let storage=clone.querySelector('meta[name="latex-review-annotation-storage"]');
+    if(!storage){storage=document.createElement('meta');storage.name='latex-review-annotation-storage';clone.querySelector('head').append(storage);}storage.content='browser';
     clone.querySelector('#annotation-current-version')?.remove();
     clone.querySelector('#annotation-backup-gzip')?.remove();
     clone.querySelectorAll('.review-print-warning,.annotation-overview,.annotation-editor,.annotation-toolbar,.annotation-card,.annotation-mark,.annotation-margin,.annotation-drafts').forEach(e=>e.remove());
@@ -294,8 +269,17 @@
     const keys=Object.keys(drafts);if(keys.length){api.resumeDraft(keys.at(-1));notice.textContent='编辑草稿已恢复。';}
   }
   async function start() {
-    if(published||location.protocol==='file:')local=true;
-    else {try {const s=await adapter.readStatus();if(s.project_id!==content.project_id||s.version_id!==content.version_id)fail('页面与接口身份不一致');}catch(e){if(!embedded||e.message.includes('身份不一致')){notice.textContent=e.message;return;}local=true;}}
+    const storage=document.querySelector('meta[name="latex-review-annotation-storage"]')?.content;
+    if(storage!==undefined&&!['disk','browser'].includes(storage))fail('批注存储方式无效');
+    local=storage==='browser'||storage===undefined&&(published||location.protocol==='file:');
+    if(!local) {
+      try {const s=await adapter.readStatus();if(s.project_id!==content.project_id||s.version_id!==content.version_id)fail('页面与接口身份不一致');}
+      catch(e) {
+        // Unmarked historical HTTP reports may have been copied to a static host.
+        if(storage!==undefined||!embedded||![404,405].includes(e.status))throw e;
+        local=true;
+      }
+    }
     let embeddedConflict='';
     if(local)await transaction((data,existing)=>{try{const result=existing?importBundle(data,embedded):{imported:[]};if(result.imported.length)data.revision++;}catch(e){embeddedConflict=e.message+'。浏览器记录未覆盖；可导出报告原备份。';}return null;},true);
     await api.setAdapter(adapter);

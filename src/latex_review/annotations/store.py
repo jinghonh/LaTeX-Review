@@ -370,11 +370,8 @@ class AnnotationStore:
             from ._locations import LocationCache, expand_location
             cache, count = None, 0
             changed_ids = []
-            if hasattr(data['threads'], 'missing_association'):
-                ids = data['threads'].missing_association(content['version_id'])
-                targets = (data['threads'][key] for key in ids)
-            else:
-                targets = data['threads'].values()
+            ids = data['threads'].missing_association(content['version_id'])
+            targets = (data['threads'][key] for key in ids)
             for thread in targets:
                 if thread['deleted_at'] or content['version_id'] in thread['associations']:
                     continue
@@ -461,7 +458,7 @@ class AnnotationStore:
                     raise AnnotationConflict('请求 ID 已用于不同载荷')
                 if not dry_run:
                     return previous['response']
-            plan = None if dry_run else annotation_preflight.load(self, content, request, fingerprint, data['revision'], transaction=data)
+            plan = None if dry_run else annotation_preflight.load(self, content, request, data['revision'], transaction=data)
             if revision != data['revision']:
                 raise AnnotationConflict(f"批注已被其他审阅者更新（期望修订号 {revision}，实际修订号 {data['revision']}），请保留草稿并重新读取",
                         {'code': 'revision_conflict', 'reasons': ['annotation_revision_changed'],
@@ -526,7 +523,7 @@ class AnnotationStore:
                 working = {**data, 'requests': copy(data['requests'])}
                 changed = {}
             if dry_run:
-                plan = annotation_preflight.save(self, content, request, fingerprint, revision, changed, results, transaction=data)
+                plan = annotation_preflight.save(self, content, request, revision, changed, results, transaction=data)
                 results = deepcopy(results)
                 for result in results:
                     result.pop('thread_id', None) if result['operation'] == 'create' else None

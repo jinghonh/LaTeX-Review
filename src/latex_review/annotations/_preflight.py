@@ -6,6 +6,7 @@ import time
 from ._validation import AnnotationConflict, digest
 
 TTL = 15 * 60
+FORMAT_VERSION = 1
 
 
 def content_hash(store, content):
@@ -14,7 +15,7 @@ def content_hash(store, content):
     return digest(content)
 
 
-def load(store, content, request, fingerprint, revision, *, transaction):
+def load(store, content, request, revision, *, transaction):
     payload = transaction.preflight(request['request_id'])
     if payload is None:
         if request.get('preflight_token'):
@@ -24,6 +25,11 @@ def load(store, content, request, fingerprint, revision, *, transaction):
         return None
     try:
         plan = json.loads(payload)
+        if (not isinstance(plan, dict) or type(plan.get('format_version')) is not int
+                or plan['format_version'] != FORMAT_VERSION
+                or not {'token', 'revision', 'content_hash', 'expires_at', 'version_id',
+                        'payload_hash', 'threads', 'results'} <= plan.keys()):
+            raise ValueError('预检格式已失效')
     except (ValueError, TypeError) as exc:
         raise AnnotationConflict('预检缓存无效，请重新预检',
             {'code': 'preflight_invalid', 'reasons': ['cache_invalid'],
@@ -33,12 +39,11 @@ def load(store, content, request, fingerprint, revision, *, transaction):
         reasons.append('annotation_revision_changed')
     if plan['content_hash'] != content_hash(store, content):
         reasons.append('content_changed')
-    if plan.get('version_id', content['version_id']) != content['version_id']:
+    if plan['version_id'] != content['version_id']:
         reasons.append('version_changed')
     payload_hash = digest({'project_id': content['project_id'], 'items': request['items'],
                           'atomic': request.get('atomic', False)})
-    if (plan.get('payload_hash') is not None and plan['payload_hash'] != payload_hash
-            or plan.get('payload_hash') is None and plan['fingerprint'] != fingerprint):
+    if plan['payload_hash'] != payload_hash:
         reasons.append('payload_changed')
     if plan['expires_at'] <= time.time():
         reasons.append('expired')
@@ -52,13 +57,13 @@ def load(store, content, request, fingerprint, revision, *, transaction):
             {'code': 'preflight_stale', 'reasons': reasons,
              'expected_revision': plan['revision'], 'actual_revision': revision,
              'request_expected_revision': request['expected_revision'],
-             'expected_version_id': plan.get('version_id'), 'actual_version_id': content['version_id'],
+             'expected_version_id': plan['version_id'], 'actual_version_id': content['version_id'],
              'expires_at': plan['expires_at']})
     return plan
 
 
-def save(store, content, request, fingerprint, revision, changed_threads, results, *, transaction):
-    plan = {'token': secrets.token_urlsafe(24), 'fingerprint': fingerprint, 'revision': revision,
+def save(store, content, request, revision, changed_threads, results, *, transaction):
+    plan = {'format_version': FORMAT_VERSION, 'token': secrets.token_urlsafe(24), 'revision': revision,
             'content_hash': content_hash(store, content), 'expires_at': time.time() + TTL,
             'version_id': content['version_id'],
             'payload_hash': digest({'project_id': content['project_id'], 'items': request['items'],

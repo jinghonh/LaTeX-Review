@@ -296,5 +296,14 @@ def test_lightweight_http_export_embeds_pdf_and_preserves_annotations(live_repor
             assert q.evaluate('reviewAnnotations.getSnapshot().threads.length')==1
             create(q,'Second offline question')
             assert q.evaluate('reviewAnnotations.getSnapshot().threads.length')==2
+            context.close()
+            # The same exported document keeps browser storage when opened over HTTP.
+            (output/'portable.html').write_text(exported)
+            context=chrome.new_context();q=context.new_page()
+            q.route('**/api/annotations/**',lambda route:route.fulfill(status=503,content_type='application/json',body='{}'))
+            ready(q,f'http://127.0.0.1:{server.server_port}/portable.html')
+            create(q,'Second portable HTTP question')
+            assert q.evaluate('reviewAnnotations.getSnapshot().threads.length')==2
+            assert len(AnnotationStore.open(load_content(output)).export()['threads'])==1
             context.close();p.close()
         finally:server.shutdown();worker.join()
