@@ -47,11 +47,8 @@ def report_identity(directory, *, root=None, entry=None):
     return paper_identity(root or entry_path.parent, entry_path)
 
 
-def copy_report(source, destination, *, allow_empty=False):
-    source, destination = Path(source).resolve(), Path(destination)
-    if destination.exists() and not (allow_empty and destination.is_dir()
-                                    and not destination.is_symlink() and not any(destination.iterdir())):
-        raise ValueError('候选报告目录已存在')
+def _report_files(source):
+    """Validate and read one report tree. The caller holds its rebuild lock."""
     class Resources(HTMLParser):
         def handle_starttag(self, tag, attrs):
             for name, value in attrs:
@@ -65,36 +62,57 @@ def copy_report(source, destination, *, allow_empty=False):
                     raise ValueError('报告资源路径越界')
                 if not (source / relative).is_file() or not (source / relative).resolve().is_relative_to(source):
                     raise ValueError(f'报告资源缺失或越界：{relative}')
-    digest = hashlib.sha256()
+    if not (source / 'report.html').is_file():
+        raise ValueError('报告入口不存在')
+    Resources().feed((source / 'report.html').read_text(encoding='utf-8'))
     total = count = 0
+    for folder, dirs, names in os.walk(source, followlinks=False):
+        folder = Path(folder)
+        dirs.sort()
+        if any((folder / name).is_symlink() for name in dirs):
+            raise ValueError('报告副本拒绝目录符号链接')
+        for name in dirs:
+            yield (folder / name).relative_to(source), None
+        for name in sorted(names):
+            path = folder / name
+            if path.is_symlink() or not path.is_file():
+                raise ValueError('报告副本拒绝非普通文件')
+            data = path.read_bytes()
+            total += len(data)
+            count += 1
+            if total > 1024**3 or count > 16384:
+                raise ValueError('报告副本超过容量限制')
+            yield path.relative_to(source), data
+
+
+def report_fingerprint(source):
+    """Hash and validate the report without creating a private copy."""
+    source = Path(source).resolve()
+    digest = hashlib.sha256()
+    with rebuild_lock(source):
+        for relative, data in _report_files(source):
+            if data is not None:
+                digest.update(relative.as_posix().encode() + b'\0' + hashlib.sha256(data).digest())
+    return digest.hexdigest()
+
+
+def copy_report(source, destination, *, allow_empty=False):
+    source, destination = Path(source).resolve(), Path(destination)
+    if destination.exists() and not (allow_empty and destination.is_dir()
+                                    and not destination.is_symlink() and not any(destination.iterdir())):
+        raise ValueError('候选报告目录已存在')
+    digest = hashlib.sha256()
     try:
         with rebuild_lock(source):
-            if not (source / 'report.html').is_file():
-                raise ValueError('报告入口不存在')
-            Resources().feed((source / 'report.html').read_text(encoding='utf-8'))
             destination.mkdir(parents=True, mode=0o700, exist_ok=allow_empty)
-            for folder, dirs, names in os.walk(source, followlinks=False):
-                folder = Path(folder)
-                dirs.sort()
-                for name in sorted(dirs):
-                    path = folder / name
-                    if path.is_symlink():
-                        raise ValueError('报告副本拒绝目录符号链接')
-                    (destination / path.relative_to(source)).mkdir(mode=0o700)
-                for name in sorted(names):
-                    path = folder / name
-                    if path.is_symlink() or not path.is_file():
-                        raise ValueError('报告副本拒绝非普通文件')
-                    data = path.read_bytes()
-                    total += len(data)
-                    count += 1
-                    if total > 1024**3 or count > 16384:
-                        raise ValueError('报告副本超过容量限制')
-                    relative = path.relative_to(source).as_posix()
-                    digest.update(relative.encode() + b'\0' + hashlib.sha256(data).digest())
-                    (destination / relative).write_bytes(data)
-            if not (destination / 'report.html').is_file():
-                raise ValueError('候选报告缺少入口')
+            for relative, data in _report_files(source):
+                target = destination / relative
+                if data is None:
+                    target.mkdir(parents=True, mode=0o700, exist_ok=True)
+                    continue
+                target.parent.mkdir(parents=True, mode=0o700, exist_ok=True)
+                digest.update(relative.as_posix().encode() + b'\0' + hashlib.sha256(data).digest())
+                target.write_bytes(data)
         return digest.hexdigest()
     except BaseException:
         if destination.exists():

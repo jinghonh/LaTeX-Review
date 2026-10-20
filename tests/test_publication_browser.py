@@ -211,16 +211,26 @@ def test_legacy_historical_reader_reads_new_storage(live_report, chrome):
     import re
     from pathlib import Path
     from latex_review.delivery import publication_html
+    from latex_review.annotations import AnnotationStore, load_content
     _,_,output,_=live_report
     (output/'diff.json').write_text('{}')
+    # The new publication carries no threads, so it must recover the legacy
+    # reader's browser storage. The current UI sends request_id, which the
+    # historical delivery script does not support; seed its carried backup.
+    (output/'new.html').write_bytes(prepare_publication(output,'paper').html)
+    content = load_content(output)
+    unit = next(u for u in content['units'] if u['text'].startswith('Stable'))
+    AnnotationStore.open(content).execute(envelope(content, {'operation': 'create', 'expected_revision': 0,
+        'selection': {'unit_id': unit['id'], 'start': 0, 'end': 6}, 'body': 'Legacy note',
+        'author': {'name': 'Tester', 'type': 'user'}, 'category': 'note'}))
     legacy=Path(__file__).parent.joinpath('fixtures/annotation_delivery_legacy.js').read_text()
     old=re.sub(r'<script>/\* Portable annotation contract.*?</script>',lambda m:'<script>'+legacy+'</script>',publication_html(output),flags=re.S)
-    (output/'old.html').write_text(old);(output/'new.html').write_bytes(prepare_publication(output,'paper').html)
+    (output/'old.html').write_text(old)
     with ThreadingHTTPServer(('127.0.0.1',0),partial(SimpleHTTPRequestHandler,directory=str(output))) as server:
         worker=Thread(target=server.serve_forever);worker.start()
         try:
             context=chrome.new_context();page=context.new_page();base=f'http://127.0.0.1:{server.server_port}/'
-            ready(page,base+'old.html');create(page)
+            ready(page,base+'old.html');assert page.evaluate('reviewAnnotations.getSnapshot().threads.length')==1
             ready(page,base+'new.html');assert page.evaluate('reviewAnnotations.getSnapshot().threads.length')==1
             bundle=page.evaluate('reviewAnnotationDelivery.backup()')
             current=page.evaluate('reviewAnnotations.getContent().version_id');import copy

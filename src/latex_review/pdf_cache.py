@@ -17,6 +17,8 @@ import tempfile
 import time
 import zlib
 
+from . import local_tasks
+
 MAX_BYTES = 128 * 1024 * 1024
 MAX_ENTRIES = 512
 MAX_RESULT = 12 * 1024 * 1024
@@ -37,7 +39,7 @@ def converter_identity(converter: str, timeout: float = 4) -> dict:
         resource.setrlimit(resource.RLIMIT_CPU, (max(1, int(timeout) + 1), max(1, int(timeout) + 1)))
     with tempfile.TemporaryDirectory(prefix='latex-review-pdf-version-') as temporary, tempfile.TemporaryFile() as stream:
         try:
-            probe = subprocess.run([str(path), '-v' if path.name == 'pdftoppm' else '--version'],
+            probe = local_tasks.run([str(path), '-v' if path.name == 'pdftoppm' else '--version'],
                                    stdin=subprocess.DEVNULL, stdout=stream, stderr=stream,
                                    timeout=timeout, check=False, preexec_fn=limits, cwd=temporary)
         except subprocess.TimeoutExpired as exc:

@@ -1,0 +1,31 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["original_chunk", "replacement_chunk"],
+  "properties": {
+    "original_chunk": {"type": "string", "minLength": 1, "maxLength": 1000000},
+    "replacement_chunk": {"type": "string", "maxLength": 1000000},
+    "status": {"enum": ["pending", "applied"]},
+    "version_id": {},
+    "unit_id": {},
+    "reason": {"type": ["string", "null"]},
+    "applied_at": {},
+    "applied_sha256": {},
+    "source_span": {
+      "type": ["object", "null"],
+      "additionalProperties": false,
+      "required": ["file", "start", "end", "sha256", "original_chunk", "reliable", "writable", "reason"],
+      "properties": {
+        "file": {"type": "string", "pattern": "^(?!/)(?!.*(?:^|/)\\.\\.(?:/|$)).*$"},
+        "start": {"type": "integer", "minimum": 0},
+        "end": {"type": "integer", "minimum": 1},
+        "sha256": {"type": "string", "maxLength": 64, "pattern": "^[0-9a-f]{64}$"},
+        "original_chunk": {"type": "string"},
+        "reliable": {"const": true},
+        "writable": {"const": true},
+        "reason": {}
+      }
+    }
+  }
+}

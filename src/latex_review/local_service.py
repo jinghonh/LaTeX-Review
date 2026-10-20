@@ -1,5 +1,6 @@
 """Resident per-user entry and serialized paper slots. Local use only."""
 from collections import deque
+from contextlib import ExitStack
 from copy import deepcopy
 from dataclasses import dataclass
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -27,7 +28,8 @@ from .identity import identity_hash, paper_identity
 from .local_client import child_environment
 from .local_paths import state_directory
 from .local_protocol import HEADER_TOKEN, LocalError, MAX_BODY, PROTOCOL_VERSION, valid_id
-from .local_reports import copy_report, report_identity
+from .local_reports import copy_report, report_fingerprint, report_identity
+from .report_rebuild import rebuild_lock
 from .local_security import local_request
 from .local_state import file_lock, lock_busy, read_json, write_json
 
@@ -101,25 +103,22 @@ class Slot:
                         value['baselines'] = {}
             return value
 
-    def submit(self, request, fingerprint, candidate, request_id):
+    def submit(self, request, fingerprint, prepare_candidate, request_id):
         with self.condition:
             self.snapshot()
             if request.get('port') and self.worker and self.worker.recipe.get('bound_port') != request['port']:
                 raise LocalError('活动工作端口不同；请先stop-paper再更改端口', 409)
             for operation in ([self.current] if self.current else []) + list(self.queue):
                 if operation['action'] == 'ensure' and operation['fingerprint'] == fingerprint:
-                    if candidate:
-                        shutil.rmtree(candidate)
                     return operation
             if self.worker and self.state == 'ready' and self.fingerprint == fingerprint:
-                if candidate:
-                    shutil.rmtree(candidate)
                 operation = self.manager.operation(self, 'ensure', request_id, state='ready')
                 operation.update(pid=self.worker.process.pid, port=self.worker.recipe['bound_port'],
                                  generation=self.worker.recipe['nonce'])
                 return operation
             if len(self.queue) >= 16:
                 raise LocalError('槽位等待队列已满', 429)
+            candidate = prepare_candidate() if prepare_candidate else None
             operation = self.manager.operation(self, 'ensure', request_id)
             operation.update(request=request, fingerprint=fingerprint, candidate=str(candidate) if candidate else None)
             self.queue.append(operation)
@@ -445,18 +444,13 @@ class Manager:
         request, request_id = self.validate(value, paper_id, kind)
         if not isinstance(request_id, str) or not 1 <= len(request_id) <= 128:
             raise LocalError('request_id无效')
-        candidate = None
-        receipt_fingerprint = identity_hash(request)
-        try:
+        with ExitStack() as locks:
             if kind == 'diff':
-                candidate = self.state / 'jobs' / ('diff-' + uuid.uuid4().hex)
-                content_hash = copy_report(request['directory'], candidate)
-                copied_identity = report_identity(candidate, root=request['root'], entry=request['entry'])
-                if copied_identity['paper_id'] != paper_id:
-                    raise LocalError('候选副本的论文身份已变化', 409)
+                locks.enter_context(rebuild_lock(request['directory']))
+                content_hash = report_fingerprint(request['directory'])
                 fingerprint = identity_hash({'request': request, 'content': content_hash})
             else:
-                fingerprint = receipt_fingerprint
+                fingerprint = identity_hash(request)
             with self.lock:
                 receipt_key = (paper_id, kind, request_id)
                 if receipt_key in self.receipts:
@@ -470,14 +464,21 @@ class Manager:
                     slot = self.slots[(paper_id, kind)] = Slot(self, paper_id, kind, None)
             if self.closed.is_set():
                 raise LocalError('入口正在停止', 503)
-            operation = slot.submit(request, fingerprint, candidate, request_id)
-            candidate = None
+            def prepare_candidate():
+                candidate = self.state / 'jobs' / ('diff-' + uuid.uuid4().hex)
+                try:
+                    copied_hash = copy_report(request['directory'], candidate)
+                    copied_identity = report_identity(candidate, root=request['root'], entry=request['entry'])
+                    if copied_hash != content_hash or copied_identity['paper_id'] != paper_id:
+                        raise LocalError('候选副本的内容或论文身份已变化', 409)
+                    return candidate
+                except BaseException:
+                    shutil.rmtree(candidate, ignore_errors=True)
+                    raise
+            operation = slot.submit(request, fingerprint, prepare_candidate if kind == 'diff' else None, request_id)
             with self.lock:
                 self.receipts[receipt_key] = (fingerprint, operation)
             return self.public_operation(operation)
-        finally:
-            if candidate:
-                shutil.rmtree(candidate, ignore_errors=True)
 
     @staticmethod
     def public_operation(operation):

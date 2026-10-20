@@ -16,6 +16,7 @@ import sys
 import tempfile
 import time
 
+from . import local_tasks
 from .contract import Diagnostic
 from .report import _write_managed
 from .sources import ProjectSource
@@ -118,7 +119,7 @@ def _group_usage(pgid: int) -> tuple[int, int]:
     if not Path(process_listing).is_file():
         return 0, 0
     try:
-        result = subprocess.run((process_listing, "-axo", "pgid=,rss="), capture_output=True,
+        result = local_tasks.run((process_listing, "-axo", "pgid=,rss="), capture_output=True,
                                 timeout=2, check=False)
     except (OSError, subprocess.TimeoutExpired):
         return 0, 0
@@ -146,7 +147,7 @@ def _run_bounded(command: list[str], cwd: Path, env: dict[str, str], timeout: fl
     output = cwd / "latex-review-command.log"
     try:
         with output.open("wb") as stream:
-            proc = subprocess.Popen(command, cwd=cwd, env=env, stdin=subprocess.DEVNULL,
+            proc = local_tasks.popen(command, cwd=cwd, env=env, stdin=subprocess.DEVNULL,
                                     stdout=stream, stderr=subprocess.STDOUT, start_new_session=True,
                                     preexec_fn=_limits)
             deadline = time.monotonic() + timeout
@@ -196,12 +197,12 @@ def _sandbox_ready(profile: Path, project: Path) -> bool:
     if sys.platform != "darwin" or not Path("/usr/bin/sandbox-exec").is_file():
         return False
     try:
-        good = subprocess.run(("/usr/bin/sandbox-exec", "-f", str(profile), "/bin/echo", "ok"),
+        good = local_tasks.run(("/usr/bin/sandbox-exec", "-f", str(profile), "/bin/echo", "ok"),
                               cwd=project, capture_output=True, timeout=3)
-        denied = subprocess.run(("/usr/bin/sandbox-exec", "-f", str(profile), "/bin/cat", "/etc/passwd"),
+        denied = local_tasks.run(("/usr/bin/sandbox-exec", "-f", str(profile), "/bin/cat", "/etc/passwd"),
                                 cwd=project, capture_output=True, timeout=3)
         probe = project.parent / f"latex-review-sandbox-{secrets.token_hex(12)}"
-        write = subprocess.run(("/usr/bin/sandbox-exec", "-f", str(profile), "/bin/sh", "-c",
+        write = local_tasks.run(("/usr/bin/sandbox-exec", "-f", str(profile), "/bin/sh", "-c",
                                 f"printf forbidden > {shlex.quote(str(probe))}"),
                                cwd=project, capture_output=True, timeout=3)
     except (OSError, subprocess.TimeoutExpired):

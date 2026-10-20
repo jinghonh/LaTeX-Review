@@ -99,6 +99,26 @@
       const offsets=new Set();for(const a of u.atoms){keys(a,['offset','formula_node_id','raw_latex','selector']);if(!Number.isInteger(a.offset)||offsets.has(a.offset)||u.text[a.offset]!=='\ufffc'||typeof a.raw_latex!=='string'||typeof a.selector!=='string')fail('公式原子无效');offsets.add(a.offset);}
       if(u.kind==='formula'&&(u.atoms.length||u.text!==u.raw_latex))fail('完整公式无效');if(ids.has(u.id)||!['text','formula'].includes(u.kind)||typeof u.text!=='string'||typeof u.raw_latex!=='string'||!Array.isArray(u.atoms)) fail('正文单元无效');ids.add(u.id);}
   }
+  const suggestionSchema=__SUGGESTION_SCHEMA__;
+  function validateSuggestion(value) {
+    const fields=suggestionSchema.properties,spanFields=fields.source_span.properties;
+    keys(value,Object.keys(fields),suggestionSchema.required);
+    for(const name of ['original_chunk','replacement_chunk']) {
+      const text=value[name],rule=fields[name];
+      if(typeof text!=='string'||Array.from(text).length<(rule.minLength||0)||Array.from(text).length>rule.maxLength)fail('建议 LaTeX 块无效');
+    }
+    if('status' in value&&!fields.status.enum.includes(value.status))fail('建议应用状态无效');
+    if(value.reason!=null&&typeof value.reason!=='string')fail('建议降级理由无效');
+    const span=value.source_span;
+    if(span!=null) {
+      keys(span,Object.keys(spanFields),fields.source_span.required);
+      if(typeof span.file!=='string'||!new RegExp(spanFields.file.pattern).test(span.file)||
+         typeof span.sha256!=='string'||span.sha256.length>spanFields.sha256.maxLength||!new RegExp(spanFields.sha256.pattern).test(span.sha256)||
+         span.reliable!==spanFields.reliable.const||span.writable!==spanFields.writable.const||
+         !Number.isInteger(span.start)||span.start<spanFields.start.minimum||!Number.isInteger(span.end)||span.end<=span.start||
+         span.original_chunk!==value.original_chunk||Array.from(value.original_chunk).length!==span.end-span.start)fail('建议源码区间无效');
+    }
+  }
   function validateBundle(b) {
     keys(b,['schema_version','project_id','revision','versions','threads']);
     if(b?.schema_version!==content.schema_version||b.project_id!==content.project_id||!Number.isInteger(b.revision)||b.revision<0||!b.versions||!b.threads||Array.isArray(b.versions)||Array.isArray(b.threads)) fail('备份项目或契约无效');
@@ -108,7 +128,7 @@
       keys(t,['id','project_id','created_version_id','created_at','updated_at','resolved','deleted_at','messages','original_anchor','current_anchor','associations','history','title','tags'],['id','project_id','created_version_id','created_at','updated_at','resolved','deleted_at','messages','original_anchor','current_anchor','associations','history']);metadata(t);
       if(id!==t.id||t.project_id!==b.project_id||typeof t.resolved!=='boolean'||!Array.isArray(t.messages)||!t.messages.length||!Array.isArray(t.history)||!t.associations) fail('线程无效');
       check(t.original_anchor);check(t.current_anchor);if(t.created_version_id!==t.original_anchor.version_id) fail('创建版本无效');
-      const ids=new Set();for(const m of t.messages) {keys(m,['id','body','author','category','created_at','updated_at','deleted_at','edits','reply_to','suggested_replacement'],['id','body','author','category','created_at','updated_at','deleted_at','edits']);if('reply_to' in m&&!ids.has(m.reply_to))fail('回复对象必须是先前消息');text(m.id,'内容 ID');if(ids.has(m.id)) fail('内容 ID 重复');ids.add(m.id);messageFields(m);if(!Array.isArray(m.edits)) fail('编辑历史无效');for(const e of m.edits){keys(e,['body','category','at']);text(e.body,'历史正文');category(e.category);text(e.at,'时间');}for(const key of ['created_at','updated_at'])text(m[key],'时间');if(m.deleted_at!=null)text(m.deleted_at,'时间');}
+      const ids=new Set();for(const m of t.messages) {keys(m,['id','body','author','category','created_at','updated_at','deleted_at','edits','reply_to','suggested_replacement'],['id','body','author','category','created_at','updated_at','deleted_at','edits']);if('reply_to' in m&&!ids.has(m.reply_to))fail('回复对象必须是先前消息');text(m.id,'内容 ID');if(ids.has(m.id)) fail('内容 ID 重复');ids.add(m.id);messageFields(m);if('suggested_replacement' in m)validateSuggestion(m.suggested_replacement);if(!Array.isArray(m.edits)) fail('编辑历史无效');for(const e of m.edits){keys(e,['body','category','at']);text(e.body,'历史正文');category(e.category);text(e.at,'时间');}for(const key of ['created_at','updated_at'])text(m[key],'时间');if(m.deleted_at!=null)text(m.deleted_at,'时间');}
       for(const [version,a] of Object.entries(t.associations)) {keys(a,['status','anchor','candidates','reason','container'],['status','anchor','candidates','reason']);if(!b.versions[version]||!['exact','auto_migrated','manual','needs_relocation'].includes(a.status)||!Array.isArray(a.candidates)) fail('关联无效');if(a.anchor){check(a.anchor);if(a.anchor.version_id!==version)fail('关联版本无效');}if(a.container){const u=b.versions[version].units.find(u=>u.id===a.container.unit_id);keys(a.container,['unit_id','kind','selector','order','source','section_path','selection_deleted','subunit','scope'],['unit_id','kind','selector','order','source','section_path','selection_deleted']);if(!u||typeof a.container.selection_deleted!=='boolean'||a.container.kind!==u.kind||('scope' in a.container&&(a.container.scope!=='table'||!['cell','header'].includes(u.subunit?.type)))||stable(a.container.source)!==stable(u.source)||stable(a.container.section_path)!==stable(u.section_path))fail('容器关联无效');}for(const candidate of a.candidates){keys(candidate,['anchor','score','method','context_score'],['anchor','score','method']);check(candidate.anchor);if(candidate.anchor.version_id!==version||typeof candidate.score!=='number'||candidate.score<0||candidate.score>1||!['exact','fuzzy'].includes(candidate.method))fail('候选无效');}}
       for(const h of t.history){keys(h,['at','method','anchor']);check(h.anchor);text(h.at,'时间');if(!['created','exact','auto_migrated','manual'].includes(h.method))fail('历史类型无效');}
       for(const key of ['created_at','updated_at'])text(t[key],'时间');if(t.deleted_at!=null)text(t.deleted_at,'时间');
@@ -158,7 +178,7 @@
     if(r.expected_revision!==data.revision)fail('批注已被其他窗口更新。输入已保留。');
     if(r.operation==='update_metadata'&&!('title' in r)&&!('tags' in r))fail('更新元数据需要 title 或 tags');
     const now=new Date().toISOString();let result=null;
-    const message=()=>{messageFields(r);if(r.suggested_replacement&&(typeof r.suggested_replacement.original_chunk!=='string'||!r.suggested_replacement.original_chunk||typeof r.suggested_replacement.replacement_chunk!=='string'))fail('建议需要原始及替换 LaTeX 块');return {...(r.suggested_replacement?{suggested_replacement:{original_chunk:r.suggested_replacement.original_chunk,replacement_chunk:r.suggested_replacement.replacement_chunk,status:'pending',source_span:null,reason:'离线建议需要本机重新定位源码'}}:{}),id:uuid(),body:r.body,author:copy(r.author),category:r.category,created_at:now,updated_at:now,deleted_at:null,edits:[]};};
+    const message=()=>{messageFields(r);if('suggested_replacement' in r)validateSuggestion(r.suggested_replacement);return {...(r.suggested_replacement?{suggested_replacement:{original_chunk:r.suggested_replacement.original_chunk,replacement_chunk:r.suggested_replacement.replacement_chunk,status:'pending',source_span:null,reason:'离线建议需要本机重新定位源码'}}:{}),id:uuid(),body:r.body,author:copy(r.author),category:r.category,created_at:now,updated_at:now,deleted_at:null,edits:[]};};
     if(r.operation==='create') {
       const a=anchor(content,r.selection),m=message(),id=uuid();
       data.threads[id]={id,project_id:data.project_id,created_version_id:content.version_id,created_at:now,updated_at:now,resolved:false,deleted_at:null,messages:[m],original_anchor:copy(a),current_anchor:copy(a),associations:{[content.version_id]:{status:'exact',anchor:a,candidates:[],reason:null}},history:[{at:now,method:'created',anchor:copy(a)}],...metadata(r)};result={thread_id:id,message_id:m.id};

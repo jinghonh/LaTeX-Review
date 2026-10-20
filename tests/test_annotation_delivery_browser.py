@@ -38,6 +38,41 @@ def ready(p,url):
 def create(p,body='Offline question'):
     assert p.evaluate('''async body=>{const u=reviewAnnotations.getContent().units.find(u=>u.text.startsWith('Stable'));return reviewAnnotations.update({operation:'create',selection:{unit_id:u.id,start:0,end:6,quote:'Stable'},body,author:{name:'Tester',type:'user'},category:'question'});}''',body)
 
+
+def test_browser_and_python_import_the_same_suggestion_contract(live_report, chrome):
+    from copy import deepcopy
+    from latex_review.annotations import AnnotationError, validate_bundle
+    root, entry, output, source = live_report
+    (output / 'report.html').write_text(publication_html(output))
+    url = (output / 'report.html').as_uri()
+    page = chrome.new_page()
+    ready(page, url)
+    create(page)
+    original = page.evaluate('reviewAnnotationDelivery.backup()')
+    content = load_content(output)
+    cases = json.loads((Path(__file__).parent / 'fixtures/annotation_suggestion_cases.json').read_text())
+    for case in cases:
+        bundle = deepcopy(original)
+        next(iter(bundle['threads'].values()))['messages'][0]['suggested_replacement'] = case['value']
+        if case['valid']:
+            validate_bundle(content, bundle)
+        else:
+            with pytest.raises(AnnotationError):
+                validate_bundle(content, bundle)
+        # Each recipient has empty browser storage, matching an independent reader.
+        recipient = chrome.new_page()
+        try:
+            ready(recipient, url)
+            result = recipient.evaluate('''async bundle=>{
+              try { await reviewAnnotationDelivery.importBundle(bundle); return true; }
+              catch { return false; }
+            }''', bundle)
+            assert result == case['valid'], case['name']
+            assert recipient.locator('#annotation-overview .annotation-card').count() == int(case['valid'])
+        finally:
+            recipient.close()
+    page.close()
+
 @pytest.mark.parametrize('scheme',['file','http'])
 def test_offline_lifecycle_reopen_export_import(live_report,chrome,scheme,tmp_path):
     root,entry,output,source=live_report

@@ -74,3 +74,14 @@ def test_missing_recipe_and_failed_rebuild_preserve_previous_report(tmp_path):
     output.joinpath('.rebuild/recipe.json').unlink()
     assert '缺少' in rebuild_report(output)['message']
     assert output.joinpath('report.html').read_bytes() == original
+
+
+def test_replay_generates_directly_without_parsing_cli(tmp_path, monkeypatch):
+    from latex_review.cli import ReviewArgumentParser
+    from latex_review.report_rebuild import RECIPE, replay
+    _, new, output = make_report(tmp_path)
+    new.joinpath('main.tex').write_text(r'\documentclass{article}\begin{document}Direct rebuild.\end{document}')
+    monkeypatch.setattr(ReviewArgumentParser, 'parse_args', lambda *args, **kwargs: pytest.fail('rebuild parsed CLI'))
+    target = tmp_path / 'candidate'
+    assert replay(output / RECIPE, target, output) in (0, 2)
+    assert 'Direct rebuild.' in (target / 'report.html').read_text()

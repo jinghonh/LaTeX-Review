@@ -1,9 +1,25 @@
 from copy import deepcopy
 import hashlib
+import json
+from pathlib import Path
 import pytest
 from latex_review.annotations import AnnotationStore, AnnotationError
 from test_annotations import content_at, select, create, mutate
 from test_annotations import envelope, storage_path
+
+
+SUGGESTION_CASES = json.loads((Path(__file__).parent /
+    'fixtures/annotation_suggestion_cases.json').read_text())
+
+
+@pytest.mark.parametrize('case', SUGGESTION_CASES, ids=lambda case: case['name'])
+def test_shared_suggestion_contract(case):
+    from latex_review.annotations._suggestions import validate
+    if case['valid']:
+        assert validate(case['value']) == case['value']
+    else:
+        with pytest.raises(AnnotationError):
+            validate(case['value'])
 
 
 def setup(tmp_path):

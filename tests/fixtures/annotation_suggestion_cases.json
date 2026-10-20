@@ -1,0 +1,13 @@
+[
+  {"name": "plain", "valid": true, "value": {"original_chunk": "beta", "replacement_chunk": "better"}},
+  {"name": "deletion", "valid": true, "value": {"original_chunk": "beta", "replacement_chunk": "", "status": "pending", "source_span": null}},
+  {"name": "invalid_status", "valid": false, "value": {"original_chunk": "beta", "replacement_chunk": "better", "status": "invalid"}},
+  {"name": "missing_replacement", "valid": false, "value": {"original_chunk": "beta"}},
+  {"name": "empty_original", "valid": false, "value": {"original_chunk": "", "replacement_chunk": "better"}},
+  {"name": "unexpected_field", "valid": false, "value": {"original_chunk": "beta", "replacement_chunk": "better", "extra": true}},
+  {"name": "null", "valid": false, "value": null},
+  {"name": "invalid_reason", "valid": false, "value": {"original_chunk": "beta", "replacement_chunk": "better", "reason": 42}},
+  {"name": "unicode_span", "valid": true, "value": {"original_chunk": "😀", "replacement_chunk": "", "status": "applied", "source_span": {"file": "main.tex", "start": 2, "end": 3, "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "original_chunk": "😀", "reliable": true, "writable": true, "reason": null}}},
+  {"name": "outside_path", "valid": false, "value": {"original_chunk": "x", "replacement_chunk": "y", "source_span": {"file": "../main.tex", "start": 2, "end": 3, "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "original_chunk": "x", "reliable": true, "writable": true, "reason": null}}},
+  {"name": "mismatched_span", "valid": false, "value": {"original_chunk": "x", "replacement_chunk": "y", "source_span": {"file": "main.tex", "start": 2, "end": 4, "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "original_chunk": "x", "reliable": true, "writable": true, "reason": null}}}
+]

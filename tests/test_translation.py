@@ -902,7 +902,8 @@ def test_preview_exits_promptly_with_translation_in_flight(provider, translation
             assert response.status == 200
         from latex_review import local_client
         local_client.stop()
-        with create_server(report.directory, int(base.rsplit(":", 1)[1])):
+        from urllib.parse import urlsplit
+        with create_server(report.directory, urlsplit(base).port):
             pass
     finally:
         gate.set()

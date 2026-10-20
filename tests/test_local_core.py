@@ -188,13 +188,15 @@ def test_worker_task_tracker_cancels_separate_session_on_eof(tmp_path):
     code = '''
 import json,os,subprocess,sys,threading
 from pathlib import Path
-from latex_review.local_tasks import install,cancel
+from latex_review.local_tasks import install,cancel,popen
+original_popen=subprocess.Popen
 install()
+assert subprocess.Popen is original_popen
 fd=int(sys.argv[1]);os.set_inheritable(fd,False)
 def watch():
     os.read(fd,1);cancel()
 threading.Thread(target=watch,daemon=True).start()
-child=subprocess.Popen([sys.executable,'-c','import time; time.sleep(120)'],start_new_session=True)
+child=popen([sys.executable,'-c','import time; time.sleep(120)'],start_new_session=True)
 Path(sys.argv[2]).write_text(json.dumps({'pid':child.pid}))
 child.wait()
 '''
@@ -233,6 +235,41 @@ def test_missing_resource_candidate_and_corrupt_registry_recovery(tmp_path):
     local_client.start()
     assert list(state.glob('registry.corrupt-*.json'))
     assert local_client.request('/api/v1/papers')['papers'] == []
+
+
+def test_diff_retries_and_equivalent_requests_do_not_copy_again(tmp_path, monkeypatch):
+    import logging
+    from latex_review import local_service
+    root, entry = paper(tmp_path)
+    request = diff_request(root, entry, tmp_path / 'report', tmp_path / 'missing.toml')
+    resource = Path(request['directory']) / 'resource.bin'
+    resource.write_bytes(bytes(1024 * 1024))
+    copied = []
+    original = local_service.copy_report
+    def copy_report(source, target):
+        result = original(source, target)
+        copied.append((target / resource.name).stat().st_size)
+        return result
+    monkeypatch.setattr(local_service, 'copy_report', copy_report)
+    # Hold operations in the queue so this test needs no worker process.
+    monkeypatch.setattr(local_service.Slot, '_run', lambda self: None)
+    state = state_directory()
+    manager = local_service.Manager(state, 8765, logging.getLogger(__name__))
+    try:
+        first = manager.ensure(request['paper_id'], 'diff', {**request, 'request_id': 'first'})
+        retry = manager.ensure(request['paper_id'], 'diff', {**request, 'request_id': 'first'})
+        equivalent = manager.ensure(request['paper_id'], 'diff', {**request, 'request_id': 'second'})
+        assert first['operation_id'] == retry['operation_id'] == equivalent['operation_id']
+        assert copied == [resource.stat().st_size]
+        resource.write_bytes(b'changed')
+        with pytest.raises(LocalError, match='内容不同'):
+            manager.ensure(request['paper_id'], 'diff', {**request, 'request_id': 'first'})
+        assert len(copied) == 1
+        changed = manager.ensure(request['paper_id'], 'diff', {**request, 'request_id': 'third'})
+        assert changed['operation_id'] != first['operation_id']
+        assert len(copied) == 2
+    finally:
+        manager.close()
 
 
 def test_upload_network_phase_releases_generation_lease(tmp_path, monkeypatch):
@@ -276,7 +313,7 @@ def test_bounded_compile_is_cancelled_with_its_separate_group(tmp_path):
     code = '''
 import os,sys,threading
 from pathlib import Path
-from latex_review.local_tasks import install,cancel
+from latex_review.local_tasks import install,cancel,popen
 from latex_review.compilation import _run_bounded
 install()
 fd=int(sys.argv[1]);os.set_inheritable(fd,False)

@@ -295,27 +295,27 @@ def test_open_browser_previews_generated_report_and_preserves_status(tmp_path, m
     config.write_text('', encoding='utf-8')
     calls = []
 
-    def preview(args):
-        assert Path(args[0]).joinpath('report.html').is_file()
-        calls.append(args)
+    def preview(directory, **options):
+        assert Path(directory).joinpath('report.html').is_file()
+        calls.append((directory, options))
         return 0
 
-    monkeypatch.setattr(serve, 'main', preview)
+    monkeypatch.setattr(serve, 'preview_report', preview)
     args = ['main.tex', '--output', 'custom-report', '--config', str(config)]
     assert cli.main(args) == 0
     assert calls == []
     assert cli.main([*args, '--open-browser']) == 0
     assert len(calls) == 1
     assert Path(calls[0][0]) != tmp_path / 'custom-report'  # Frozen private browser copy.
-    assert calls[0][1:] == ['--open-browser', '--translation-cache-dir', str(tmp_path / 'translation-cache'), '--config', str(config)]
+    assert calls[0][1] == dict(open_browser=True, translation_cache_dir=tmp_path / 'translation-cache', config=config, wait=False, startup_timeout=120)
     (tmp_path / 'main.tex').write_text(r'\section{A}\odd{unknown}', encoding='utf-8')
     assert cli.main([*args, '--open-browser']) == 2
-    monkeypatch.setattr(serve, 'main', lambda args: 4)
+    monkeypatch.setattr(serve, 'preview_report', lambda *args, **kwargs: 4)
     assert cli.main([*args, '--open-browser']) == 4
     assert (tmp_path / 'custom-report/report.html').is_file()
     (tmp_path / 'main.tex').unlink()
     calls.clear()
-    monkeypatch.setattr(serve, 'main', preview)
+    monkeypatch.setattr(serve, 'preview_report', preview)
     assert cli.main([*args, '--open-browser']) == 4
     assert calls == []
 

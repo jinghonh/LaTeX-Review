@@ -22,7 +22,11 @@ def _data(identifier: str, value: object) -> str:
 
 
 def _script(name: str, revision: int | None = None) -> str:
-    content = files('latex_review').joinpath(name).read_text(encoding='utf-8')
+    if name == 'annotation_delivery.js':
+        from .annotations._suggestions import delivery_script
+        content = delivery_script()
+    else:
+        content = files('latex_review').joinpath(name).read_text(encoding='utf-8')
     if revision is not None:
         content = content.replace('LIVE_REVISION', str(revision))
     return '<script>' + content + '</script>'

@@ -10,6 +10,7 @@ import struct
 import subprocess
 import zlib
 
+from . import local_tasks
 from .compilation import CompileStatus, _program, _safe_path
 from .contract import Diagnostic, ReviewDocument, SourceLocation
 from .report import _write_managed
@@ -63,7 +64,7 @@ def _png(width: int, height: int, pixels: bytes, *, color: bool = False) -> byte
 
 
 def _run(command: list[str], timeout: float = 10) -> bytes:
-    result = subprocess.run(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=timeout, check=False)
+    result = local_tasks.run(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=timeout, check=False)
     if result.returncode or len(result.stdout) > 8 * 1024 * 1024:
         raise OSError(result.stderr[:300].decode("utf-8", "replace") or "页面转换失败")
     return result.stdout

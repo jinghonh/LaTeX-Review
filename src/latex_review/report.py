@@ -18,6 +18,7 @@ import subprocess
 import tempfile
 from urllib.parse import quote
 
+from . import local_tasks
 from .comparison import ComparisonResult
 from .delivery import DeliveryError as ReportPathError, single_file_html as _single_file_html
 from .contract import (ChangeDetail, Diagnostic, DiagnosticsDocument, PrimaryChange, ReviewDocument,
@@ -240,7 +241,7 @@ def _pdf_preview_uncached(source: Path, directory: Path, relative: Path,
                 reasons.append("sips 不支持指定 PDF 页码")
                 continue
             try:
-                result = subprocess.run(command, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+                result = local_tasks.run(command, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
                                         stderr=subprocess.PIPE, timeout=timeout, check=False,
                                         cwd=temporary, preexec_fn=limit_output)
             except subprocess.TimeoutExpired:

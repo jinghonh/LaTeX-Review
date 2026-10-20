@@ -109,11 +109,11 @@ def test_upload_ignores_entry_service_state(paper, monkeypatch, entry_state):
 def test_upload_preview_exit_priority(paper, monkeypatch, upload_ok, browser, preview_code, expected):
     remote = Remote(monkeypatch, fail=not upload_ok)
     preview_calls = []
-    def preview(args):
+    def preview(directory, **options):
         assert remote.calls, '预览必须在上传之后'
-        preview_calls.append(args)
+        preview_calls.append((directory, options))
         return preview_code
-    monkeypatch.setattr(serve, 'main', preview)
+    monkeypatch.setattr(serve, 'preview_report', preview)
     assert cli.main(['main.tex', '--upload'] + (['--open-browser'] if browser else [])) == expected
     assert bool(preview_calls) == browser
     run = json.loads((paper / '.latex-review/latest/run.json').read_text())
@@ -129,7 +129,7 @@ def test_upload_preview_exit_priority(paper, monkeypatch, upload_ok, browser, pr
 def test_upload_preserves_diagnostic_exit_code(paper, monkeypatch, upload_ok, browser, preview_code, expected):
     (paper / 'main.tex').write_text('New text. \\odd{unpreviewable}\n')
     remote = Remote(monkeypatch, fail=not upload_ok)
-    monkeypatch.setattr(serve, 'main', lambda args: preview_code)
+    monkeypatch.setattr(serve, 'preview_report', lambda *args, **kwargs: preview_code)
     assert cli.main(['main.tex', '--upload'] + (['--open-browser'] if browser else [])) == expected
     assert len(remote.archives) == int(upload_ok)
 
@@ -180,13 +180,13 @@ with output_lease(report,timeout=2):
         assert result.returncode == 0, result.stderr
     remote = Remote(monkeypatch, before_query=mutate_after_freeze)
     previews = []
-    def preview(args):
-        previews.append(args)
-        snapshot = (Path(args[0]) / 'report.html').read_text()
+    def preview(directory, **options):
+        previews.append((directory, options))
+        snapshot = (Path(directory) / 'report.html').read_text()
         assert 'Frozen publication text.' in snapshot
         assert 'Foreign replacement.' not in snapshot
         return 0
-    monkeypatch.setattr(serve, 'main', preview)
+    monkeypatch.setattr(serve, 'preview_report', preview)
     assert cli.main(['main.tex', '--upload', '--output', str(output)] + (['--open-browser'] if browser else [])) == 0
     assert bool(previews) == browser
     html = remote.archives[0]['report.html'].decode()

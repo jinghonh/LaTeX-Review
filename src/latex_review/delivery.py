@@ -8,7 +8,6 @@ import gzip
 from datetime import datetime, timezone
 from dataclasses import dataclass
 from hashlib import sha256
-from importlib.resources import files
 import io
 import tarfile
 from uuid import uuid4
@@ -261,7 +260,8 @@ def _prepare_publication(directory: Path, slug: str, translation_config: dict | 
         html = shared_publication_annotations(html)
     resources = report_resources(html, directory)
     html = re.sub(r'<script type="application/json" id="annotation-assets">.*?</script>', '', html, flags=re.S)
-    script = files('latex_review').joinpath('annotation_delivery.js').read_text(encoding='utf-8')
+    from .annotations._suggestions import delivery_script
+    script = delivery_script()
     html = re.sub(r'<script>/\* Portable annotation contract.*?</script>',
                   lambda _: '<script>' + script + '</script>', html, flags=re.S)
     html = html.replace('</head>', '<meta name="latex-review-publication" content="static"><style>#translation-export{display:none!important}</style></head>', 1)

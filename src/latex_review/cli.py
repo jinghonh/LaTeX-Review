@@ -12,15 +12,15 @@ import os
 from pathlib import Path
 import re
 import shutil
-import subprocess
 import sys
 import tomllib
 
+from . import local_tasks
 from .cache import OWNER_FILE, ParseCache, is_managed_cache_file, is_owned_stage, read_owner_secret, stage_prefix
 from .comparison import compare_projects
 from .compilation import compile_side, skipped_side
 from .contract import Diagnostic, SourceLocation
-from .report import ReportPathError, write_cache_metadata, write_failure_diagnostics, write_report, write_source_fallback
+from .report import ReportPathError, ReportResult, write_cache_metadata, write_failure_diagnostics, write_report, write_source_fallback
 from .sources import SourceError, resolve_sources
 from .structure import parse_project
 from .macros import validate_macros
@@ -176,7 +176,7 @@ def _source_roots(options: dict) -> tuple[Path, ...]:
         return tuple(Path(options[key]).expanduser().resolve().parent for key in ("old_file", "new_file"))
     entry = Path(options["entry"]).expanduser().resolve()
     try:
-        probe = subprocess.run(("git", "-C", str(entry.parent), "rev-parse", "--show-toplevel"),
+        probe = local_tasks.run(("git", "-C", str(entry.parent), "rev-parse", "--show-toplevel"),
                                capture_output=True, check=False)
     except OSError:
         return (entry.parent,)
@@ -305,15 +305,120 @@ def _finish_current(output, run, code):
         pass
 
 
-def main(argv: list[str] | None = None, *, configuration: dict | None = None,
-         source_exclusions: tuple[Path, ...] = ()) -> int:
+def generate_report(options: dict, output: Path, *, configuration: dict,
+                    cache: ParseCache | None = None, run: dict | None = None,
+                    source_exclusions: tuple[Path, ...] = ()) -> tuple[ReportResult, dict]:
+    """Generate from resolved source options, without command-line parsing.
+
+    The caller owns the output directory and its lifetime locks. Rebuild callers
+    use a private staging directory; CLI callers validate and prepare their output.
+    """
+    config = configuration
+    output = Path(output)
+    output.mkdir(parents=True, exist_ok=True)
+    run = new_manifest() if run is None else run
+    run['stages']['sources'] = 'running'
+    cache = cache if cache is not None else ParseCache(output.parent / '.latex-review-cache', enabled=False)
+    compile_config = config.get('compile', {})
+    compile_enabled = compile_config.get('enabled', False)
+    new_only = compile_config.get('new_only', False)
+    sandbox = compile_config.get('sandbox_render', False)
+    engine = compile_config.get('engine', 'pdflatex')
+    timeout = compile_config.get('timeout', 90)
+    if engine not in {'pdflatex', 'xelatex', 'lualatex'} or not 1 <= timeout <= 600:
+        raise ConfigurationError('编译引擎或超时无效')
+    if (new_only or sandbox) and not compile_enabled:
+        raise ConfigurationError('仅编译新版本及沙箱渲染须启用编译')
+    _progress("正在读取比较来源")
+    from .local_paths import state_directory
+    with resolve_sources(**options, excluded_paths=(output, cache.directory, output.parent / "translation-cache", state_directory(),
+                                                       *source_exclusions,
+                                                       *tuple(root / ".latex-review" / "annotations" for root in _source_roots(options))),
+                         ignore_patterns=tuple(config.get("ignore", ()))) as pair:
+        _progress("正在展开两版来源")
+        old_expanded, new_expanded = pair.old.expand(), pair.new.expand()
+        from .identity import paper_identity
+        local_identity = paper_identity(pair.new.worktree_origin or pair.new.root, pair.new.entry)
+        run["baselines"] = {"old": baseline(old_expanded), "new": baseline(new_expanded)}
+        run["stages"]["sources"] = "complete"
+        run["stages"]["parse"] = "running"
+        macros = validate_macros(config.get("macros", {}))
+        failures = []
+        parsed = []
+        for expanded in (old_expanded, new_expanded):
+            _progress("正在解析" + ("旧稿" if expanded.source.side == "old" else "新稿"))
+            try:
+                parsed.append(cache.parse(expanded, parser=lambda source: parse_project(source, macros=macros, include_title=True)))
+            except SourceError:
+                raise
+            except Exception as exc:
+                parsed.append(None)
+                failures.append((expanded.source.side, str(exc)))
+        source_fallback = bool(failures or any(item and any(d.code == "plastex_parse_error" for d in item.diagnostics) for item in parsed))
+        run["stages"]["parse"] = "degraded" if source_fallback else "complete"
+        comparison = None
+        if not source_fallback:
+            run["stages"]["compare"] = "running"
+            comments = config.get("diff", {}).get("comments", False)
+            _progress("正在比较结构化内容")
+            comparison = compare_projects(parsed[0], parsed[1], review_comments=comments)
+            run["stages"]["compare"] = "complete"
+        statuses = None
+        rendering = None
+        compile_diagnostics: tuple[Diagnostic, ...] = ()
+        if compile_enabled:
+            run["stages"]["compile"] = "running"
+            built = []
+            for source in (pair.old, pair.new):
+                if source.side == "old" and new_only:
+                    built.append(skipped_side(output, engine))
+                    continue
+                _progress("正在编译" + ("旧稿" if source.side == "old" else "新稿"))
+                peer = pair.new if source.side == "old" else pair.old
+                status, issues = compile_side(source, output, engine=engine, timeout=timeout, sandbox=sandbox,
+                                              related_sources=(peer,))
+                built.append(status)
+                compile_diagnostics += issues
+            statuses = tuple(built)
+            _progress("正在生成编译页面预览")
+            rendering, visual_issues = build_visual(statuses[0], statuses[1], output,
+                                                    comparison.document if comparison else None,
+                                                    sources=(pair.old, pair.new))
+            compile_diagnostics += visual_issues
+            run["stages"]["compile"] = "degraded" if any(d.severity in {"warning", "error"} for d in compile_diagnostics) else "complete"
+        run["stages"]["report"] = "running"
+        _progress("正在生成内容预览并写入报告")
+        if source_fallback:
+            report = write_source_fallback(old_expanded, new_expanded, output, parse_failures=failures,
+                                           parsed=tuple(parsed), extra_diagnostics=compile_diagnostics,
+                                           rendering=rendering, statuses=statuses)
+        else:
+            report = write_report(parsed[0], parsed[1], comparison, output,
+                                  extra_diagnostics=compile_diagnostics,
+                                  rendering=rendering, statuses=statuses,
+                                  annotation_project_root=_source_roots(options)[-1])
+        write_cache_metadata(output, cache.metadata())
+        from .report_rebuild import save_recipe
+        save_recipe(output, old_expanded, new_expanded, config)
+        run["stages"]["report"] = "degraded" if source_fallback else "complete"
+        run["degradation_reasons"] = [{"code": d.code, "severity": d.severity, "message": d.message}
+                                      for d in report.document.diagnostics
+                                      if d.rule_status is None and d.severity in {"warning", "error"}]
+    from .local_state import write_json
+    write_json(output / '.local-identity.json', local_identity)
+    code = 2 if any(d.rule_status is None and d.severity in {'warning', 'error'}
+                    for d in report.document.diagnostics) else 0
+    finish(output, run, code)
+    return report, run
+
+
+def main(argv: list[str] | None = None) -> int:
     from .output_leases import generation_guard
     with ExitStack() as output_guard, ExitStack() as resources, generation_guard(output_guard):
-        return _main(argv, configuration=configuration, source_exclusions=source_exclusions,
-                     output_guard=output_guard, resources=resources)
+        return _main(argv, output_guard=output_guard, resources=resources)
 
 
-def _main(argv=None, *, configuration=None, source_exclusions=(), output_guard, resources):
+def _main(argv=None, *, output_guard, resources):
     parser = ReviewArgumentParser(prog="latex-review", description="比较论文并生成结构化审阅报告。",
                                   epilog="默认比较 Git HEAD 与磁盘工作区；仅显式 --compile 才运行 TeX。")
     parser.add_argument("paths", nargs="*", help="Git 模式入口，或两个独立源文件")
@@ -353,7 +458,7 @@ def _main(argv=None, *, configuration=None, source_exclusions=(), output_guard, 
     run = new_manifest()
     active_stage = "sources"
     try:
-        config = configuration if configuration is not None else _config(
+        config = _config(
             Path(args.config).expanduser() if args.config else Path(".latex-review.toml"), bool(args.config))
         compile_config = config.get("compile", {})
         compile_enabled = args.compile or compile_config.get("enabled", False)
@@ -400,87 +505,15 @@ def _main(argv=None, *, configuration=None, source_exclusions=(), output_guard, 
                            config={"config": {key: value for key, value in config.items() if key != "translation"}, "math": args.math or "mathjax",
                                    "comments": args.comments if args.comments is not None else config.get("diff", {}).get("comments", False),
                                    "include_title": True})
-        _progress("正在读取比较来源")
-        from .local_paths import state_directory
-        with resolve_sources(**options, excluded_paths=(output, cache_dir, output.parent / "translation-cache", state_directory(),
-                                                           *source_exclusions,
-                                                           *tuple(root / ".latex-review" / "annotations" for root in _source_roots(options))),
-                             ignore_patterns=tuple(config.get("ignore", ()))) as pair:
-            _progress("正在展开两版来源")
-            old_expanded, new_expanded = pair.old.expand(), pair.new.expand()
-            from .identity import paper_identity
-            local_identity = paper_identity(pair.new.worktree_origin or pair.new.root, pair.new.entry)
-            run["baselines"] = {"old": baseline(old_expanded), "new": baseline(new_expanded)}
-            run["stages"]["sources"] = "complete"
-            active_stage = "parse"
-            macros = validate_macros(config.get("macros", {}))
-            failures = []
-            parsed = []
-            for expanded in (old_expanded, new_expanded):
-                _progress("正在解析" + ("旧稿" if expanded.source.side == "old" else "新稿"))
-                try:
-                    parsed.append(cache.parse(expanded, parser=lambda source: parse_project(source, macros=macros, include_title=True)))
-                except SourceError:
-                    raise
-                except Exception as exc:
-                    parsed.append(None)
-                    failures.append((expanded.source.side, str(exc)))
-            source_fallback = bool(failures or any(item and any(d.code == "plastex_parse_error" for d in item.diagnostics) for item in parsed))
-            run["stages"]["parse"] = "degraded" if source_fallback else "complete"
-            active_stage = "compare"
-            comparison = None
-            if not source_fallback:
-                comments = args.comments if args.comments is not None else config.get("diff", {}).get("comments", False)
-                _progress("正在比较结构化内容")
-                comparison = compare_projects(parsed[0], parsed[1], review_comments=comments)
-                run["stages"]["compare"] = "complete"
-            statuses = None
-            rendering = None
-            compile_diagnostics: tuple[Diagnostic, ...] = ()
-            if compile_enabled:
-                active_stage = "compile"
-                built = []
-                for source in (pair.old, pair.new):
-                    if source.side == "old" and new_only:
-                        built.append(skipped_side(output, engine))
-                        continue
-                    _progress("正在编译" + ("旧稿" if source.side == "old" else "新稿"))
-                    peer = pair.new if source.side == "old" else pair.old
-                    status, issues = compile_side(source, output, engine=engine, timeout=timeout, sandbox=sandbox,
-                                                  related_sources=(peer,))
-                    built.append(status)
-                    compile_diagnostics += issues
-                statuses = tuple(built)
-                _progress("正在生成编译页面预览")
-                rendering, visual_issues = build_visual(statuses[0], statuses[1], output,
-                                                        comparison.document if comparison else None,
-                                                        sources=(pair.old, pair.new))
-                compile_diagnostics += visual_issues
-                run["stages"]["compile"] = "degraded" if any(d.severity in {"warning", "error"} for d in compile_diagnostics) else "complete"
-            active_stage = "report"
-            _progress("正在生成内容预览并写入报告")
-            if source_fallback:
-                report = write_source_fallback(old_expanded, new_expanded, output, parse_failures=failures,
-                                               parsed=tuple(parsed), extra_diagnostics=compile_diagnostics,
-                                               rendering=rendering, statuses=statuses)
-            else:
-                report = write_report(parsed[0], parsed[1], comparison, output,
-                                      extra_diagnostics=compile_diagnostics,
-                                      rendering=rendering, statuses=statuses,
-                                      annotation_project_root=_source_roots(options)[-1])
-            write_cache_metadata(output, cache.metadata())
-            from copy import deepcopy
-            from .report_rebuild import save_recipe
-            effective = deepcopy(config)
-            effective['compile'] = dict(enabled=compile_enabled, new_only=new_only, sandbox_render=sandbox,
-                                        engine=engine, timeout=timeout)
-            effective.setdefault('diff', {})['comments'] = (
-                args.comments if args.comments is not None else config.get('diff', {}).get('comments', False))
-            save_recipe(output, old_expanded, new_expanded, effective)
-            run["stages"]["report"] = "degraded" if source_fallback else "complete"
-            run["degradation_reasons"] = [{"code": d.code, "severity": d.severity, "message": d.message}
-                                          for d in report.document.diagnostics
-                                          if d.rule_status is None and d.severity in {"warning", "error"}]
+        from copy import deepcopy
+        effective = deepcopy(config)
+        effective['compile'] = dict(enabled=compile_enabled, new_only=new_only, sandbox_render=sandbox,
+                                    engine=engine, timeout=timeout)
+        effective.setdefault('diff', {})['comments'] = (
+            args.comments if args.comments is not None else config.get('diff', {}).get('comments', False))
+        report, run = generate_report(options, output, configuration=effective, cache=cache,
+                                      run=run)
+        source_fallback = run['stages']['parse'] == 'degraded'
         print(report.html)
         _progress(f"生成完成：{report.document.summary.changes} 项主变更；报告：{report.html}")
         warnings = [d for d in report.document.diagnostics if d.severity in {"warning", "error"}]
@@ -488,13 +521,13 @@ def _main(argv=None, *, configuration=None, source_exclusions=(), output_guard, 
             _progress(f"需要检查 {len(warnings)} 条诊断；详情：{output / 'diagnostics.json'}")
         if source_fallback:
             _progress("恢复操作：检查结构解析诊断后重新生成；源码降级报告暂不支持全文搜索、审阅记录和续读。")
-        if any(d.code == "compile_failed" for d in compile_diagnostics):
+        if any(d.code == "compile_failed" for d in report.document.diagnostics):
             _progress("恢复操作：查看 compiled/ 下的编译日志；确认 latexmk 和所选 TeX 引擎已安装，再修正编译错误。")
-        if any(d.code == "sandbox_unavailable" for d in compile_diagnostics):
+        if any(d.code == "sandbox_unavailable" for d in report.document.diagnostics):
             _progress("恢复操作：检查沙箱诊断并修复本机隔离环境后重新运行。")
-        result = 2 if any(d.rule_status is None and d.severity in {"warning", "error"}
-                         for d in report.document.diagnostics) else 0
+        result = run['exit_code']
     except ConfigurationError as exc:
+        active_stage = next((name for name, state in run['stages'].items() if state == 'running'), active_stage)
         if output_ready:
             _record_failure(output, Diagnostic("configuration_error", "error", str(exc)))
             run["stages"][active_stage] = "failed"
@@ -504,6 +537,7 @@ def _main(argv=None, *, configuration=None, source_exclusions=(), output_guard, 
         _progress("恢复操作：检查错误中指出的配置文件或选项；运行 latex-review --help 查看用法。")
         return 64
     except SourceError as exc:
+        active_stage = next((name for name, state in run['stages'].items() if state == 'running'), active_stage)
         if exc.code in {"invalid_arguments", "conflicting_modes"}:
             print(f"latex-review: 参数错误：{exc.message}", file=sys.stderr)
             _source_recovery(exc.code)
@@ -521,6 +555,7 @@ def _main(argv=None, *, configuration=None, source_exclusions=(), output_guard, 
             finish(output, run, 4)
         return 4
     except Exception as exc:
+        active_stage = next((name for name, state in run['stages'].items() if state == 'running'), active_stage)
         if output_ready:
             _record_failure(output, Diagnostic("internal_error", "error", f"{type(exc).__name__}: {exc}"))
         print(f"latex-review: 内部错误：{type(exc).__name__}: {exc}", file=sys.stderr)
@@ -530,9 +565,6 @@ def _main(argv=None, *, configuration=None, source_exclusions=(), output_guard, 
             run["degradation_reasons"] = [{"code": "internal_error", "message": str(exc)}]
             finish(output, run, 8)
         return 8
-    from .local_state import write_json
-    write_json(output / '.local-identity.json', local_identity)
-    finish(output, run, result)
     preview_directory = output
     preview_error = None
     if args.open_browser:
@@ -560,21 +592,17 @@ def _main(argv=None, *, configuration=None, source_exclusions=(), output_guard, 
             run["degradation_reasons"].append({"code": "upload_failed", "message": str(exc)})
     output_guard.close()
     if args.open_browser:
-        from .serve import main as preview
-        preview_args = [str(preview_directory), "--open-browser", "--translation-cache-dir", str(output.parent / "translation-cache")]
-        if args.config:
-            preview_args.extend(["--config", args.config])
-        if args.wait:
-            preview_args.append("--wait")
-        if args.startup_timeout != 120:
-            preview_args.extend(["--startup-timeout", str(args.startup_timeout)])
+        from .serve import preview_report
         run["stages"]["preview"] = "running"
         _finish_current(output, run, result)
         if preview_error:
             print(f"latex-review: 预览副本失败：{preview_error}", file=sys.stderr)
             preview_result = 4
         else:
-            preview_result = preview(preview_args)
+            preview_result = preview_report(preview_directory, open_browser=True,
+                                            translation_cache_dir=output.parent / 'translation-cache',
+                                            config=Path(args.config) if args.config else None,
+                                            wait=args.wait, startup_timeout=args.startup_timeout)
         run["stages"]["preview"] = "failed" if preview_result else "complete"
         if preview_result:
             _finish_current(output, run, preview_result)

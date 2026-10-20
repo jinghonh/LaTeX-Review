@@ -116,12 +116,12 @@ def test_cli_upload_failure_keeps_local_report_and_opens_browser(tmp_path, monke
         assert (directory / 'report.html').is_file()
         calls.append('upload')
         raise UploadError('offline')
-    def preview(args):
-        assert Path(args[0]).joinpath('report.html').is_file()
+    def preview(directory, **options):
+        assert Path(directory).joinpath('report.html').is_file()
         calls.append('browser')
         return 0
     monkeypatch.setattr(upload, 'upload_report', fail)
-    monkeypatch.setattr(serve, 'main', preview)
+    monkeypatch.setattr(serve, 'preview_report', preview)
     assert cli.main(['main.tex', '--open-browser', '--upload']) == 16
     assert calls == ['upload', 'browser']
     calls.clear()

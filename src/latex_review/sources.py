@@ -14,6 +14,7 @@ import subprocess
 import tempfile
 from typing import Iterator
 
+from . import local_tasks
 from .contract import ComparisonSource
 from .source_map import SourceMap, SourceSegment
 
@@ -89,7 +90,7 @@ _GRAPHICS = (".pdf", ".png", ".jpg", ".jpeg", ".eps", ".svg", ".webp")
 
 def _git(where: Path, *args: str, check: bool = True) -> subprocess.CompletedProcess[bytes]:
     try:
-        result = subprocess.run(("git", "-C", str(where), *args), capture_output=True)
+        result = local_tasks.run(("git", "-C", str(where), *args), capture_output=True)
     except FileNotFoundError as exc:
         raise SourceError("explicit_sources_required", None, "未找到 Git；请显式指定两个目录或两个独立文件") from exc
     if check and result.returncode:
@@ -538,7 +539,7 @@ def expand_project(source: ProjectSource) -> ExpandedProject:
                         provided = False
                         if resolver and re.fullmatch(r"[A-Za-z0-9_.-]+", filename) and not filename.startswith("-"):
                             try:
-                                found = subprocess.run((resolver, filename), capture_output=True, timeout=2, check=False)
+                                found = local_tasks.run((resolver, filename), capture_output=True, timeout=2, check=False)
                                 provided = found.returncode == 0 and bool(found.stdout.strip())
                             except (OSError, subprocess.TimeoutExpired):
                                 pass

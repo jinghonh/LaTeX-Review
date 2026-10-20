@@ -6,9 +6,9 @@ import json
 import os
 from pathlib import Path
 import shutil
-import subprocess
 import sys
 from threading import local
+from . import local_tasks
 
 _held = local()
 
@@ -96,21 +96,22 @@ def replay(recipe_path, output, original_report):
         build(ProjectSource('new', root, recipe['entry'], ComparisonSource('directory', str(root))), output, revision)
         _write(output / 'live-status.json', json.dumps({'revision': revision, 'message': '已应用源码建议并更新预览。'}))
         return 0
-    from .cli import main
+    from .cli import generate_report
     if recipe['mode'] == 'git':
-        argv = [str(entry), '--old', recipe['old_revision'], '--new', 'worktree']
+        options = dict(entry=str(entry), old_revision=recipe['old_revision'], new_revision='worktree')
     else:
         old_root = (recipe_path.parent.parent / recipe['old_snapshot']).resolve()
         if not old_root.is_relative_to(recipe_path.parent.parent.resolve()):
             raise ValueError('重建基线快照路径无效')
         if recipe['mode'] == 'file':
-            argv = [str(old_root / recipe['old_entry']), str(entry)]
+            options = dict(old_file=str(old_root / recipe['old_entry']), new_file=str(entry))
         elif recipe['mode'] == 'directory':
-            argv = ['--old-dir', str(old_root), '--new-dir', str(root), '--entry', recipe['entry']]
+            options = dict(old_dir=str(old_root), new_dir=str(root), entry=recipe['entry'])
         else:
             raise ValueError('未知重建来源模式')
-    argv += ['--output', str(output), '--no-cache']
-    return main(argv, configuration=recipe['configuration'], source_exclusions=(Path(original_report),))
+    _, manifest = generate_report(options, output, configuration=recipe['configuration'],
+                                  source_exclusions=(Path(original_report),))
+    return manifest['exit_code']
 
 
 def execute_on_report(session, envelope, report, *, progress=None, incremental=False):
@@ -154,7 +155,7 @@ def _rebuild_report(report):
                 code = ('from latex_review.local_tasks import inherit_owner; '
                         f'inherit_owner({OWNER_FD}); ' + code)
                 inherited = (OWNER_FD,)
-            result = subprocess.run([sys.executable, '-c', code, str(recipe_path), str(stage), str(report)],
+            result = local_tasks.run([sys.executable, '-c', code, str(recipe_path), str(stage), str(report)],
                                     capture_output=True, text=True, pass_fds=inherited)
             from .annotations import load_content
             if result.returncode not in (0, 2) or not (stage / 'report.html').is_file():

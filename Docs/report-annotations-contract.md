@@ -97,6 +97,7 @@ Git 比较使用原始仓库根目录，不使用临时快照目录。实时预�
 
 每条内容保存 UUID、正文、作者、分类、时间、删除标记和编辑历史。
 可选 `suggested_replacement` 保存原始及替换 LaTeX、创建版本、单元、可靠区间及 `pending`/`applied` 状态。
+Python 与浏览器共用[建议字段契约](../src/latex_review/schemas/annotation-suggestion.schema.json)。浏览器脚本内嵌此契约，离线校验无需联网。
 建议应用不改变线程的解决状态。预检不写入；应用校验文件全文指纹、原文、所属区间与修订号。
 作者格式为 `{"name":"显示名称","type":"user"}`；类型还允许 `agent`。
 分类为 `question`、`suggestion` 或 `note`。单条正文上限为 64 KiB UTF-8。

@@ -340,6 +340,48 @@ def _report_directory(path: Path, config: dict) -> Path:
     return path
 
 
+def preview_report(directory: Path, *, config: Path | None = None,
+                   translation_cache_dir: Path | None = None, root: Path | None = None,
+                   entry: Path | None = None, port: int = 0, open_browser: bool = False,
+                   wait: bool = False, startup_timeout: float = 120) -> int:
+    """Open a managed report directly; CLI parsing stays in main."""
+    directory = Path(directory)
+    try:
+        from .cli import _config
+        from .identity import identity_hash
+        from .local_reports import report_identity
+        config_path = (config or Path('.latex-review.toml')).expanduser().resolve()
+        config_explicit = config is not None
+        values = _config(config_path, config_explicit)
+        shortcut = directory if directory.suffix.lower() == '.tex' else None
+        directory = _report_directory(directory, values).resolve()
+        identity = report_identity(directory, root=root,
+                                   entry=entry or shortcut)
+        request = {**identity, 'kind': 'diff', 'directory': str(directory), 'port': port,
+                   'config': str(config_path), 'config_explicit': config_explicit,
+                   'cache': str((translation_cache_dir or directory.parent / 'translation-cache').expanduser().resolve()),
+                   'configuration_fingerprint': identity_hash(values)}
+        from .local_client import ensure, follow
+        result = ensure(request, timeout=startup_timeout)
+        print(result['url'], flush=True)
+        print('差异报告服务已就绪；使用latex-review-local stop-paper显式停止。', file=sys.stderr, flush=True)
+        if open_browser:
+            try:
+                opened = webbrowser.open(result['url'])
+            except (OSError, webbrowser.Error):
+                opened = False
+            if not opened:
+                print('无法自动打开浏览器；请手动打开上述地址。', file=sys.stderr)
+        if wait:
+            follow(request['paper_id'], 'diff')
+        return 0
+    except KeyboardInterrupt:
+        return 0
+    except (OSError, ValueError, RuntimeError) as exc:
+        print(f'预览启动失败：{exc}', file=sys.stderr)
+        return 4
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description='启动或复用受管差异报告服务；命令返回后服务继续运行')
     parser.add_argument('directory', type=Path, help='已有报告目录、report.html或论文入口')
@@ -355,39 +397,9 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     if not 0 <= args.port <= 65535 or args.startup_timeout <= 0:
         parser.error('端口或启动超时无效')
-    try:
-        from .cli import _config
-        from .identity import identity_hash
-        from .local_reports import report_identity
-        config_path = (args.config or Path('.latex-review.toml')).expanduser().resolve()
-        config = _config(config_path, bool(args.config))
-        directory = _report_directory(args.directory, config).resolve()
-        shortcut = args.directory if args.directory.suffix.lower() == '.tex' else None
-        identity = report_identity(directory, root=args.root or args.annotation_project_root,
-                                   entry=args.entry or shortcut)
-        request = {**identity, 'kind': 'diff', 'directory': str(directory), 'port': args.port,
-                   'config': str(config_path), 'config_explicit': bool(args.config),
-                   'cache': str((args.translation_cache_dir or directory.parent / 'translation-cache').expanduser().resolve()),
-                   'configuration_fingerprint': identity_hash(config)}
-        from .local_client import ensure, follow
-        result = ensure(request, timeout=args.startup_timeout)
-        print(result['url'], flush=True)
-        print('差异报告服务已就绪；使用latex-review-local stop-paper显式停止。', file=sys.stderr, flush=True)
-        if args.open_browser:
-            try:
-                opened = webbrowser.open(result['url'])
-            except (OSError, webbrowser.Error):
-                opened = False
-            if not opened:
-                print('无法自动打开浏览器；请手动打开上述地址。', file=sys.stderr)
-        if args.wait:
-            follow(request['paper_id'], 'diff')
-        return 0
-    except KeyboardInterrupt:
-        return 0
-    except (OSError, ValueError, RuntimeError) as exc:
-        print(f'预览启动失败：{exc}', file=sys.stderr)
-        return 4
+    return preview_report(args.directory, config=args.config, translation_cache_dir=args.translation_cache_dir,
+                          root=args.root or args.annotation_project_root, entry=args.entry, port=args.port,
+                          open_browser=args.open_browser, wait=args.wait, startup_timeout=args.startup_timeout)
 
 
 if __name__ == '__main__':

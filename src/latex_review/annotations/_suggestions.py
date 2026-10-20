@@ -2,10 +2,22 @@
 from copy import deepcopy
 import difflib
 import hashlib
+from importlib.resources import files
+import json
 import os
 from pathlib import Path
-import re
 import tempfile
+
+from jsonschema import Draft7Validator
+
+SCHEMA = json.loads(files('latex_review').joinpath('schemas/annotation-suggestion.schema.json').read_text(encoding='utf-8'))
+_validator = Draft7Validator(SCHEMA)
+
+
+def delivery_script():
+    """Embed the same suggestion contract used by Python into portable reports."""
+    script = files('latex_review').joinpath('annotation_delivery.js').read_text(encoding='utf-8')
+    return script.replace('__SUGGESTION_SCHEMA__', json.dumps(SCHEMA).replace('<', '\\u003c'))
 
 
 def error(message):
@@ -14,27 +26,14 @@ def error(message):
 
 
 def validate(value):
-    from ._validation import exact_keys, _integer
-    exact_keys(value, ('original_chunk', 'replacement_chunk', 'status', 'version_id', 'unit_id',
-                  'source_span', 'reason', 'applied_at', 'applied_sha256'), ('original_chunk', 'replacement_chunk'))
-    if not isinstance(value, dict) or not isinstance(value.get('original_chunk'), str) or not value['original_chunk'] or not isinstance(value.get('replacement_chunk'), str):
-        error('建议需要非空原始 LaTeX 块及替换 LaTeX 块')
-    if len(value['original_chunk']) > 1000000 or len(value['replacement_chunk']) > 1000000:
-        error('建议 LaTeX 块过长')
-    if 'status' in value and value['status'] not in ('pending', 'applied'):
-        error('建议应用状态无效')
-    if value.get('reason') is not None and not isinstance(value['reason'], str):
-        error('建议降级理由无效')
+    from ._validation import _integer
+    if not _validator.is_valid(value):
+        error('建议字段、应用状态或源码区间无效')
     span = value.get('source_span')
     if span is not None:
-        exact_keys(span, ('file', 'start', 'end', 'sha256', 'original_chunk', 'reliable', 'writable', 'reason'))
-        if (not isinstance(span['file'], str) or Path(span['file']).is_absolute()
-                or '..' in Path(span['file']).parts or span['reliable'] is not True or span['writable'] is not True
-                or not isinstance(span['sha256'], str) or re.fullmatch('[0-9a-f]{64}', span['sha256']) is None):
-            error('建议源码区间无效')
         _integer(span['start'], 'source start')
         _integer(span['end'], 'source end', span['start'] + 1)
-        if span['original_chunk'] != value['original_chunk'] or len(span['original_chunk']) != span['end'] - span['start']:
+        if span['end'] <= span['start'] or span['original_chunk'] != value['original_chunk'] or len(span['original_chunk']) != span['end'] - span['start']:
             error('建议源码区间与原文不一致')
     return value
 
