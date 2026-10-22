@@ -18,6 +18,9 @@ def _ungroup(value: str) -> str:
     value = value.strip()
     while value.startswith('{') and _group_end(value, 0) == len(value):
         value = value[1:-1].strip()
+    box = re.fullmatch(r'\\(?:mbox|textnormal|textrm)\s*\{(.*)\}', value, re.S)
+    if box:
+        return _ungroup(box.group(1))
     return value
 
 

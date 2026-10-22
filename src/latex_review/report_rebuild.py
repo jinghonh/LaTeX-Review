@@ -71,7 +71,8 @@ def save_live_recipe(output, source):
     target = Path(output) / RECIPE
     target.parent.mkdir(parents=True, exist_ok=True)
     target.write_text(json.dumps({'schema_version': '1.0', 'available': True, 'mode': 'live',
-                                 'new_root': str(source.root), 'entry': source.entry}), encoding='utf-8')
+                                 'new_root': str(source.root), 'entry': source.entry,
+                                 'configuration': source.configuration}), encoding='utf-8')
 
 
 def replay(recipe_path, output, original_report):
@@ -93,7 +94,7 @@ def replay(recipe_path, output, original_report):
         except (OSError, ValueError, KeyError):
             revision = 1
         output.mkdir(parents=True, exist_ok=True)
-        build(ProjectSource('new', root, recipe['entry'], ComparisonSource('directory', str(root))), output, revision)
+        build(ProjectSource('new', root, recipe['entry'], ComparisonSource('directory', str(root)), configuration=recipe.get('configuration')), output, revision)
         _write(output / 'live-status.json', json.dumps({'revision': revision, 'message': '已应用源码建议并更新预览。'}))
         return 0
     from .cli import generate_report

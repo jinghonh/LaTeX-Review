@@ -191,3 +191,9 @@ def test_compiled_number_capture_accepts_labels_hidden_inside_macros(tmp_path):
     metadata = json.loads((output / 'compiled/new/numbering.json').read_text())
     assert metadata['labels']['eq:hidden'] == '1'
     assert list(metadata['rows'].values()) == [{'0': '1'}]
+
+
+def test_compiled_ieee_boxed_number_is_plain():
+    from latex_review.numbering import _ungroup
+    assert _ungroup(r'\mbox {II-A}') == 'II-A'
+    assert _ungroup(r'{\mbox {S-I}}') == 'S-I'

@@ -70,8 +70,10 @@ def main(argv=None):
                 from .report_rebuild import rebuild_lock
                 candidate = Path(recipe['candidate'])
                 candidate.mkdir(parents=True, exist_ok=True)
+                from .cli import _config
                 source = ProjectSource('new', Path(recipe['root']), recipe['entry'],
-                                       ComparisonSource('directory', recipe['root']))
+                                       ComparisonSource('directory', recipe['root']),
+                                       configuration=_config(Path(recipe['config']), recipe.get('config_explicit', False)))
                 with rebuild_lock(Path(recipe['output'])):
                     source_fingerprint = fingerprint(source.root, Path(recipe['output']), cache_directory=Path(recipe['cache']))
                     build(source, candidate)

@@ -48,11 +48,13 @@ def _span(project, start: int, end: int) -> tuple[dict, dict | None]:
     chunk = full_text[first.start:last.end]
     if chunk != project.expanded.text[start:end]:
         return _unavailable('展开内容与原始源码不一致'), None
-    writable = project.expanded.source.identity.kind != 'git'
+    from .project_profile import settings
+    read_only = settings(project.expanded.source).get('project', {}).get('read_only', False)
+    writable = project.expanded.source.identity.kind != 'git' and not read_only
     span = {'file': first.file, 'start': first.start, 'end': last.end,
             'sha256': sha256(full_text.encode('utf-8')).hexdigest(),
             'original_chunk': chunk, 'reliable': True, 'writable': writable,
-            'reason': None if writable else 'Git 历史比较版本只读'}
+            'reason': None if writable else ('论文项目为只读' if read_only else 'Git 历史比较版本只读')}
     location = {'file': first.file, 'start_line': first.start_line,
                 'end_line': last.end_line, 'start_column': first.start_column,
                 'end_column': last.end_column, 'confidence': 1.0,

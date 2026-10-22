@@ -48,7 +48,26 @@ def _write(path: Path, content: str) -> None:
 
 
 def build(source: ProjectSource, output: Path, revision: int = 1) -> list[str]:
-    project = parse_project(source.expand(), include_title=True)
+    from .project_profile import settings
+    from .macros import validate_macros
+    configuration = settings(source)
+    project = parse_project(source.expand(), macros=validate_macros(configuration.get("macros", {})), include_title=True)
+    compile_messages = []
+    compiled_link = ""
+    if configuration.get("compile", {}).get("enabled", False):
+        from .compilation import compile_side
+        options = configuration["compile"]
+        status, issues = compile_side(source, output, engine=options.get("engine", "pdflatex"),
+                                     timeout=options.get("timeout", 90),
+                                     sequence=tuple(options.get("sequence", ())),
+                                     sandbox=options.get("sandbox_render", False))
+        compile_messages = [item.message for item in issues]
+        if status.pdf:
+            compiled_link = f'<p><a href="{status.pdf}" target="_blank">打开编译 PDF</a></p>'
+            from dataclasses import replace
+            numbering = output / "compiled" / source.side / "numbering.json"
+            if numbering.is_file():
+                project = replace(project, compiled_numbering=json.loads(numbering.read_text()))
     units = build_current_units(project)
     _write(output / "translation-units.json", json.dumps(units, ensure_ascii=False))
     assets, diagnostics = _figure_assets(None, project, output, _pdf_converters(source, output), 15)
@@ -57,7 +76,7 @@ def build(source: ProjectSource, output: Path, revision: int = 1) -> list[str]:
     from .annotations import MANIFEST, build_content, content_meta
     annotation_content = build_content(project, preview.html)
     _write(output / MANIFEST, json.dumps(annotation_content, ensure_ascii=False))
-    messages = [item.message for item in (*preview.diagnostics, *diagnostics)]
+    messages = compile_messages + [item.message for item in (*preview.diagnostics, *diagnostics)]
     from .reading import build_reading
     reading = build_reading(project, units, revision=revision)
     style = files('latex_review').joinpath('report.css').read_text(encoding='utf-8')
@@ -68,7 +87,7 @@ def build(source: ProjectSource, output: Path, revision: int = 1) -> list[str]:
 <p class="report-entry">{escape(source.entry)}</p>
 <div class="report-versions"><span class="version-chip version-new"><span>来源</span><strong>当前磁盘论文</strong></span></div></div>
 <details class="report-help"><summary>预览说明</summary><div>
-<p>内容预览不代表最终编译版式。保存论文后自动更新。</p>
+<p>内容预览不代表最终编译版式。保存论文后自动更新。</p>{compiled_link}
 <p id="math-status" role="status">正在加载在线公式排版。</p></div></details></header>
 <section class="report-controls live-controls" aria-label="持续预览工具栏">
 <div class="live-toolbar-navigation">
@@ -104,15 +123,21 @@ def prepare_request(entry, *, root=None, output=None, config=None, cache=None, p
     entry = Path(entry).expanduser().resolve()
     root = Path(root).expanduser().resolve() if root else _source_roots({'entry': str(entry)})[-1]
     identity = paper_identity(root, entry, require_entry=True)
-    output = Path(output).expanduser().resolve() if output else root / '.latex-review' / 'live'
+    from .project_profile import load, output as profile_output
+    profile = load(root, identity["entry"])
+    default_output = profile_output(root, identity['entry'], 'live') if profile else root / '.latex-review' / 'live'
+    output = Path(output).expanduser().resolve() if output else default_output
     storage = root / '.latex-review' / 'annotations'
-    cache = Path(cache).expanduser().resolve() if cache else root / '.latex-review' / 'translation-cache'
+    cache = Path(cache).expanduser().resolve() if cache else (output.parent / 'translation-cache' if profile else root / '.latex-review' / 'translation-cache')
     for path in (output, cache):
+        if profile.get("project", {}).get("read_only") and path.is_relative_to(root):
+            raise ValueError("只读项目的输出和缓存必须位于论文目录之外")
         if root.is_relative_to(path) or path == storage or path in storage.parents or storage in path.parents:
             raise ValueError('输出和缓存不可覆盖论文或共享批注存储')
     if output == cache or output in cache.parents or cache in output.parents:
         raise ValueError('输出和缓存不可重叠')
-    config_path = Path(config or '.latex-review.toml').expanduser().resolve()
+    from .project_profile import directory
+    config_path = Path(config).expanduser().resolve() if config else (directory(root) / 'project.toml' if profile else Path('.latex-review.toml').resolve())
     values = _config(config_path, bool(config))
     return {**identity, 'kind': 'live', 'output': str(output), 'config': str(config_path),
             'config_explicit': bool(config), 'cache': str(cache), 'poll_files': bool(poll_files),
@@ -126,15 +151,17 @@ def run_worker(recipe, stop):
     from .report_rebuild import rebuild_lock
     from .local_state import write_json
     from .cli import _config
+    from .project_profile import directory as profile_directory
     from contextlib import ExitStack
     root, output = Path(recipe['root']), Path(recipe['output'])
     cache = Path(recipe['cache'])
-    source = ProjectSource('new', root, recipe['entry'], ComparisonSource('directory', str(root)))
+    config = _config(Path(recipe['config']), recipe['config_explicit'])
+    source = ProjectSource('new', root, recipe['entry'], ComparisonSource('directory', str(root)), configuration=config)
     with ExitStack() as stack:
         stack.enter_context(output_lease(output, wait=False, persistent=True))
         output.mkdir(parents=True, exist_ok=True)
         events = stack.enter_context(ProjectEvents(root, output, cache, force_polling=recipe['poll_files'],
-                                                   extra_files=(Path(recipe['config']),)))
+                                                   extra_files=(Path(recipe['config']), profile_directory(root) / 'project.toml')))
         initial = events.generation
         revision = 1
         from .local_reports import copy_report
@@ -171,6 +198,8 @@ def run_worker(recipe, stop):
                     try:
                         with rebuild_lock(output):
                             with report_directory(output) as candidate:
+                                from dataclasses import replace
+                                source = replace(source, configuration=_config(Path(recipe["config"]), recipe["config_explicit"]))
                                 messages = build(source, candidate.directory, revision + 1)
                         revision += 1
                         message = events.warning + f'已更新当前论文。预览诊断：{len(messages)} 项。'

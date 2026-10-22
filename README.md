@@ -56,6 +56,7 @@ latex-review-local stop
 | 需求 | 文档 |
 | --- | --- |
 | 安装、比较来源与配置 | [使用指南](Docs/user-guide.md) |
+| 多入口与只读论文项目 | [外部项目配置](Docs/multi-entry-projects.md) |
 | 当前论文持续预览与迁移 | [持续预览](Docs/live-preview.md) |
 | 打开已有报告 | [报告预览](Docs/report-preview.md) |
 | 中文翻译、术语表与译文导出 | [翻译指南](Docs/translation.md) |

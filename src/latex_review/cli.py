@@ -77,7 +77,7 @@ def _config(path: Path, explicit: bool) -> dict:
     data = _read_config(path.expanduser(), explicit)
     if "translation" in shared or "translation" in data:
         data["translation"] = _merge_translation(shared.get("translation", {}), data.get("translation", {}))
-    allowed = {"entry", "ignore", "render", "diff", "git", "output", "macros", "compile", "translation"}
+    allowed = {"entry", "ignore", "render", "diff", "git", "output", "macros", "compile", "translation", "source", "project"}
     if extra := set(data) - allowed:
         raise ConfigurationError(f"配置含未知字段：{', '.join(sorted(extra))}")
     for key in ("entry", "output"):
@@ -91,7 +91,7 @@ def _config(path: Path, explicit: bool) -> dict:
                          "formula_token_diff": bool},
                 "git": {"default_old": str, "default_new": str},
                 "compile": {"enabled": bool, "new_only": bool, "engine": str,
-                            "timeout": int, "sandbox_render": bool}}
+                            "timeout": int, "sandbox_render": bool, "sequence": list, "include_paths": list}}
     for section, fields in sections.items():
         values = data.get(section, {})
         if not isinstance(values, dict):
@@ -108,6 +108,8 @@ def _config(path: Path, explicit: bool) -> dict:
         if data.get(section, {}).get(key, expected) != expected:
             raise ConfigurationError(f"首版不支持 [{section}].{key} 的该值")
     try:
+        from .project_profile import validate
+        validate(data)
         validate_macros(data.get("macros", {}))
         if "translation" in data:
             from .translation import TranslationConfig
@@ -336,6 +338,9 @@ def generate_report(options: dict, output: Path, *, configuration: dict,
                                                        *tuple(root / ".latex-review" / "annotations" for root in _source_roots(options))),
                          ignore_patterns=tuple(config.get("ignore", ()))) as pair:
         _progress("正在展开两版来源")
+        from dataclasses import replace
+        from .sources import SourcePair
+        pair = SourcePair(*(replace(source, configuration=config) for source in (pair.old, pair.new)))
         old_expanded, new_expanded = pair.old.expand(), pair.new.expand()
         from .identity import paper_identity
         local_identity = paper_identity(pair.new.worktree_origin or pair.new.root, pair.new.entry)
@@ -356,13 +361,6 @@ def generate_report(options: dict, output: Path, *, configuration: dict,
                 failures.append((expanded.source.side, str(exc)))
         source_fallback = bool(failures or any(item and any(d.code == "plastex_parse_error" for d in item.diagnostics) for item in parsed))
         run["stages"]["parse"] = "degraded" if source_fallback else "complete"
-        comparison = None
-        if not source_fallback:
-            run["stages"]["compare"] = "running"
-            comments = config.get("diff", {}).get("comments", False)
-            _progress("正在比较结构化内容")
-            comparison = compare_projects(parsed[0], parsed[1], review_comments=comments)
-            run["stages"]["compare"] = "complete"
         statuses = None
         rendering = None
         compile_diagnostics: tuple[Diagnostic, ...] = ()
@@ -376,10 +374,22 @@ def generate_report(options: dict, output: Path, *, configuration: dict,
                 _progress("正在编译" + ("旧稿" if source.side == "old" else "新稿"))
                 peer = pair.new if source.side == "old" else pair.old
                 status, issues = compile_side(source, output, engine=engine, timeout=timeout, sandbox=sandbox,
-                                              related_sources=(peer,))
+                                              related_sources=(peer,), sequence=tuple(compile_config.get("sequence", ())))
                 built.append(status)
                 compile_diagnostics += issues
             statuses = tuple(built)
+        for index, project in enumerate(parsed):
+            numbering = output / 'compiled' / ('old' if index == 0 else 'new') / 'numbering.json'
+            if project is not None and numbering.is_file():
+                parsed[index] = replace(project, compiled_numbering=json.loads(numbering.read_text(encoding='utf-8')))
+        comparison = None
+        if not source_fallback:
+            run["stages"]["compare"] = "running"
+            comments = config.get("diff", {}).get("comments", False)
+            _progress("正在比较结构化内容")
+            comparison = compare_projects(parsed[0], parsed[1], review_comments=comments)
+            run["stages"]["compare"] = "complete"
+        if compile_enabled:
             _progress("正在生成编译页面预览")
             rendering, visual_issues = build_visual(statuses[0], statuses[1], output,
                                                     comparison.document if comparison else None,
@@ -460,6 +470,25 @@ def _main(argv=None, *, output_guard, resources):
     try:
         config = _config(
             Path(args.config).expanduser() if args.config else Path(".latex-review.toml"), bool(args.config))
+        options = _source_options(args, config)
+        from .project_profile import load, output as project_output
+        root = _source_roots(options)[-1]
+        entry_path = options.get("entry") or options.get("new_file")
+        if "new_dir" in options:
+            entry_path = root / entry_path
+        profile_entry = Path(entry_path).expanduser().resolve().relative_to(root).as_posix()
+        profile = load(root, profile_entry)
+        if profile:
+            for key, value in config.items():
+                if isinstance(value, dict) and isinstance(profile.get(key), dict):
+                    profile[key].update(value)
+                else:
+                    profile[key] = value
+            config = profile
+            from .project_profile import validate
+            validate(config)
+            if not args.output and "output" not in config:
+                config["output"] = str(project_output(root, profile_entry, "diff"))
         compile_config = config.get("compile", {})
         compile_enabled = args.compile or compile_config.get("enabled", False)
         new_only = args.compile_new_only or compile_config.get("new_only", False)
@@ -474,15 +503,18 @@ def _main(argv=None, *, output_guard, resources):
             raise ConfigurationError("首版仅支持 mathjax 公式排版")
         if args.format is not None and args.format != "html,json":
             raise ConfigurationError("首版固定生成 report.html、diff.json 和 diagnostics.json")
-        options = _source_options(args, config)
         if args.inspect_sources:
             return _inspect(options)
         output = Path(os.path.abspath(Path(args.output or config.get("output", ".latex-review/latest")).expanduser()))
         if output in (Path.cwd(), Path("/")):
             raise ConfigurationError("输出目录不能是当前目录或文件系统根目录")
         _check_output_separate(output, options)
+        if config.get("project", {}).get("read_only") and any(output.is_relative_to(root) for root in _source_roots(options)):
+            raise ConfigurationError("只读项目的报告必须位于论文目录之外")
         cache_dir = Path(os.path.abspath(Path(args.cache_dir).expanduser())) if args.cache_dir else output.parent / (
             "cache" if output.name == "latest" else ".latex-review-cache")
+        if config.get("project", {}).get("read_only") and any(cache_dir.is_relative_to(root) for root in _source_roots(options)):
+            raise ConfigurationError("只读项目的缓存必须位于论文目录之外")
         if cache_dir == output or cache_dir in output.parents or output in cache_dir.parents:
             raise ConfigurationError("缓存目录不能与报告目录重叠")
         if cache_dir.is_symlink() or any(parent.is_symlink() for parent in cache_dir.parents):
@@ -507,7 +539,7 @@ def _main(argv=None, *, output_guard, resources):
                                    "include_title": True})
         from copy import deepcopy
         effective = deepcopy(config)
-        effective['compile'] = dict(enabled=compile_enabled, new_only=new_only, sandbox_render=sandbox,
+        effective['compile'] = dict(compile_config, enabled=compile_enabled, new_only=new_only, sandbox_render=sandbox,
                                     engine=engine, timeout=timeout)
         effective.setdefault('diff', {})['comments'] = (
             args.comments if args.comments is not None else config.get('diff', {}).get('comments', False))

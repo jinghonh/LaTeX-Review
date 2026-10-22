@@ -90,19 +90,26 @@ def instrument(source, directory: Path) -> dict:
         for offset, label in sorted(edits.items(), reverse=True):
             raw = raw[:offset] + label + raw[offset:]
         path.write_text(raw, encoding='utf-8')
-    entry = directory / source.entry
+    prepare_entry(directory / source.entry)
+    return mapping
+
+
+def prepare_entry(entry: Path) -> None:
+    """Shared instrumented files may also be included by a companion entry."""
     raw = entry.read_text(encoding='utf-8')
+    if _HELPER in raw:
+        return
     document = re.search(r'\\begin\s*\{document\}', _masked(raw))
     if document:
         raw = raw[:document.start()] + _HELPER + raw[document.start():]
         entry.write_text(raw, encoding='utf-8')
-    return mapping
 
 
-def collect(build: Path, mapping: dict) -> bytes:
+def collect(build: Path, mapping: dict, entry: str | None = None) -> bytes:
     labels = {}
     aliases = {}
-    for path in build.rglob('*.aux'):
+    paths = sorted(build.rglob('*.aux'), key=lambda path: (path.stem == entry, str(path)))
+    for path in paths:
         if path.is_symlink() or path.stat().st_size > 4 * 1024 * 1024:
             continue
         text = _masked(path.read_text(encoding='utf-8', errors='replace'))

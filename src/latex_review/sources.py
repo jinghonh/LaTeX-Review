@@ -60,6 +60,7 @@ class ProjectSource:
     entry: str
     identity: ComparisonSource
     worktree_origin: Path | None = None
+    configuration: dict | None = None
 
     def expand(self) -> ExpandedProject:
         return expand_project(self)
@@ -342,8 +343,9 @@ def _macro_definition_end(text: str, match: re.Match[str]) -> tuple[int, str] | 
     return None if end is None else (end, text[body_start + 1:end - 1])
 
 
-def _commands(text: str):
+def _commands(text: str, extra_names=(), file_exists=None):
     """仅识别静态字面依赖；注释及 verbatim 内的命令不当作依赖。"""
+    commands = re.compile(_COMMAND.pattern.replace("input|", "|".join(map(re.escape, extra_names)) + "|input|")) if extra_names else _COMMAND
     index = 0
     while index < len(text):
         if text[index] == "%":
@@ -365,6 +367,26 @@ def _commands(text: str):
         if text[index] != "\\":
             index += 1
             continue
+        conditional = re.match(r"\\IfFileExists(?![A-Za-z@])", text[index:]) if file_exists else None
+        if conditional:
+            cursor = index + conditional.end()
+            groups = []
+            for _ in range(3):
+                cursor = _skip_space_comments(text, cursor)
+                close = _group_end(text, cursor, "{", "}")
+                if close is None:
+                    break
+                groups.append((cursor + 1, close - 1))
+                cursor = close
+            if len(groups) == 3:
+                check = text[slice(*groups[0])]
+                chosen = groups[1 if file_exists(check) else 2]
+                yield "skip_range", index, chosen[0], ""
+                for name, start, end, argument in _commands(text[slice(*chosen)], extra_names, file_exists):
+                    yield name, start + chosen[0], end + chosen[0], argument
+                yield "skip_range", chosen[1], cursor, ""
+                index = cursor
+                continue
         definition = _MACRO_DEFINITION.match(text, index)
         if definition is not None:
             parsed = _macro_definition_end(text, definition)
@@ -375,7 +397,7 @@ def _commands(text: str):
                 continue
             yield "unparsed_macro_definition", index, len(text), text[definition.end():]
             return
-        match = _COMMAND.match(text, index)
+        match = commands.match(text, index)
         if match is None:
             index += 2  # 已转义的 %、反斜线等不再次扫描。
             continue
@@ -414,6 +436,11 @@ def _commands(text: str):
 
 def expand_project(source: ProjectSource) -> ExpandedProject:
     """递归展开 input/include，收集资源，并维护每次包含的独立来源。"""
+    from .project_profile import settings
+    options = settings(source).get("source", {})
+    include_macros = options.get("include_macros", {})
+    omit_macros = options.get("omit_macros", [])
+    omitted = set()
     output: list[str] = []
     spans: list[SourceSegment] = []
     files: dict[str, str] = {}
@@ -442,9 +469,10 @@ def expand_project(source: ProjectSource) -> ExpandedProject:
             return None, "dependency_outside_root"
         if extensions == _GRAPHICS and option.suffix and option.suffix.lower() not in _GRAPHICS:
             return None, "unsupported_dependency"
-        bases = [Path(current_file).parent, Path(".")]
+        bases = [Path(source.entry).parent, Path(current_file).parent, Path(".")]
         if any(Path(path).is_absolute() for path in paths):
             return None, "dependency_outside_root"
+        bases.extend(Path(source.entry).parent / path for path in paths)
         bases.extend(Path(path) for path in paths)
         seen = set()
         in_root_candidate = False
@@ -491,11 +519,33 @@ def expand_project(source: ProjectSource) -> ExpandedProject:
             raise SourceError("source_changed", source.side, f"快照文件在展开期间不可读：{file}：{exc}", file) from exc
         files[file] = content
         cursor = 0
-        for name, start, end, argument in _commands(content):
+        def file_exists(argument):
+            return candidate_file(file, argument, ("",))[0] is not None
+
+        for name, start, end, argument in _commands(content, (*include_macros, *omit_macros), file_exists):
+            if name == "skip_range":
+                emit(file, content, cursor, start, instance)
+                cursor = end
+                continue
+            if name in omit_macros:
+                omitted.add(argument.strip())
+                emit(file, content, cursor, start, instance)
+                cursor = end
+                continue
+            if name in include_macros:
+                if argument.strip() in omitted:
+                    emit(file, content, cursor, start, instance)
+                    cursor = end
+                    continue
+                argument = include_macros[name].replace("#1", argument.strip())
+                name = "input"
             if name == "unparsed_macro_definition":
                 issue("uncertain_dependency", "宏定义无法静态解析；未展开其中可能存在的依赖", file, start, end, chain)
                 continue
             if name == "macro_definition":
+                defined = re.match(r"\\(?:newcommand|renewcommand|providecommand|DeclareRobustCommand)\*?\s*\{?\\([A-Za-z@]+)", content[start:end])
+                if defined and defined.group(1) in include_macros:
+                    continue
                 if _COMMAND.search(argument):
                     issue("uncertain_dependency", "宏定义内的依赖命令未执行，实际依赖取决于宏调用", file, start, end, chain)
                 continue

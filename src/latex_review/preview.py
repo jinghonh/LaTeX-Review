@@ -120,6 +120,10 @@ def _anchor(side: str, node_id: str) -> str:
 def _reference_html(key: str, raw: str, project: ParsedProject, side: str, anchor: str = '') -> str:
     target = project.labels.get(key)
     if not target:
+        number = project.numbering.labels.get(key)
+        if number is not None and not raw.startswith(r"\pageref"):
+            label = "(" + number + ")" if raw.startswith(r"\eqref") else number
+            return f'<span class="external-ref" title="另一论文入口：{_e(key)}"{anchor}>{_e(label)}</span>'
         return f'<span class="unresolved-ref"{anchor}>?? ({_e(key)})</span>'
     node = project.by_id()[target].review
     label = project.numbering.labels.get(key, project.numbering.nodes.get(target))
@@ -794,7 +798,7 @@ def render_preview(old: ParsedProject | None, new: ParsedProject, *,
                    and by_id[child].expanded_end <= node.expanded_end for child in node.review.child_ids):
                 continue
             for key in node.references:
-                if key not in project.labels:
+                if key not in project.labels and key not in project.numbering.labels:
                     diagnostics.append(Diagnostic("unresolved_reference", "info", f"交叉引用目标不存在：{key}",
                                                   source_old=node.review.source if side == "old" else None,
                                                   source_new=node.review.source if side == "new" else None))

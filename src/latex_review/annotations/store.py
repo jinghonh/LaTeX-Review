@@ -29,7 +29,10 @@ class AnnotationStore:
         if not isinstance(project_id, str) or len(project_id) != 64 or any(c not in '0123456789abcdef' for c in project_id):
             raise AnnotationError('项目 ID 无效')
         self.project_id = project_id
-        self.directory = self.root / '.latex-review' / 'annotations'
+        from ..project_profile import load, directory
+        self.read_only = load(self.root).get('project', {}).get('read_only', False)
+        self.directory = (directory(self.root) / 'annotations' if self.read_only
+                          else self.root / '.latex-review' / 'annotations')
         self.path = self.directory / f'{project_id}.sqlite3'
         self.legacy_path = self.directory / f'{project_id}.json'
         self.lock_path = self.directory / f'{project_id}.lock'
@@ -555,6 +558,9 @@ class AnnotationStore:
     def _suggestion(self, content, request):
         """Commit a source suggestion, restoring source if storage fails."""
         from ._suggestions import error, inspect, replace
+        from ..project_profile import load
+        if load(self.root).get("project", {}).get("read_only") and request.get("operation") == "suggestion_apply":
+            raise AnnotationError("论文项目为只读，不能应用源码修改")
         import hashlib
         exact_keys(request, ('operation', 'expected_revision', 'thread_id', 'message_id'),
               ('operation', 'expected_revision', 'thread_id', 'message_id'))

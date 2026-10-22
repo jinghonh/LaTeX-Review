@@ -18,7 +18,7 @@ MATH_COMMANDS = frozenset({
     "rightarrow", "leftarrow", "longrightarrow", "longmapsto", "mapsto", "Rightarrow", "Leftrightarrow",
     "downarrow", "uparrow", "to", "not", "mid", "vert", "lvert", "rvert", "lVert", "rVert",
     "displaystyle", "textstyle", "scriptstyle", "scriptscriptstyle", "limits", "nolimits", "substack",
-    "varsigma", "odot", "mathop",
+    "varsigma", "varpi", "iota", "tanh", "allowbreak", "bullet", "odot", "mathop",
     "quad", "qquad", "ldots", "cdots", "dots", "vdots", "ddots", "hspace", "phantom",
 })
 

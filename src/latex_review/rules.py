@@ -130,7 +130,7 @@ def _findings(project: ParsedProject) -> dict[tuple[str, str], list[_Site]]:
         if bibliography_reliable and key not in project.bibliography and f"bib:{key}" not in project.labels:
             findings[("bibliography_key_unresolved", key)] = sites
     for key, sites in references.items():
-        if key not in labels:
+        if key not in labels and key not in project.numbering.labels:
             findings[("unresolved_reference", key)] = sites
     for key, sites in labels.items():
         if len(sites) > 1:

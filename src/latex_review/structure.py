@@ -446,7 +446,9 @@ class _Builder:
                         continue
                     if not frontmatter:
                         self._flush(pending, i, parent)
-                    kind = ("frontmatter" if name == "frontmatter" else "abstract" if name == "abstract" else
+                    from .project_profile import settings
+                    alias = settings(self.project.source).get("source", {}).get("environments", {}).get(name)
+                    kind = alias or ("frontmatter" if name == "frontmatter" else "abstract" if name == "abstract" else
                             "keywords" if name in {"keyword", "keywords"} else
                             "equation" if name in _MATH_ENV | _MATH_ARRAY_ENV else "list" if name in _LIST_ENV else
                             "figure" if name in _FIGURE_ENV else "table" if name in _TABLE_ENV else
@@ -601,6 +603,8 @@ def parse_project(project: ExpandedProject, *, macros: dict[str, MacroPlaceholde
     """解析一侧已展开项目；节点保留精确原文和全部来源片段。"""
     unknown, error = _plastex_unknown(_safe_plastex_input(project))
     unknown.difference_update(macros or {})
+    from .project_profile import settings
+    unknown.difference_update(settings(project.source).get("source", {}).get("environments", {}))
     theorem_envs = set(_THEOREM_ENV)
     theorem_envs.update(re.findall(r"\\newtheorem\*?\s*\{([^{}]+)\}", _masked(project.text)))
     if error:

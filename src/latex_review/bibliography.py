@@ -118,7 +118,7 @@ def read_bibliography(project: ExpandedProject) -> tuple[dict[str, BibliographyE
             if end is None:
                 warn("bibliography_unsupported", f"参考文献条目未闭合：{file}", loc)
                 continue
-            if kind in {"comment", "preamble", "string"}:
+            if kind in {"comment", "preamble", "string", "ieeetranbstctl"}:
                 continue
             body = content[match.end():end - 1]
             head = re.match(r"\s*([^,\s{}()]+)\s*,", body)

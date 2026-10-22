@@ -75,15 +75,23 @@ def _program(name: str, path: str, forbidden: tuple[Path, ...]) -> str | None:
 
 def _copy_project(source: ProjectSource, destination: Path, excluded: Path) -> None:
     root = source.root.resolve()
+    from .project_profile import settings
+    included = tuple(Path(p) for p in settings(source).get("compile", {}).get("include_paths", ()))
     total = 0
     for current, dirs, files in os.walk(root, followlinks=False):
         folder = Path(current)
         dirs[:] = [name for name in dirs if name not in {".git", ".latex-review"} and not (folder / name).is_relative_to(excluded)]
+        if included:
+            dirs[:] = [name for name in dirs if any(
+                (folder / name).relative_to(root).is_relative_to(part) or part.is_relative_to((folder / name).relative_to(root))
+                for part in included)]
         for name in dirs:
             if (folder / name).is_symlink():
                 raise OSError(f"隔离副本拒绝目录符号链接：{(folder / name).relative_to(root)}")
         for name in files:
             original = folder / name
+            if included and not any(original.relative_to(root).is_relative_to(part) for part in included):
+                continue
             if original.is_relative_to(excluded):
                 continue
             if original.is_symlink() or not original.is_file():
@@ -216,7 +224,8 @@ def _sandbox_ready(profile: Path, project: Path) -> bool:
 
 def compile_side(source: ProjectSource, output_dir: Path, *, engine: str = "pdflatex",
                  timeout: float = 90, output_limit: int = 2 * 1024 * 1024,
-                 sandbox: bool = False, related_sources: tuple[ProjectSource, ...] = ()
+                 sandbox: bool = False, related_sources: tuple[ProjectSource, ...] = (),
+                 sequence: tuple[str, ...] = ()
                  ) -> tuple[CompileStatus, tuple[Diagnostic, ...]]:
     if engine not in _MODES or timeout <= 0 or not 1024 <= output_limit <= 16 * 1024 * 1024:
         raise ValueError("编译引擎、超时或输出上限无效")
@@ -252,10 +261,11 @@ def compile_side(source: ProjectSource, output_dir: Path, *, engine: str = "pdfl
                     _sandbox_profile(profile, project, tuple(allowed))
                     if not _sandbox_ready(profile, project):
                         raise RuntimeError("macOS 沙箱不可用或隔离自检未通过；拒绝高级渲染")
-                out = project / "build"
+                cwd = entry.parent
+                out = cwd / "build"
                 out.mkdir()
                 env = {key: value for key, value in os.environ.items() if key in {"LANG", "LC_ALL"}}
-                env.update({"HOME": str(project), "TEXMFOUTPUT": str(out), "openin_any": "p", "openout_any": "p",
+                env.update({"HOME": str(project), "TEXINPUTS": str(out) + os.pathsep, "TEXMFOUTPUT": str(out), "openin_any": "r" if cwd != project else "p", "openout_any": "p",
                             "shell_escape": "f", "max_print_line": "1000", "TMPDIR": str(out), "PATH": safe_path})
                 for program, marker in ((latexmk, "latexmk"), (engine_path, _ENGINE_MARKERS[engine])):
                     probe_code, probe_log, probe_reason = _run_bounded(
@@ -268,9 +278,25 @@ def compile_side(source: ProjectSource, output_dir: Path, *, engine: str = "pdfl
                 # BibTeX 直接处理 build/main.aux，避免 latexmk 为它切换目录后影响 TeX 重跑。
                 command = [latexmk, "-norc", "-nobibfudge", _MODES[engine], "-interaction=nonstopmode", "-halt-on-error",
                            "-file-line-error", "-latexoption=-no-shell-escape", "-latexoption=-synctex=1",
-                           "-outdir=build", source.entry]
-                exit_code, log, reason = _run_bounded(command, project, env, timeout, output_limit,
-                                                      sandbox_profile=profile if sandbox else None)
+                           "-outdir=build"]
+                # All entries share one private output directory for xr-hyper auxiliary files.
+                plan = [*sequence, source.entry] if sequence else [source.entry]
+                deadline = time.monotonic() + timeout
+                for relative in plan:
+                    target = (project / relative).resolve()
+                    if not target.is_relative_to(project) or not target.is_file() or target.parent != cwd:
+                        raise OSError("编译顺序中的入口必须存在，且与当前入口位于同一目录")
+                    from .compile_numbering import prepare_entry
+                    prepare_entry(target)
+                    remaining = deadline - time.monotonic()
+                    if remaining <= 0:
+                        reason = "多入口编译超时"
+                        break
+                    exit_code, step_log, reason = _run_bounded(command + ["-g", target.name], cwd, env, remaining, output_limit,
+                                                              sandbox_profile=profile if sandbox else None)
+                    log = (log + step_log)[-output_limit:]
+                    if exit_code != 0 or reason:
+                        break
                 pdf_path = out / f"{entry.stem}.pdf"
                 tex_log = out / f"{entry.stem}.log"
                 synctex_path = out / f"{entry.stem}.synctex.gz"
@@ -285,7 +311,7 @@ def compile_side(source: ProjectSource, output_dir: Path, *, engine: str = "pdfl
                 if exit_code == 0 and pdf_rel is not None and reason is None:
                     status = "success"
                     _write_managed(output_dir, Path(f'compiled/{side}/numbering.json'),
-                                   content=collect(out, numbering_mapping))
+                                   content=collect(out, numbering_mapping, entry.stem))
                 else:
                     status = "failed"
                     reason = reason or f"latexmk 退出状态 {exit_code}；详见编译日志"
