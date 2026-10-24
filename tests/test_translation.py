@@ -910,3 +910,16 @@ def test_preview_exits_promptly_with_translation_in_flight(provider, translation
         if process.poll() is None:
             process.kill()
         process.communicate()
+
+
+def test_manifest_uses_unique_tokens_across_sentences_and_rejects_transfer(tmp_path):
+    report = _content_report(tmp_path, r'First $x$. Next $y$.', r'First $a$. Next $b$.')
+    units = json.loads((report.directory / 'translation-units.json').read_text())
+    unit = units[0]
+    tokens = [p['token'] for s in unit['sentences'] for p in s['protected']]
+    assert len(tokens) == len(set(tokens)) == 2
+    payload = {'sentences': [{'id': s['number'], 'text': s['text']} for s in unit['sentences']]}
+    payload['sentences'][0]['text'] = tokens[1]
+    payload['sentences'][1]['text'] = tokens[0]
+    with pytest.raises(TranslationError):
+        validate_translation(unit, payload)

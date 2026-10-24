@@ -281,10 +281,15 @@ POST 使用 `Content-Type: application/json` 和 `X-LaTeX-Review-Token`。
 
 `report_annotations.js` 公开 `reviewAnnotations`：`coordinates`、`selection`、`refresh`、`update`、
 `openComposer`、`focus`、`getContent`、`getSnapshot`、`getDrafts`、`restoreDrafts`、`resumeDraft`、`setAdapter`。
-适配器的 `read()` 返回 `[content, snapshot]`；`update(envelope)` 返回 snapshot。
+适配器完整实现 `read()`、`readRevision()`、`readChanges(since)`、`readJobs()` 和 `update(envelope, progress)`。
+`read()` 返回 `[content, snapshot]`；`update(envelope, progress)` 返回 snapshot，长任务通过 `progress` 报告进度。
+页面只使用适配器，不直接请求 HTTP，也不兼容缺少方法的适配器。测试替身使用相同接口。
 每次读写仍检查页面项目、版本及 `expected_revision`。
 
 `annotation_delivery.js` 选择本机 HTTP 或浏览器 IndexedDB 适配器。
+它独立负责初始化、请求编码和异步任务轮询。适配器安装后，页面才开始读取和显示批注。
+本机初始化只读取一次正文和页面状态；首次渲染复用已核验的状态。
+正文固定于页面版本，后续刷新和轮询继续核对状态中的版本。版本变化时拒绝写入。
 新报告通过 `<meta name="latex-review-annotation-storage" content="disk|browser">` 明确存储方式。
 本机报告使用 `disk`；发布、单文件报告和浏览器 HTML 导出使用 `browser`。
 磁盘接口返回错误、断网或返回无效 JSON 时，页面保留草稿并显示错误，不切换存储。

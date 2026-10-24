@@ -22,7 +22,7 @@ from uuid import uuid4
 from .text_diff import _without_comments, scan_latex, split_sentences
 
 
-RULE_VERSION = "3"
+RULE_VERSION = "4"
 _TOKEN = re.compile(r"\[\[LR_\d+\]\]")
 _NUMBER = re.compile(r"[+−-]?(?:\d+(?:[.,]\d+)*|\.\d+)(?:[eE][+−-]?\d+)?(?:\s*[%‰])?")
 _HEADINGS = {"part", "chapter", "section", "subsection", "subsubsection", "title"}
@@ -85,21 +85,21 @@ class TranslationConfig:
         return address if address.endswith("/chat/completions") else address + "/chat/completions"
 
 
-def _protected_sentence(raw: str, render) -> dict:
+def _protected_sentence(raw: str, render, *, token_start: int = 0) -> dict:
     from .structure import _argument, _masked
 
     protected: list[dict] = []
 
-    def add(latex: str, html: str) -> str:
-        token = f"[[LR_{len(protected)}]]"
-        protected.append({"token": token, "latex": latex, "html": html})
+    def add(latex: str, html: str, kind: str, **metadata) -> str:
+        token = f"[[LR_{token_start + len(protected)}]]"
+        protected.append({"token": token, "latex": latex, "html": html, "kind": kind, **metadata})
         return token
 
     def walk(text: str) -> str:
         parts = []
         ordinary = []
         def flush():
-            parts.append(_NUMBER.sub(lambda m: add(m[0], escape(m[0])), "".join(ordinary)))
+            parts.append(_NUMBER.sub(lambda m: add(m[0], escape(m[0]), "number"), "".join(ordinary)))
             ordinary.clear()
         for token in scan_latex(text)[0]:
             if token.kind in {"math", "citation", "reference", "command", "verbatim"}:
@@ -126,11 +126,11 @@ def _protected_sentence(raw: str, render) -> dict:
                         tag = "a"
                         opening = f'<a href="{escape(address, quote=True)}" rel="noreferrer">'
                 if tag and argument and argument[0] == len(token.text):
-                    parts += [add(token.text[:argument[2]], opening),
-                              walk(token.text[argument[2]:argument[0] - 1]),
-                              add("}", f"</{tag}>")]
+                    start = add(token.text[:argument[2]], opening, "format_open", source=name)
+                    parts += [start, walk(token.text[argument[2]:argument[0] - 1]),
+                              add("}", f"</{tag}>", "format_close", pair=start, source=name)]
                 else:
-                    parts.append(add(token.text, render(token.text)))
+                    parts.append(add(token.text, render(token.text), token.kind))
             else:
                 ordinary.append(" " if token.kind == "space" else token.text)
         flush()
@@ -165,7 +165,8 @@ def _build_unit(project, node, side: str, change_id: str, changed: set[int], *,
         for number, sentence in enumerate(split_sentences(raw), 1):
             def render(text):
                 return _inline_html(text, project, side, [], source=node.review.source)
-            protected = _protected_sentence(sentence.text, render)
+            protected = _protected_sentence(sentence.text, render,
+                                            token_start=sum(len(s["protected"]) for s in sentences))
             if not protected["text"].strip():
                 continue
             sentences.append({"number": number, "changed": number in changed or (highlight_structure and kind != "paragraph"),
@@ -233,6 +234,87 @@ def build_current_units(project) -> list[dict]:
     return units
 
 
+def validate_manifest(units: object) -> list[dict]:
+    """Validate the current manifest once, before sessions or exports consume it."""
+    def fail(detail):
+        raise TranslationError(f"翻译清单的{detail}无效，请重新生成报告后启动预览服务")
+
+    def fields(value, required, optional=()):
+        if (not isinstance(value, dict) or not set(required) <= value.keys()
+                or value.keys() - set(required) - set(optional)):
+            fail("字段")
+
+    def text(value):
+        if not isinstance(value, str) or not value.strip():
+            fail("文本字段")
+
+    if not isinstance(units, list):
+        fail("列表")
+    ids = set()
+    for unit in units:
+        fields(unit, ("id", "side", "node_id", "kind", "change_id", "rule_version", "sentences"), ("error",))
+        for name in ("id", "side", "node_id", "kind", "change_id", "rule_version"):
+            text(unit[name])
+        if unit["rule_version"] != RULE_VERSION:
+            fail("保护规则")
+        if (unit["side"] not in {"old", "new"} or unit["kind"] not in {"paragraph", "figure", *_HEADINGS}
+                or unit["id"] != f'{unit["side"]}-{unit["node_id"]}' or unit["id"] in ids):
+            fail("内容身份")
+        ids.add(unit["id"])
+        if not isinstance(unit["sentences"], list):
+            fail("句子列表")
+        if "error" in unit:
+            text(unit["error"])
+            if unit["sentences"]:
+                fail("阻止翻译的内容")
+            continue
+        if not unit["sentences"]:
+            fail("句子列表")
+        number, unit_tokens = 0, set()
+        for sentence in unit["sentences"]:
+            fields(sentence, ("number", "changed", "text", "protected"))
+            if type(sentence["number"]) is not int or sentence["number"] <= number or type(sentence["changed"]) is not bool:
+                fail("句子编号或变更标记")
+            number = sentence["number"]
+            text(sentence["text"])
+            if not isinstance(sentence["protected"], list):
+                fail("占位符列表")
+            fragments = {}
+            for fragment in sentence["protected"]:
+                fields(fragment, ("token", "latex", "html", "kind"), ("source", "pair"))
+                for name in ("token", "latex", "kind"):
+                    text(fragment[name])
+                if not isinstance(fragment["html"], str):
+                    fail("占位符预览")
+                token, kind = fragment["token"], fragment["kind"]
+                if not _TOKEN.fullmatch(token) or token in unit_tokens:
+                    fail("占位符身份")
+                if kind not in {"number", "math", "citation", "reference", "command", "verbatim", "format_open", "format_close"}:
+                    fail("占位符类型")
+                if kind in {"format_open", "format_close"}:
+                    text(fragment.get("source"))
+                    if fragment["source"] not in {*_FORMATTING, "href"}:
+                        fail("格式命令")
+                elif "source" in fragment:
+                    fail("占位符字段")
+                if kind == "format_close":
+                    text(fragment.get("pair"))
+                    opening = fragments.get(fragment["pair"])
+                    if not opening or opening["kind"] != "format_open" or opening["source"] != fragment["source"]:
+                        fail("格式配对")
+                elif "pair" in fragment:
+                    fail("格式配对")
+                fragments[token] = fragment
+                unit_tokens.add(token)
+            if _TOKEN.findall(sentence["text"]) != list(fragments):
+                fail("占位符数量、顺序或所属句")
+            try:
+                _validate_format_scope(sentence["protected"], list(fragments))
+            except TranslationError:
+                fail("格式配对")
+    return units
+
+
 def cache_key(unit: dict, config: TranslationConfig) -> str:
     settings = asdict(config)
     for field_name in ("api_key_env", "concurrency", "timeout", "max_retries"):
@@ -250,6 +332,32 @@ def _numeric_affixes(text: str, token: str) -> tuple[str, str]:
     prefix = re.search(r"[+−-]\s*$", before)
     suffix = re.match(r"\s*(?:[%‰]|[eE](?:[+−-]|(?=$|[^\w])))", after)
     return (prefix[0].strip() if prefix else "", suffix[0].strip() if suffix else "")
+
+
+def _validate_format_scope(protected: list[dict], translated: list[str]) -> None:
+    """原子可以在相同格式作用域内移动；格式边界保持原序。"""
+    fragments = {p["token"]: p for p in protected}
+    boundaries = [p["token"] for p in protected if p["kind"].startswith("format_")]
+    if [t for t in translated if t in boundaries] != boundaries:
+        raise TranslationError("译文改变了格式占位符的配对或嵌套，请重试")
+
+    def scopes(tokens):
+        stack, result = [], {}
+        for token in tokens:
+            fragment = fragments[token]
+            if fragment["kind"] == "format_open":
+                stack.append(token)
+            elif fragment["kind"] == "format_close":
+                if not stack or stack.pop() != fragment["pair"]:
+                    raise TranslationError("译文改变了格式占位符的配对或嵌套，请重试")
+            else:
+                result[token] = tuple(stack)
+        if stack:
+            raise TranslationError("译文格式占位符未闭合，请重试")
+        return result
+
+    if scopes(list(fragments)) != scopes(translated):
+        raise TranslationError("译文将原子占位符移出了原有格式作用域，请重试")
 
 
 def validate_translation(unit: dict, payload: object) -> list[str]:

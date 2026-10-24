@@ -39,6 +39,38 @@ def create(p,body='Offline question'):
     assert p.evaluate('''async body=>{const u=reviewAnnotations.getContent().units.find(u=>u.text.startsWith('Stable'));return reviewAnnotations.update({operation:'create',selection:{unit_id:u.id,start:0,end:6,quote:'Stable'},body,author:{name:'Tester',type:'user'},category:'question'});}''',body)
 
 
+@pytest.mark.parametrize('mode', ['live', 'diff'])
+def test_initialization_reads_content_and_status_once(live_report, request, mode):
+    def check(page, url):
+        requests = []
+        page.on('request', lambda item: requests.append(item.url))
+        ready(page, url)
+        assert sum(url.endswith('/api/annotations/content') for url in requests) == 1
+        assert sum(url.endswith('/api/annotations/status?view=page') for url in requests) == 1
+        requests.clear()
+        page.evaluate('reviewAnnotations.refresh()')
+        assert page.evaluate('reviewAnnotations.isReady()')
+        assert not any(url.endswith('/api/annotations/content') for url in requests)
+        assert sum(url.endswith('/api/annotations/status?view=page') for url in requests) == 1
+
+    if mode == 'diff':
+        page = request.getfixturevalue('annotated_page')
+        check(page, page.url)
+        return
+    chrome = request.getfixturevalue('chrome')
+    root, _, output, _ = live_report
+    with create_server(output, annotation_project_root=root) as server:
+        worker = Thread(target=server.serve_forever)
+        worker.start()
+        page = chrome.new_page()
+        try:
+            check(page, f'http://127.0.0.1:{server.server_port}/report.html')
+        finally:
+            page.close()
+            server.shutdown()
+            worker.join()
+
+
 def test_browser_and_python_import_the_same_suggestion_contract(live_report, chrome):
     from copy import deepcopy
     from latex_review.annotations import AnnotationError, validate_bundle

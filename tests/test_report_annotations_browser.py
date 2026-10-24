@@ -109,6 +109,17 @@ def test_conflict_and_mismatch_preserve_draft(annotated_page):
     assert p.locator('.annotation-editor > textarea').input_value()=='Preserved draft'
 
 
+def test_refresh_rejects_changed_server_version(annotated_page):
+    page = annotated_page
+    snapshot = page.evaluate('reviewAnnotations.getSnapshot()')
+    snapshot['version_id'] = 'different-version'
+    page.route('**/api/annotations/status?view=page', lambda route: route.fulfill(json=snapshot))
+    page.evaluate('reviewAnnotations.refresh()')
+    assert not page.evaluate('reviewAnnotations.isReady()')
+    assert '正文版本已变化' in page.locator('#annotation-status').text_content()
+    assert not page.evaluate('reviewAnnotations.update({operation: "reconcile"})')
+
+
 def test_formula_toolbar_render_success_failure_and_ui_save(annotated_page):
     p=annotated_page
     formula=p.evaluate('reviewAnnotations.getContent().units.find(u=>u.kind==="formula").selector')
@@ -151,7 +162,7 @@ def test_pending_save_preserves_complete_form(annotated_page,field,value):
     p.evaluate('''() => {
       const api=reviewAnnotations,u=api.getContent().units.find(u=>u.kind==='text');
       window.delayedSave=null;
-      api.setAdapter({read:async()=>[api.getContent(),api.getSnapshot()],update:envelope=>new Promise(resolve=>{window.delayedSave=async()=>{const response=await fetch('/api/annotations/update',{method:'POST',headers:{'Content-Type':'application/json','X-LaTeX-Review-Token':api.getSnapshot().token},body:JSON.stringify(envelope)});resolve(await response.json());};})});
+      api.setAdapter({read:async()=>[api.getContent(),api.getSnapshot()],readRevision:async()=>api.getSnapshot(),readChanges:async()=>api.getSnapshot(),readJobs:async()=>({jobs:[]}),update:envelope=>new Promise(resolve=>{window.delayedSave=async()=>{const response=await fetch('/api/annotations/update',{method:'POST',headers:{'Content-Type':'application/json','X-LaTeX-Review-Token':api.getSnapshot().token},body:JSON.stringify(envelope)});resolve(await response.json());};})});
       api.openComposer('create',null,{unit_id:u.id,start:0,end:3,quote:u.text.slice(0,3)});
     }''')
     p.wait_for_function('document.querySelector("#annotation-status").textContent.includes("条批注")')

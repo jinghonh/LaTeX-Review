@@ -193,17 +193,14 @@ def publication_html(directory: Path, translation_config: dict | None = None, *,
         html = embed_annotations(html, json.loads(manifest.read_text(encoding="utf-8")), directory, include_assets=include_assets, compressed=compressed_annotations)
     warnings = list(warnings)
     if translation_config is not None:
-        from .translation import RULE_VERSION, TranslationConfig, cache_key, read_cached_translations, rendered_result
+        from .translation import TranslationConfig, cache_key, read_cached_translations, rendered_result, validate_manifest
         config = TranslationConfig.from_mapping(translation_config)
         results = {}
         manifest = directory / "translation-units.json"
         try:
             if manifest.is_symlink():
                 raise ValueError("翻译清单不可为符号链接")
-            units = json.loads(manifest.read_text(encoding="utf-8"))
-            if (not isinstance(units, list) or any(not isinstance(unit, dict)
-                    or unit.get("rule_version") != RULE_VERSION for unit in units)):
-                raise ValueError("翻译清单规则不兼容")
+            units = validate_manifest(json.loads(manifest.read_text(encoding="utf-8")))
             cached, warnings = read_cached_translations(units, config, directory.parent / "translation-cache")
             results = {unit["id"]: rendered_result(unit, cached[cache_key(unit, config)])
                        for unit in units if not unit.get("error") and cache_key(unit, config) in cached}

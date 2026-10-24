@@ -57,17 +57,11 @@ def pack_storage(bundle):
     return {'storage_encoding': ENCODING, 'sha256': hashlib.sha256(payload.encode()).hexdigest(), 'data': data}
 
 
-def unpack_storage(value, *, restore_versions=True):
+def unpack_storage(value):
     if isinstance(value, dict) and 'storage_encoding' in value:
         if (set(value) != {'storage_encoding', 'sha256', 'data'} or value['storage_encoding'] != ENCODING
                 or not isinstance(value['data'], dict)
                 or hashlib.sha256(json.dumps(value['data'], ensure_ascii=False, sort_keys=True, separators=(',', ':')).encode()).hexdigest() != value['sha256']):
             raise ValueError('正文存储校验失败')
-        if not restore_versions:
-            packed = value['data']
-            if (set(packed) != {'encoding', 'units', 'bundle'} or packed['encoding'] != ENCODING
-                    or not isinstance(packed['units'], list) or not isinstance(packed['bundle'], dict)):
-                raise ValueError('正文共享表示无效')
-            return packed['bundle']
         return unpack_versions(value['data'])
     return unpack_versions(value)

@@ -18,8 +18,8 @@ def unit(name="paragraph"):
     return {"id": name, "side": "new", "node_id": name, "kind": "paragraph", "change_id": name,
             "sentences": [{"number": 1, "changed": True,
                            "text": "Private original [[LR_0]] and [[LR_1]].",
-                           "protected": [{"token": "[[LR_0]]", "latex": "$x$", "html": "x"},
-                                         {"token": "[[LR_1]]", "latex": "$y$", "html": "y"}]}]}
+                           "protected": [{"token": "[[LR_0]]", "latex": "$x$", "html": "x", "kind": "math"},
+                                         {"token": "[[LR_1]]", "latex": "$y$", "html": "y", "kind": "math"}]}]}
 
 
 @pytest.fixture

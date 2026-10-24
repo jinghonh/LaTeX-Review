@@ -9,7 +9,7 @@ import json
 from pathlib import Path
 from threading import RLock
 
-from .translation import RULE_VERSION, TranslationConfig, TranslationError, TranslationManager
+from .translation import TranslationConfig, TranslationError, TranslationManager, validate_manifest
 
 
 class TranslationSession:
@@ -42,10 +42,7 @@ class TranslationSession:
         if manifest.is_symlink():
             raise ValueError("翻译清单不可为符号链接")
         units = json.loads(manifest.read_text(encoding="utf-8")) if manifest.is_file() else []
-        if (not isinstance(units, list) or any(not isinstance(unit, dict)
-                or unit.get("rule_version") != RULE_VERSION for unit in units)):
-            raise ValueError("翻译清单的保护规则已更新或格式无效，请重新生成报告后启动预览服务")
-        return TranslationManager(units, self.config, self.directory)
+        return TranslationManager(validate_manifest(units), self.config, self.directory)
 
     def _available(self) -> TranslationManager:
         if self.closed:

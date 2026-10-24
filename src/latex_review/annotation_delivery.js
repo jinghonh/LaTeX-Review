@@ -173,7 +173,7 @@
       tx.oncomplete=()=>resolve(result);tx.onabort=tx.onerror=()=>reject(error||tx.error);
     });
   }
-  let local=false,token=null;
+  let local=false,token=null,initialSnapshot=null;
   async function json(url,options) {
     const r=await fetch(url,options);
     if(!r.ok) {
@@ -182,18 +182,36 @@
     }
     return r.json();
   }
+  async function encodeRequest(envelope) {
+    const body=JSON.stringify(envelope);
+    if(body.length>16384&&typeof CompressionStream!=='undefined'){
+      const stream=new Blob([body]).stream().pipeThrough(new CompressionStream('gzip'));
+      return {body:await new Response(stream).arrayBuffer(),headers:{'Content-Encoding':'gzip'}};
+    }
+    return {body,headers:{}};
+  }
+  function restoreRequestBodies(value, request) {
+    const bodies=request.operation==='batch'?new Map(request.items.map(item=>[item.id,item.body])):new Map([['single',request.body]]);
+    for(const thread of value.threads||[])for(const message of thread.messages){
+      if(!Object.hasOwn(message,'body_ref'))continue;
+      const body=bodies.get(message.body_ref);if(typeof body!=='string')throw Error('批注响应缺少正文引用');
+      message.body=body;delete message.body_ref;
+    }
+    return value;
+  }
   const adapter={
     async readRevision(){if(local)return transaction(d=>({project_id:d.project_id,version_id:content.version_id,revision:d.revision}));return json('api/annotations/status?view=revision');},
     async readChanges(since){return local?transaction(view):json('api/annotations/status?view=changes&since='+since);},
     async readJobs(){return local?{jobs:[]}:json('api/annotations/jobs');},
     async readStatus(){if(local)return transaction(view);const s=await json('api/annotations/status?view=page');token=s.token;return s;},
-    async read(){if(local)return [content,await transaction(view)];const [c,s]=await Promise.all([json('api/annotations/content'),json('api/annotations/status?view=page')]);token=s.token;return [c,s];},
+    // Content belongs to this page version; every snapshot is checked against it by the UI.
+    async read(){const s=initialSnapshot||await adapter.readStatus();initialSnapshot=null;return [content,s];},
     async update(e,progress){
       if(local)return transaction(d=>dispatch(d,e),true);
       const slow=['suggestion_preview','suggestion_apply','import','reconcile'].includes(e.request.operation);
-      const payload=await api.encodeRequest(e);
+      const payload=await encodeRequest(e);
       const task=await json('api/annotations/update'+(slow?'?async=1':''),{method:'POST',headers:{'Content-Type':'application/json','X-LaTeX-Review-Token':token,'X-LaTeX-Review-Delta-Encoding':'request-bodies',...payload.headers},body:payload.body});
-      if(!task.task_id)return api.restoreRequestBodies(task,e.request);
+      if(!task.task_id)return restoreRequestBodies(task,e.request);
       while(true){const job=await json(task.status_url);if(job.state==='complete')return job.result;if(job.state==='failed')fail(job.message||'批注任务失败');progress?.(job);await new Promise(resolve=>setTimeout(resolve,300));}
     }
   };
@@ -273,7 +291,7 @@
     if(storage!==undefined&&!['disk','browser'].includes(storage))fail('批注存储方式无效');
     local=storage==='browser'||storage===undefined&&(published||location.protocol==='file:');
     if(!local) {
-      try {const s=await adapter.readStatus();if(s.project_id!==content.project_id||s.version_id!==content.version_id)fail('页面与接口身份不一致');}
+      try {initialSnapshot=await adapter.readStatus();if(initialSnapshot.project_id!==content.project_id||initialSnapshot.version_id!==content.version_id)fail('页面与接口身份不一致');}
       catch(e) {
         // Unmarked historical HTTP reports may have been copied to a static host.
         if(storage!==undefined||!embedded||![404,405].includes(e.status))throw e;
@@ -283,6 +301,7 @@
     let embeddedConflict='';
     if(local)await transaction((data,existing)=>{try{const result=existing?importBundle(data,embedded):{imported:[]};if(result.imported.length)data.revision++;}catch(e){embeddedConflict=e.message+'。浏览器记录未覆盖；可导出报告原备份。';}return null;},true);
     await api.setAdapter(adapter);
+    if(!api.isReady())return;
     // Only the current live page commits migrations. Opening historical reports is read-only.
     if(!local&&document.body.classList.contains('live-view')&&api.getContent())await api.update({operation:'reconcile'});
     await restoreDrafts();window.reviewAnnotationDeliveryReady=true;notice.textContent=embeddedConflict||(local?'批注保存在当前浏览器。请导出 HTML 或 JSON 以携带更新。':'批注保存到项目共享磁盘。');
