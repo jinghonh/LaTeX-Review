@@ -52,7 +52,7 @@ def build(source: ProjectSource, output: Path, revision: int = 1) -> list[str]:
     from .macros import validate_macros
     configuration = settings(source)
     project = parse_project(source.expand(), macros=validate_macros(configuration.get("macros", {})), include_title=True)
-    compile_messages = []
+    compile_diagnostics = []
     compiled_link = ""
     if configuration.get("compile", {}).get("enabled", False):
         from .compilation import compile_side
@@ -61,7 +61,7 @@ def build(source: ProjectSource, output: Path, revision: int = 1) -> list[str]:
                                      timeout=options.get("timeout", 90),
                                      sequence=tuple(options.get("sequence", ())),
                                      sandbox=options.get("sandbox_render", False))
-        compile_messages = [item.message for item in issues]
+        compile_diagnostics = list(issues)
         if status.pdf:
             compiled_link = f'<p><a href="{status.pdf}" target="_blank">打开编译 PDF</a></p>'
             from dataclasses import replace
@@ -76,11 +76,23 @@ def build(source: ProjectSource, output: Path, revision: int = 1) -> list[str]:
     from .annotations import MANIFEST, build_content, content_meta
     annotation_content = build_content(project, preview.html)
     _write(output / MANIFEST, json.dumps(annotation_content, ensure_ascii=False))
-    messages = compile_messages + [item.message for item in (*preview.diagnostics, *diagnostics)]
+    all_diagnostics = [*compile_diagnostics, *preview.diagnostics, *diagnostics]
+    messages = [item.message for item in all_diagnostics]
     from .reading import build_reading
     reading = build_reading(project, units, revision=revision)
     style = files('latex_review').joinpath('report.css').read_text(encoding='utf-8')
-    diagnostic_items = ''.join('<li>' + escape(message) + '</li>' for message in messages)
+    diagnostic_items = ''
+    for item in all_diagnostics:
+        severity = {'info': '信息', 'warning': '警告', 'error': '错误'}.get(item.severity, item.severity)
+        location = item.source_new or item.source_old
+        position = location.file if location and location.file else '位置未知'
+        if location and location.start_line is not None:
+            position += f':{location.start_line}'
+            if location.start_column is not None:
+                position += f':{location.start_column}'
+        diagnostic_items += ('<li data-severity="' + escape(item.severity, quote=True) + '">'
+                             + '<strong>' + escape(severity) + '</strong> · <code>'
+                             + escape(position) + '</code> · ' + escape(item.message) + '</li>')
     header = f'''<header class="report-header">
 <div class="report-identity"><div class="report-eyebrow"><span class="report-mark">LaTeX</span>
 <span>论文内容预览</span><span class="report-edition">持续预览</span></div>

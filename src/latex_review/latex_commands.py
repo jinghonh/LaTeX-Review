@@ -18,13 +18,13 @@ MATH_COMMANDS = frozenset({
     "rightarrow", "leftarrow", "longrightarrow", "longmapsto", "mapsto", "Rightarrow", "Leftrightarrow",
     "downarrow", "uparrow", "to", "not", "mid", "vert", "lvert", "rvert", "lVert", "rVert",
     "displaystyle", "textstyle", "scriptstyle", "scriptscriptstyle", "limits", "nolimits", "substack",
-    "varsigma", "varpi", "iota", "tanh", "allowbreak", "bullet", "odot", "mathop",
+    "varsigma", "varpi", "iota", "tanh", "allowbreak", "bullet", "odot", "oplus", "bigoplus", "mathop",
     "quad", "qquad", "ldots", "cdots", "dots", "vdots", "ddots", "hspace", "phantom",
 })
 
 TEXT_COMMANDS = frozenset({
     "vfill", "footnotesize", "arraybackslash", "bibliographystyle", "paragraph", "subparagraph", "par", "sep", "vspace", "smallskip", "medskip", "bigskip",
-    "toprule", "midrule", "bottomrule", "hline", "cline", "multirow", "multicolumn", "shortstack",
+    "toprule", "midrule", "bottomrule", "cmidrule", "hline", "cline", "multirow", "multicolumn", "shortstack",
     "resizebox", "linewidth", "textwidth", "columnwidth", "tabcolsep", "FloatBarrier", "color", "textcolor",
     "includegraphics", "captionsetup", "raggedright", "raggedleft", "centering", "minipage", "endminipage",
     "journal", "ead", "corref", "cortext", "fnref", "fntext", "affiliation", "address", "keyword", "keywords",

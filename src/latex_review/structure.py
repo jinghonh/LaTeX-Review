@@ -194,7 +194,7 @@ def _issue_location(project: ExpandedProject, issue: SourceIssue) -> SourceLocat
 
 
 def _diagnostic(code: str, message: str, location: SourceLocation, side: str) -> Diagnostic:
-    return Diagnostic(code, "warning", message,
+    return Diagnostic(code, "info" if code == "tex_distribution_style" else "warning", message,
                       source_old=location if side == "old" else None,
                       source_new=location if side == "new" else None)
 
@@ -500,6 +500,11 @@ class _Builder:
             command = _COMMAND.match(self.mask, i)
             if command:
                 name = command.group(1)
+                if name == "maketitle":
+                    self._flush(pending, i, parent)
+                    self.add("metadata", i, command.end(), parent)
+                    i = pending = command.end()
+                    continue
                 if name in _NUMBERING_COMMANDS:
                     self._flush(pending, i, parent)
                     finish = command.end()
@@ -520,10 +525,14 @@ class _Builder:
                         self.add('metadata', i, body[0], parent)
                         i = pending = body[0]
                         continue
-                if frontmatter and name in {"title", "author", "date", "affiliation", "address", "ead", "corref", "cortext", "fnref", "fntext", "journal"}:
+                if name in {"title", "author", "date"} or (frontmatter and name in {"affiliation", "address", "ead", "corref", "cortext", "fnref", "fntext", "journal"}):
                     arg = _argument(self.mask, command.end())
                     finish = arg[0] if arg else command.end()
-                    self.add("metadata", i, finish, parent)
+                    if not frontmatter:
+                        self._flush(pending, i, parent)
+                    node = self.add("metadata", i, finish, parent)
+                    if name == "title" and arg:
+                        self._inline(node, arg[2], arg[0] - 1)
                     i = finish
                     pending = i
                     continue
