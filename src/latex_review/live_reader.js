@@ -1,4 +1,5 @@
 (() => {
+  const readonly = document.querySelector('meta[name="latex-review-readonly"]')?.content === 'snapshot';
   const paper = document.querySelector('.preview-side');
   const search = document.getElementById('live-search');
   const sections = paper ? Array.from(paper.querySelectorAll('.node-part,.node-chapter,.node-section,.node-subsection,.node-subsubsection')) : [];
@@ -9,7 +10,7 @@
   };
   const storageKey = 'latex-live:' + location.pathname;
   let saved = null;
-  try { saved = JSON.parse(sessionStorage.getItem(storageKey)); } catch (_) {}
+  try { if(!readonly)saved = JSON.parse(sessionStorage.getItem(storageKey)); } catch (_) {}
   function jump(node) {
     if (!node) return;
     node.scrollIntoView({block:'start'});
@@ -44,6 +45,7 @@
   }
   window.reviewSections.restore(saved?.sections);
   function remember() {
+    if(readonly)return;
     const paragraphs = Array.from(paper.querySelectorAll('.node-paragraph,.node-figure'));
     const near = paragraphs.filter(node => node.getBoundingClientRect().top <= 120).at(-1) ||
       sections.filter(node => node.getBoundingClientRect().top <= 120).at(-1);
@@ -76,7 +78,7 @@
     diagnostics.open = true;
   });
   window.addEventListener('pagehide', remember);
-  if (location.protocol !== 'http:' || location.hostname !== '127.0.0.1') return;
+  if (readonly || location.protocol !== 'http:' || location.hostname !== '127.0.0.1') return;
   let revision = LIVE_REVISION;
   async function check() {
     try {

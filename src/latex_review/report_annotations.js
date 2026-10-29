@@ -1,5 +1,6 @@
 (() => {
   'use strict';
+  const readonly = document.querySelector('meta[name="latex-review-readonly"]')?.content === 'snapshot';
   const meta = name => document.querySelector(`meta[name="latex-review-annotation-${name}"]`)?.content;
   if (!meta('project')) return;
   const el = (tag, text, cls) => { const e = document.createElement(tag); if (text != null) e.textContent = text; if (cls) e.className = cls; return e; };
@@ -77,7 +78,7 @@
   const layoutCards=[];
   const toolbar=el('div',null,'annotation-toolbar'); toolbar.hidden=true; toolbar.append(button('批注',()=>{ toolbar.hidden=true; openComposer('create',null,pending); })); document.body.append(toolbar);
   const editor=el('section',null,'annotation-editor'); editor.hidden=true; editor.setAttribute('aria-label','编辑批注');
-  const name=el('input'); name.placeholder='显示名称'; name.value='审阅者';try{name.value=localStorage.getItem('latex-review-author-name')||name.value;}catch(_){} name.setAttribute('aria-label','显示名称');
+  const name=el('input'); name.placeholder='显示名称'; name.value='审阅者';try{if(!readonly)name.value=localStorage.getItem('latex-review-author-name')||name.value;}catch(_){} name.setAttribute('aria-label','显示名称');
   const author=select([['user','用户'],['agent','智能体']]); author.setAttribute('aria-label','作者身份');
   const type=select(categories); type.setAttribute('aria-label','内容分类');
   const body=el('textarea'); body.rows=5; body.setAttribute('aria-label','批注正文');
@@ -109,6 +110,7 @@
   function remember(notify=true) { if(editing) drafts[editing.key]={...editing,body:body.value,name:name.value,author:author.value,category:type.value,original:original.value,replacement:replacement.value}; if(notify&&editing) document.dispatchEvent(new CustomEvent('annotation-draft')); }
   [body,name,author,type,original,replacement].forEach(e=>e.addEventListener('input',remember));
   function openComposer(operation,thread,selection,message) {
+    if(readonly)return;
     remember(); const key=operation+':'+(message?.id||thread?.id||JSON.stringify(selection));
     editing={operation,thread,selection,message,key}; const d=drafts[key];
     if(d) editing={...d,operation,thread,selection,message,key};
@@ -137,7 +139,7 @@
   }
   let polling=false;
   async function pollUpdates() {
-    if(polling||busy||!ready||!content||document.hidden)return;
+    if(readonly||polling||busy||!ready||!content||document.hidden)return;
     polling=true;const generation=readGeneration;
     try {
       let s=await adapter.readRevision();
@@ -154,18 +156,18 @@
       // A transient read failure must not interrupt editing or disable saving.
     } finally {polling=false;}
   }
-  setInterval(pollUpdates,2000);
+  if(!readonly)setInterval(pollUpdates,2000);
   document.addEventListener('visibilitychange',()=>{if(!document.hidden)pollUpdates();});
   const phases={queued:'排队',read:'读取批注',lock:'等待存储锁',validate:'检查版本',locate:'定位批注',preflight:'预检',apply:'应用',reuse:'复用预检',write:'写入',rebuild:'更新报告',complete:'完成'};
   function showProgress(job) {status.textContent=`${phases[job.phase]||job.phase} · ${job.total?`${job.completed}/${job.total}`:'处理中'}`;}
   let jobsPolling=false,externalJob=false;
   async function pollJobs() {
-    if(busy||jobsPolling||document.hidden||!ready)return;
+    if(readonly||busy||jobsPolling||document.hidden||!ready)return;
     jobsPolling=true;
     try {const data=await adapter.readJobs();if(busy)return;if(data.jobs.length){externalJob=true;showProgress(data.jobs.at(-1));}else if(externalJob){externalJob=false;status.textContent='批注任务已结束。';pollUpdates();}}
     catch(e) {} finally {jobsPolling=false;}
   }
-  setInterval(pollJobs,1000);
+  if(!readonly)setInterval(pollJobs,1000);
   function acceptSnapshot(s) {
     if(!s.incremental){snapshot=s;return null;}
     if(s.start_revision!==snapshot.revision)throw Error('批注修订号已变化，请重新读取');
@@ -183,6 +185,7 @@
     }finally{busy=false;}
   }
   async function update(request) {
+    if(readonly){status.textContent='历史快照只读。';return false;}
     if(!ready&&preparation&&!busy)await preparation;
     if(!ready||busy) {status.textContent='批注接口或版本不可用。输入已保留。'; return false;}
     remember(); busy=true; save.disabled=true;
@@ -312,7 +315,7 @@
     if(t.association.status==='needs_relocation') {
       d.append(el('p',t.association.container?.selection_deleted?'原选区已删除。批注仍关联到所属段落或表格。':t.association.container?'已定位所属段落或表格；选区待重新定位。':'待重新定位'));
       if(t.association.container)d.append(button('定位所属段落或表格',()=>focus(t)));
-      d.append(button('手动重新关联',()=>{relocation=t;status.textContent='请选择当前段落内文字或完整公式。';}));
+      if(!readonly)d.append(button('手动重新关联',()=>{relocation=t;status.textContent='请选择当前段落内文字或完整公式。';}));
     }
     if(t.association.status==='auto_migrated') d.append(el('p','自动迁移'));
     const replySection=el('section',null,'annotation-replies');replySection.setAttribute('aria-label',`回复 · ${replies.length}`);
@@ -325,11 +328,11 @@
         box.append(el('pre',suggestion.original_chunk),el('pre',suggestion.replacement_chunk));
         const diff=el('pre',suggestion.reason||'点击预览检查源码差异。');box.append(diff);
         const preview=button('预览源码差异',async()=>{try{const envelope={project_id:content.project_id,version_id:content.version_id,request:{operation:'suggestion_preview',thread_id:t.id,message_id:m.id,expected_revision:snapshot.revision}};const response=await adapter.update(envelope);diff.textContent=response.result.diff;}catch(e){diff.textContent=e.message;}});
-        box.append(preview); if(suggestion.status!=='applied')box.append(button('接受并应用源码建议',()=>update({operation:'suggestion_apply',thread_id:t.id,message_id:m.id})));row.append(box);
+        if(!readonly)box.append(preview); if(!readonly&&suggestion.status!=='applied')box.append(button('接受并应用源码建议',()=>update({operation:'suggestion_apply',thread_id:t.id,message_id:m.id})));row.append(box);
       }
       const edit=button('编辑',()=>openComposer('edit',t,null,m));
-      edit.className='annotation-edit';row.append(edit);
-      if(index>0){const reply=button('回复',()=>openComposer('reply',t,null,m));reply.className='annotation-edit';row.append(document.createTextNode(' · '),reply);}
+      edit.className='annotation-edit';if(!readonly)row.append(edit);
+      if(!readonly&&index>0){const reply=button('回复',()=>openComposer('reply',t,null,m));reply.className='annotation-edit';row.append(document.createTextNode(' · '),reply);}
       if(index===0)d.append(row);else {
         const parent=m.reply_to?messages.slice(1,index).find(x=>x.id===m.reply_to):null;
         const parentRow=parent&&replyRows.get(parent.id);
@@ -344,7 +347,7 @@
     if(replies.length)d.append(replySection);
     const actions=el('div',null,'annotation-card-actions');
     actions.append(button('回复',()=>openComposer('reply',t)),button(t.resolved?'重新打开':'标记为已解决',()=>update({operation:t.resolved?'reopen':'resolve',thread_id:t.id})));
-    const remove=button('删除批注',()=>{const replies=Math.max(0,t.messages.filter(m=>!m.deleted_at).length-1);if(window.confirm(`删除这条批注及其 ${replies} 条回复？删除后无法在界面恢复。`))update({operation:'delete_thread',thread_id:t.id});});remove.className='annotation-delete';actions.append(remove);d.append(actions);
+    const remove=button('删除批注',()=>{const replies=Math.max(0,t.messages.filter(m=>!m.deleted_at).length-1);if(window.confirm(`删除这条批注及其 ${replies} 条回复？删除后无法在界面恢复。`))update({operation:'delete_thread',thread_id:t.id});});remove.className='annotation-delete';actions.append(remove);if(!readonly)d.append(actions);
     if(t.history.length) {const history=el('details',null,'annotation-message-actions');history.append(el('summary','关联记录'));t.history.forEach(h=>history.append(el('p',h.at+' · '+h.method)));d.append(history);}
     return d;
   }
@@ -449,6 +452,7 @@
     throw Error('只能选择修改后版本的单个段落或完整公式。');
   }
   document.addEventListener('mouseup',e=>{
+    if(readonly)return;
     if(panel.contains(e.target)||editor.contains(e.target)||toolbar.contains(e.target)) return;
     toolbar.hidden=true;if(!ready) return;
     try { pending=selection(); if(pending&&relocation) {const t=relocation;relocation=null;update({operation:'associate',thread_id:t.id,selection:pending});return;}
@@ -461,10 +465,10 @@
     if(point&&getSelection().isCollapsed&&!(document.body.classList.contains('live-view')&&document.body.classList.contains('bilingual-view')&&e.target.closest('.review-sentence,.translated-sentence'))) {
       for(const u of content.units.filter(u=>u.kind==='text')) {const root=rootFor(u);if(root?.contains(point.startContainer)){const map=coordinates(root),offset=map.offset(point.startContainer,point.startOffset);const t=snapshot.threads.find(t=>{const a=t.association.anchor;return a?.unit_id===u.id&&a.start<=offset&&a.end>offset;});if(t) overlap({...t.association.anchor,start:offset,end:offset+1});break;}}
     }
-    const formula=e.target.closest('[data-annotation-latex]'); if(formula) {const u=content.units.find(u=>u.kind==='formula'&&rootFor(u)===formula);if(u){pending={unit_id:u.id,side:'new'};if(relocation){const t=relocation;relocation=null;update({operation:'associate',thread_id:t.id,selection:pending});return;}if(editing?.operation==='create'&&!editing.selection){editing.selection=pending;editing.content=structuredClone(content);editing.anchor=window.reviewAnnotationDelivery?.anchor(content,pending);editing.warning=null;remember();return;}toolbar.hidden=false;const r=formula.getBoundingClientRect();toolbar.style.top=r.bottom+'px';toolbar.style.left=Math.min(innerWidth-130,r.left)+'px';}}
+    const formula=e.target.closest('[data-annotation-latex]'); if(formula&&!readonly) {const u=content.units.find(u=>u.kind==='formula'&&rootFor(u)===formula);if(u){pending={unit_id:u.id,side:'new'};if(relocation){const t=relocation;relocation=null;update({operation:'associate',thread_id:t.id,selection:pending});return;}if(editing?.operation==='create'&&!editing.selection){editing.selection=pending;editing.content=structuredClone(content);editing.anchor=window.reviewAnnotationDelivery?.anchor(content,pending);editing.warning=null;remember();return;}toolbar.hidden=false;const r=formula.getBoundingClientRect();toolbar.style.top=r.bottom+'px';toolbar.style.left=Math.min(innerWidth-130,r.left)+'px';}}
   });
   [sort,identity,category,resolved,location,search].forEach(e=>e.addEventListener('input',()=>{scope=null;render();}));
   window.reviewAnnotations=Object.freeze({coordinates,selection,refresh,synchronize,update,openComposer,focus,
-    getDrafts(){remember(false);return structuredClone(drafts);},restoreDrafts(value){Object.assign(drafts,value);const tray=el('div',null,'annotation-drafts');tray.append(el('p','保留的编辑草稿'));Object.entries(value).forEach(([key,d])=>tray.append(button(d.body.slice(0,60)||'空草稿',()=>window.reviewAnnotations.resumeDraft(key))));panel.append(tray);},resumeDraft(key){const d=drafts[key];if(d){openComposer(d.operation,d.thread,d.selection,d.message);editing={...d,key};body.value=d.body;name.value=d.name;author.value=d.author;type.value=d.category;original.value=d.original||'';replacement.value=d.replacement||'';if(d.warning)status.textContent=d.warning;}},
+    getDrafts(){remember(false);return structuredClone(drafts);},restoreDrafts(value){if(readonly)return;Object.assign(drafts,value);const tray=el('div',null,'annotation-drafts');tray.append(el('p','保留的编辑草稿'));Object.entries(value).forEach(([key,d])=>tray.append(button(d.body.slice(0,60)||'空草稿',()=>window.reviewAnnotations.resumeDraft(key))));panel.append(tray);},resumeDraft(key){const d=drafts[key];if(d){openComposer(d.operation,d.thread,d.selection,d.message);editing={...d,key};body.value=d.body;name.value=d.name;author.value=d.author;type.value=d.category;original.value=d.original||'';replacement.value=d.replacement||'';if(d.warning)status.textContent=d.warning;}},
     setAdapter(value){adapter=value;return refresh();},isReady(){return ready;},isBusy(){return busy||externalJob;},getContent(){return content;},getSnapshot(){return snapshot;}});
 })();

@@ -1,24 +1,50 @@
 (function () {
   'use strict';
+  const readonly = document.querySelector('meta[name="latex-review-readonly"]')?.content === 'snapshot';
   const manifest = document.getElementById('translation-units');
-  if (!manifest) return;
-  const units = JSON.parse(manifest.textContent);
+  if (!manifest && !readonly) return;
+  let units;
+  try { units = JSON.parse(manifest ? manifest.textContent : 'null'); }
+  catch (error) { if (!readonly) throw error; }
   const mode = document.getElementById('translation-mode');
   const status = document.getElementById('translation-status');
   const all = document.getElementById('translate-all');
   const cancel = document.getElementById('translation-cancel');
   const exportButton = document.getElementById('translation-export');
   let results = JSON.parse(document.getElementById('translation-results').textContent);
+  const readableUnit = unit => unit && ['id', 'node_id', 'change_id', 'kind'].every(key => typeof unit[key] === 'string') &&
+    ['old', 'new'].includes(unit.side);
+  const legacyManifest = readonly && (!Array.isArray(units) || !units.every(readableUnit));
+  if (legacyManifest) {
+    // These are display identifiers from saved results, never a replacement source manifest.
+    units = Object.values(results).filter(result => readableUnit(result) &&
+      document.getElementById(result.side + '-' + result.node_id));
+  }
   const blockedStates = Object.fromEntries(units.filter(unit => unit.error)
     .map(unit => [unit.id, {state: 'blocked', message: unit.error}]));
   let states = {...blockedStates}, token = '', active = false, polling = false, available = true;
   const installed = new Set();
   const live = document.body.classList.contains('live-view');
   const published = document.querySelector('meta[name="latex-review-publication"]')?.content === 'static';
-  const localService = !published && location.protocol === 'http:' && location.hostname === '127.0.0.1';
+  const localService = !readonly && !published && location.protocol === 'http:' && location.hostname === '127.0.0.1';
   const labels = {pending: '等待翻译', running: '正在翻译', ready: '译文已完成', failed: '翻译失败，可重试', cancelled: '已停止，可重试', blocked: '此段无法翻译'};
   let pinnedSentence = '', hoveredSentence = '';
   const liveCells = new Map();
+  let savedTranslations;
+
+  function unalignedTranslations() {
+    if (!savedTranslations) {
+      savedTranslations = document.createElement('section');
+      savedTranslations.className = 'history-saved-translations';
+      savedTranslations.setAttribute('aria-label', '已保存译文（只读，未关联原文）');
+      const title = document.createElement('h2'); title.textContent = '已保存译文 · 只读';
+      const explanation = document.createElement('p');
+      explanation.textContent = '以下译文无法关联到当前报告的原文节点，仅展示保存时的内容，不提供原文跳转。';
+      savedTranslations.append(title, explanation);
+      document.body.append(savedTranslations);
+    }
+    return savedTranslations;
+  }
 
   function readingAnchor() {
     if (!live) return null;
@@ -79,7 +105,7 @@
     Object.values(results).forEach(result => {
       if (installed.has(result.id)) return;
       const target = document.getElementById(result.side + '-' + result.node_id);
-      if (!target) return;
+      if (!target && !readonly) return;
       const block = document.createElement('div');
       block.className = 'translation-block'; block.lang = 'zh-CN';
       block.dataset.translationUnit = result.id;
@@ -87,12 +113,23 @@
       block.append(label);
       result.sentences.forEach(sentence => {
         const span = document.createElement('span');
-        span.className = 'translated-sentence' + (sentence.changed ? ' sentence-changed' : '');
-        span.dataset.originalSentence = result.side + '-' + result.node_id + '-sentence-' + sentence.number;
+        const originalId = result.side + '-' + result.node_id + '-sentence-' + sentence.number;
+        const aligned = !readonly || Boolean(target && Number.isInteger(sentence.number) && sentence.number > 0 &&
+          target.contains(document.getElementById(originalId)) &&
+          result.sentences.filter(item => item.number === sentence.number).length === 1);
+        span.className = 'translated-sentence' + (sentence.changed && aligned ? ' sentence-changed' : '');
+        if (aligned) span.dataset.originalSentence = originalId;
+        else span.dataset.unmatched = 'true';
         // HTML is escaped by the server; protected fragments come from the existing safe preview renderer.
         span.innerHTML = sentence.html;
         block.append(span, document.createTextNode(' '));
       });
+      if (!target) {
+        block.style.display = 'block';
+        unalignedTranslations().append(block);
+        installed.add(result.id);
+        return;
+      }
       if (live && liveCells.has(result.id)) {
         const cell = liveCells.get(result.id);
         const originalIds = Array.from(cell.original.querySelectorAll('.review-sentence')).map(sentence => sentence.id);
@@ -150,6 +187,7 @@
 
   function refreshButtons() {
     document.querySelectorAll('[data-translate-change]').forEach(button => {
+      if (readonly) { button.hidden = true; button.disabled = true; return; }
       const selected = units.filter(unit => unit.change_id === button.dataset.translateChange);
       const pending = selected.some(unit => ['running', 'pending'].includes((states[unit.id] || {}).state));
       const complete = selected.length > 0 && selected.every(unit => results[unit.id]);
@@ -175,7 +213,7 @@
     document.querySelectorAll('.group-translation-side[data-translation-node],.inline-translation-side[data-translation-node]').forEach(side => {
       const id = side.dataset.translationNode;
       const placeholder = side.querySelector('.translation-placeholder');
-      placeholder.hidden = Boolean(results[id]);
+      placeholder.hidden = readonly ? Boolean(side.querySelector('.translated-sentence')) : Boolean(results[id]);
       const state = states[id] || {};
       placeholder.textContent = labels[state.state] || '尚未翻译';
       if (state.message) placeholder.textContent += ' · ' + state.message;
@@ -189,18 +227,24 @@
     status.hidden = units.length > 0 && count === units.length && !active;
     const overview = document.getElementById('overview-translation');
     if (overview) {
-      overview.textContent = !units.length ? '无待翻译内容' : count === units.length ? '译文已完成 · ' + count + ' 段' :
+      overview.textContent = legacyManifest ? '已保存译文 · ' + Object.keys(results).length + ' 段（旧清单不兼容）' :
+        !units.length ? '无待翻译内容' : count === units.length ? '译文已完成 · ' + count + ' 段' :
         '译文 ' + count + ' / ' + units.length + ' 段' + (active ? ' · 翻译中' : '');
-      overview.dataset.complete = String(units.length > 0 && count === units.length);
+      overview.dataset.complete = String(!legacyManifest && units.length > 0 && count === units.length);
     }
     document.querySelectorAll('.group-translation,.inline-translation').forEach(section => {
-      const hasResults = Array.from(section.querySelectorAll('[data-translation-node]'))
-        .some(side => results[side.dataset.translationNode]);
+      const hasResults = readonly ? Boolean(section.querySelector('.translated-sentence')) :
+        Array.from(section.querySelectorAll('[data-translation-node]')).some(side => results[side.dataset.translationNode]);
       if (hasResults && !section.dataset.cachedTranslationOpened) {
         section.open = true;
         section.dataset.cachedTranslationOpened = 'true';
       }
     });
+    if (readonly) {
+      all.hidden = cancel.hidden = exportButton.hidden = true;
+      all.disabled = cancel.disabled = exportButton.disabled = true;
+      status.hidden = false;
+    }
   }
 
   async function api(path, body) {
@@ -264,6 +308,7 @@
   }
 
   async function translate(ids, retry = false) {
+    if (readonly) return;
     mode.value = 'bilingual'; applyResults();
     const remaining = ids.filter(id => (retry || !results[id]) && !blockedStates[id]);
     if (!remaining.length) return;
@@ -385,5 +430,6 @@
     status.textContent = count === units.length ? '已保存全部 ' + count + ' 段译文，可直接阅读。' :
       '已保存 ' + count + ' / ' + units.length + ' 段译文；继续翻译需启动本机服务。';
   }
+  if (readonly) status.textContent = '历史快照只读 · 已保存 ' + Object.keys(results).length + ' 段译文';
   if (localService) poll();
 })();

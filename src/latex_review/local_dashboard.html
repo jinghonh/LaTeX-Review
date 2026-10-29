@@ -1,12 +1,981 @@
-<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>LaTeX Review · 本地论文</title>
-<style>
-:root{color-scheme:light dark;font-family:"Avenir Next","PingFang SC",sans-serif;background:#f4f3ef;color:#222827}body{max-width:1100px;margin:0 auto;padding:52px 24px}header{display:flex;align-items:end;justify-content:space-between;border-bottom:2px solid #243d37;padding-bottom:24px}h1{font-family:"Iowan Old Style","Songti SC",serif;font-size:40px;margin:6px 0}.eyebrow{font-size:12px;letter-spacing:.13em;color:#546d65}p{line-height:1.6}.muted{color:#68746f}button,a.link{border:1px solid #82988e;background:transparent;color:inherit;border-radius:6px;padding:8px 12px;cursor:pointer;font:inherit;white-space:nowrap}a{color:#22614f}.paper{animation:appear .25s ease-out;margin:24px 0;background:#fff;border:1px solid #d6ddd5;border-radius:12px;padding:24px}.paper h2{margin:0 0 6px;font-size:22px}.path{font:12px ui-monospace,monospace;overflow-wrap:anywhere;color:#63706a}.slots{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:22px}.slot{border-top:1px solid #d8ded8;padding-top:14px}.slot h3{font-size:16px;margin:0 0 10px}.state{font-size:12px;padding:3px 8px;border-radius:20px;background:#e9eee9}.actions{display:flex;gap:8px;align-items:center;margin-top:12px}.diagnostic{font-size:13px;color:#924a22;overflow-wrap:anywhere}details{margin-top:12px;font-size:12px}#notice{min-height:28px;color:#924a22}#empty{padding:50px 0}code{overflow-wrap:anywhere}@media(max-width:620px){body{padding:28px 16px}.slots{grid-template-columns:1fr}header{align-items:start;gap:16px}.paper{padding:18px}}@media(prefers-color-scheme:dark){:root{background:#17201d;color:#e5ece6}.paper{background:#202c27;border-color:#3a4b43}.path,.muted{color:#a5b8ab}a{color:#a1d7b5}.state{background:#354b3e}.slot{border-color:#405246}}
-@keyframes appear{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}@media(prefers-reduced-motion:reduce){.paper{animation:none}}button:focus-visible,a:focus-visible{outline:3px solid #b98742;outline-offset:3px}</style></head><body><header><div><div class="eyebrow">LATEX REVIEW / LOCAL</div><h1>本地论文</h1><p class="muted">从一个入口打开持续预览和差异报告。</p></div><button id="refresh">刷新列表</button></header><p id="notice" role="status"></p><main id="papers"></main><section id="empty" hidden><h2>尚未注册论文</h2><p>在终端启动一次持续预览或打开已有报告，论文就会显示在这里。</p><code>latex-review-live path/to/main.tex</code></section><footer class="muted"><p>关闭此页面不会停止服务。使用论文卡片停止服务。</p></footer>
-<script>
-const token='__TOKEN__';const labels={ready:'运行中',stopped:'已停止',starting:'正在启动',updating:'正在更新',stopping:'正在停止',failed:'启动失败',blocked:'等待旧进程退出'};
-function el(tag,text,cls){const e=document.createElement(tag);if(text!==undefined)e.textContent=text;if(cls)e.className=cls;return e}
-async function api(path,body){const r=await fetch(path,body===undefined?{}:{method:'POST',headers:{'Content-Type':'application/json','X-LaTeX-Review-Token':token},body:JSON.stringify(body)});const v=await r.json();if(!r.ok)throw Error(v.message||'请求失败');return v}
-async function action(id,kind,verb){try{const v=await api(`/api/v1/papers/${id}/${kind}/${verb}`,verb==='ensure'?{reuse_saved:true,request_id:crypto.randomUUID()}:{});document.querySelector('#notice').textContent=verb==='ensure'?'正在启动服务…':'正在停止服务…';if(v.operation_id){for(let i=0;i<1200;i++){const o=await api('/api/v1/operations/'+v.operation_id);if(['ready','failed','cancelled'].includes(o.state)){if(o.state!=='ready')throw Error(o.message||'操作失败');break}await new Promise(r=>setTimeout(r,250))}}document.querySelector('#notice').textContent=verb==='ensure'?'服务已启动。':'服务已停止。';await refresh()}catch(e){document.querySelector('#notice').textContent=e.message}}
-async function refresh(){try{const value=await api('/api/v1/papers');const main=document.querySelector('#papers');main.replaceChildren();document.querySelector('#empty').hidden=value.papers.length>0;for(const p of value.papers){const card=el('article',undefined,'paper');card.append(el('h2',p.entry),el('div',p.root,'path'));const slots=el('div',undefined,'slots');for(const kind of ['live','diff']){const s=p.slots[kind]||{state:'stopped'};const box=el('section',undefined,'slot');box.append(el('h3',kind==='live'?'持续预览':'差异报告'),el('span',labels[s.state]||s.state,'state'));const actions=el('div',undefined,'actions');if(s.state==='ready'){const a=el('a','打开','link');a.href=new URL(s.url).pathname;a.target='_blank';a.rel='noopener';actions.append(a)}if(s.request&&s.state!=='ready'){const b=el('button','启动');b.onclick=()=>action(p.paper_id,kind,'ensure');actions.append(b)}if(['ready','starting','updating','blocked'].includes(s.state)){const b=el('button','停止');b.onclick=()=>action(p.paper_id,kind,'stop');actions.append(b)}box.append(actions);if(s.baselines&&s.baselines.old){const old=s.baselines.old;box.append(el('p',`比较基线：${old.kind} · ${old.identifier||''}`,'path'))}if(s.message)box.append(el('p',s.message,'diagnostic'));if(s.log){const d=el('details');d.append(el('summary','诊断信息'));d.append(el('p',`日志：${s.log}`,'path'));if(s.pid)d.append(el('p',`进程：${s.pid} · 端口：${s.port}`));d.append(el('p',`论文 ID：${p.paper_id}`,'path'));box.append(d)}slots.append(box)}card.append(slots);main.append(card)}}catch(e){document.querySelector('#notice').textContent=e.message}}
-document.querySelector('#refresh').onclick=refresh;refresh();setInterval(refresh,5000);
-</script></body></html>
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>LaTeX Review · 本地论文</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --canvas: #f4f5f2;
+      --surface: #fff;
+      --subtle: #edf0eb;
+      --ink: #242e29;
+      --muted: #627068;
+      --line: #d9dfd8;
+      --accent: #22654e;
+      --accent-soft: #e3f0e8;
+      --danger: #a6372b;
+      --danger-soft: #fbeae6;
+      --warning: #886019;
+      --warning-soft: #faf0d8;
+      --shadow: 0 18px 60px #162a2226;
+      font-family: "Avenir Next", "PingFang SC", "Microsoft YaHei", sans-serif;
+      font-size: 13px;
+    }
+    :root[data-theme="dark"] {
+      color-scheme: dark;
+      --canvas: #161d1a;
+      --surface: #1d2722;
+      --subtle: #26332c;
+      --ink: #e2e9e3;
+      --muted: #a4b5a9;
+      --line: #3a483f;
+      --accent: #9ad9b8;
+      --accent-soft: #253f32;
+      --danger: #ffb0a3;
+      --danger-soft: #452b28;
+      --warning: #e5c47d;
+      --warning-soft: #403822;
+      --shadow: 0 18px 60px #0005;
+    }
+    * { box-sizing: border-box; }
+    [hidden] { display: none !important; }
+    body { margin: 0; background: var(--canvas); color: var(--ink); }
+    button, input, select { font: inherit; }
+    button, .link {
+      display: inline-flex; justify-content: center; align-items: center; gap: 5px;
+      min-height: 32px; padding: 5px 10px; border: 1px solid var(--line);
+      border-radius: 5px; background: var(--surface); color: var(--ink);
+      cursor: pointer; text-decoration: none; white-space: nowrap;
+    }
+    button:hover, .link:hover { border-color: var(--accent); background: var(--accent-soft); }
+    button:disabled { opacity: .48; cursor: not-allowed; }
+    button:disabled:hover { background: var(--surface); border-color: var(--line); }
+    button.primary { color: var(--surface); background: var(--accent); border-color: var(--accent); }
+    button.danger { color: var(--danger); }
+    button.quiet { background: transparent; border-color: transparent; }
+    :focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+    a { color: var(--accent); }
+    input, select {
+      min-height: 36px; padding: 7px 10px; border: 1px solid var(--line);
+      border-radius: 5px; background: var(--surface); color: var(--ink); min-width: 0;
+    }
+    input::placeholder { color: var(--muted); }
+    h1, h2, h3, p { margin: 0; }
+    h1 { font-size: 25px; font-weight: 600; letter-spacing: -.6px; }
+    h2 { font-size: 17px; font-weight: 600; }
+    h3 { font-size: 13px; font-weight: 600; }
+    .muted { color: var(--muted); }
+    .mono, .path, pre { font-family: "SFMono-Regular", Consolas, monospace; font-size: 11px; }
+    .path { color: var(--muted); overflow-wrap: anywhere; line-height: 1.65; }
+    .shell { display: grid; grid-template-columns: 184px minmax(0, 1fr); min-height: 100vh; }
+    .sidebar {
+      position: sticky; top: 0; height: 100vh; padding: 26px 14px 18px;
+      border-right: 1px solid var(--line); display: flex; flex-direction: column; gap: 30px;
+    }
+    .brand { padding: 0 10px; display: flex; align-items: center; gap: 9px; }
+    .brand-mark {
+      width: 30px; height: 34px; display: grid; place-items: center; flex: none;
+      border: 1px solid var(--accent); color: var(--accent); font: italic 23px "Iowan Old Style", serif;
+    }
+    .brand strong { font-size: 14px; font-weight: 600; }
+    .brand small { display: block; color: var(--muted); font-size: 10px; letter-spacing: 1.4px; margin-top: 3px; }
+    .nav-label { color: var(--muted); font-size: 10px; letter-spacing: 1.6px; padding: 0 11px 10px; }
+    nav { display: grid; gap: 5px; }
+    nav button { width: 100%; justify-content: flex-start; border-color: transparent; background: transparent; min-height: 40px; }
+    nav button[aria-current="page"] { color: var(--accent); background: var(--accent-soft); font-weight: 600; }
+    .nav-icon { width: 19px; font-size: 16px; text-align: center; }
+    .nav-count { margin-left: auto; font: 11px "SFMono-Regular", monospace; color: var(--muted); }
+    .sidebar-bottom { margin-top: auto; padding: 0 10px; line-height: 1.9; font-size: 11px; color: var(--muted); }
+    .sidebar-bottom button { width: 100%; margin-bottom: 12px; }
+    main { min-width: 0; padding: 27px 28px 16px; }
+    .topbar { display: flex; justify-content: space-between; align-items: center; gap: 16px; }
+    .eyebrow { color: var(--muted); font-size: 10px; letter-spacing: 1.8px; margin-bottom: 7px; }
+    .counts { display: flex; gap: 0; align-items: center; }
+    .count { padding: 0 17px; border-left: 1px solid var(--line); white-space: nowrap; }
+    .count strong { display: block; font-size: 23px; font-weight: 500; line-height: 1.25; font-variant-numeric: tabular-nums; }
+    .count span { color: var(--muted); font-size: 11px; }
+    .count:first-child strong { color: var(--accent); }
+    .count:nth-child(2) strong { color: var(--danger); }
+    .toolbar { display: flex; align-items: end; gap: 10px; padding: 23px 0 14px; }
+    .field { display: grid; gap: 5px; min-width: 0; }
+    .field > span { font-size: 11px; color: var(--muted); }
+    .search-field { flex: 1; max-width: 440px; }
+    #search { width: 100%; }
+    .refresh { margin-left: auto; min-height: 36px; }
+    .feedback { font-size: 12px; line-height: 1.6; overflow-wrap: anywhere; }
+    #notice:not(:empty) { padding: 9px 12px; margin-bottom: 12px; border-left: 3px solid var(--accent); background: var(--accent-soft); }
+    #connection:not(:empty) { padding: 9px 12px; margin-bottom: 12px; border-left: 3px solid var(--danger); background: var(--danger-soft); color: var(--danger); }
+    .view-heading { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin: 5px 0 12px; }
+    .view-heading h2 { font-size: 14px; flex: none; }
+    .view-heading span { font-size: 11px; color: var(--muted); text-align: right; }
+    .workarea { display: grid; grid-template-columns: minmax(0, 1fr); gap: 18px; align-items: start; }
+    .workarea.has-detail { grid-template-columns: minmax(360px, 1fr) 310px; }
+    .list { min-width: 0; border: 1px solid var(--line); border-radius: 7px; background: var(--surface); overflow: hidden; }
+    .paper { padding: 14px 16px; border-bottom: 1px solid var(--line); }
+    .paper:last-child { border-bottom: 0; }
+    .paper.selected { box-shadow: inset 3px 0 var(--accent); background: color-mix(in srgb, var(--accent-soft) 30%, var(--surface)); }
+    .paper-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 3px; }
+    .paper-title { text-align: left; justify-content: flex-start; white-space: normal; padding: 0; border: 0; background: transparent; min-height: 26px; font-size: 15px; font-weight: 600; overflow-wrap: anywhere; }
+    .paper-title:hover { background: transparent; color: var(--accent); }
+    .paper-head h3 { min-width: 0; }
+    .pin { color: var(--muted); font-size: 12px; min-height: 28px; padding: 2px 7px; }
+    .pin[aria-pressed="true"] { color: var(--accent); background: var(--accent-soft); }
+    .slots { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-top: 11px; }
+    .slot { min-width: 0; display: flex; align-items: center; flex-wrap: wrap; gap: 7px; }
+    .slot h3 { font-weight: 500; color: var(--muted); font-size: 11px; }
+    .state { display: inline-flex; gap: 5px; align-items: center; font-size: 11px; white-space: nowrap; color: var(--muted); }
+    .state::before { content: ""; width: 5px; height: 5px; background: currentColor; border-radius: 50%; flex: none; }
+    .state.good { color: var(--accent); }
+    .state.bad { color: var(--danger); }
+    .state.busy { color: var(--warning); }
+    .actions { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+    .slot .actions { margin-left: auto; }
+    .slot button, .slot .link { min-height: 28px; padding: 3px 8px; font-size: 12px; }
+    .diagnostic { color: var(--danger); overflow-wrap: anywhere; font-size: 12px; line-height: 1.7; }
+    .slot .diagnostic, .slot .progress { flex-basis: 100%; }
+    .progress { color: var(--warning); font-size: 11px; overflow-wrap: anywhere; line-height: 1.65; }
+    .detail { min-width: 0; background: var(--surface); border: 1px solid var(--line); border-radius: 7px; position: sticky; top: 18px; }
+    .detail-header { padding: 13px 15px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid var(--line); }
+    .detail-header h2 { font-size: 13px; }
+    .detail-content { padding: 15px; display: grid; gap: 16px; }
+    .detail-name { overflow-wrap: anywhere; font-size: 16px; }
+    dl { display: grid; grid-template-columns: 54px minmax(0, 1fr); gap: 7px 10px; margin: 0; line-height: 1.6; font-size: 12px; }
+    dt { color: var(--muted); } dd { margin: 0; overflow-wrap: anywhere; }
+    details { border-top: 1px solid var(--line); padding-top: 12px; min-width: 0; }
+    summary { cursor: pointer; font-weight: 600; font-size: 12px; padding: 2px 0; }
+    details > .detail-section { display: grid; gap: 10px; margin-top: 12px; }
+    pre { white-space: pre-wrap; overflow-wrap: anywhere; background: var(--canvas); padding: 10px; border-radius: 4px; max-height: 260px; overflow: auto; line-height: 1.7; margin: 0; }
+    .empty { padding: 42px 22px; text-align: center; color: var(--muted); line-height: 1.8; }
+    .empty h3 { color: var(--ink); font-size: 15px; margin-bottom: 5px; }
+    .record { padding: 14px 16px; border-bottom: 1px solid var(--line); display: grid; gap: 9px; }
+    .record:last-child { border-bottom: 0; }
+    .record-head { display: flex; gap: 10px; flex-wrap: wrap; align-items: baseline; }
+    .record-title { font-weight: 600; overflow-wrap: anywhere; }
+    .record time { margin-left: auto; color: var(--muted); font-size: 11px; }
+    .record-meta { color: var(--muted); font-size: 12px; display: flex; gap: 12px; flex-wrap: wrap; overflow-wrap: anywhere; }
+    .record p { line-height: 1.6; overflow-wrap: anywhere; }
+    .record .actions { margin-top: 2px; }
+    #more { margin: 14px auto; display: flex; }
+    footer { padding-top: 17px; display: flex; gap: 12px; justify-content: space-between; color: var(--muted); font-size: 11px; line-height: 1.7; }
+    dialog { color: var(--ink); background: var(--surface); border: 1px solid var(--line); border-radius: 10px; box-shadow: var(--shadow); width: min(440px, calc(100% - 32px)); padding: 23px; }
+    dialog::backdrop { background: #14271f66; }
+    dialog form { display: grid; gap: 17px; }
+    dialog p { color: var(--muted); line-height: 1.7; overflow-wrap: anywhere; }
+    dialog .actions { justify-content: flex-end; }
+    .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+    @media (max-width: 1150px) {
+      main { padding: 24px 20px 16px; }
+      .workarea.has-detail { grid-template-columns: minmax(0, 1fr); }
+      .detail { position: static; }
+      .detail-content { grid-template-columns: 1fr 1fr; }
+      .detail-content > :first-child, .detail-content > .actions { grid-column: 1 / -1; }
+    }
+    @media (max-width: 760px) {
+      .shell { grid-template-columns: 1fr; }
+      .sidebar { position: static; height: auto; border-right: 0; border-bottom: 1px solid var(--line); padding: 12px 14px 8px; gap: 14px; }
+      .brand { padding: 0 2px; }
+      .brand-mark { height: 27px; width: 26px; font-size: 20px; }
+      .brand small, .nav-label, .sidebar-bottom p { display: none; }
+      nav { grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 2px; }
+      nav button { justify-content: center; padding: 8px 2px; min-height: 40px; font-size: 12px; }
+      .nav-icon, .nav-count { display: none; }
+      .sidebar-bottom { position: absolute; right: 14px; top: 10px; padding: 0; }
+      .sidebar-bottom button { margin: 0; min-height: 30px; font-size: 11px; }
+      main { padding: 20px 14px 15px; }
+      .topbar { gap: 10px; }
+      h1 { font-size: 23px; }
+      .count { padding: 0 10px; }
+      .count:last-child { padding-right: 0; }
+      .count strong { font-size: 20px; }
+      .eyebrow { font-size: 9px; letter-spacing: .8px; }
+      .toolbar { flex-wrap: wrap; padding-top: 19px; gap: 8px; }
+      .search-field { flex-basis: 100%; max-width: none; }
+      .toolbar select { max-width: 140px; }
+      .slots { gap: 9px; grid-template-columns: 1fr; }
+      .slot { padding-top: 8px; border-top: 1px solid var(--line); }
+      .paper { padding: 12px; }
+      .detail-content { grid-template-columns: 1fr; }
+      .record { padding: 13px 12px; }
+      .record time { margin-left: 0; width: 100%; }
+      .view-heading { align-items: start; }
+      footer { flex-direction: column; gap: 4px; }
+      button, .link { min-height: 36px; }
+      .slot button, .slot .link { min-height: 32px; }
+    }
+    @media (prefers-reduced-motion: no-preference) {
+      button, .link { transition: background .12s ease, border-color .12s ease; }
+    }
+  </style>
+</head>
+<body>
+  <a class="sr-only" href="#search">跳至搜索</a>
+  <div class="shell">
+    <aside class="sidebar" aria-label="工作台导航">
+      <div class="brand"><span class="brand-mark" aria-hidden="true">L</span><div><strong>LaTeX Review</strong><small>PAPER WORKBENCH</small></div></div>
+      <div>
+        <p class="nav-label">工作空间</p>
+        <nav aria-label="工作台视图">
+          <button type="button" data-view="papers" aria-current="page"><span class="nav-icon" aria-hidden="true">▤</span>论文<span class="nav-count" id="nav-papers">0</span></button>
+          <button type="button" data-view="failures"><span class="nav-icon" aria-hidden="true">!</span>故障<span class="nav-count" id="nav-failures">0</span></button>
+          <button type="button" data-view="operations"><span class="nav-icon" aria-hidden="true">↺</span>操作历史<span class="nav-count" id="nav-operations">0</span></button>
+          <button type="button" data-view="reports"><span class="nav-icon" aria-hidden="true">▥</span>报告历史<span class="nav-count" id="nav-reports">0</span></button>
+          <button type="button" data-view="archived"><span class="nav-icon" aria-hidden="true">▱</span>已归档<span class="nav-count" id="nav-archived">0</span></button>
+        </nav>
+      </div>
+      <div class="sidebar-bottom"><button type="button" id="theme" aria-label="切换深色主题">深色外观</button><p>本地入口 · 受管服务<br>每 5 秒同步状态</p></div>
+    </aside>
+    <main>
+      <header class="topbar">
+        <div><p class="eyebrow">LOCAL / WORKBENCH</p><h1>本地论文</h1></div>
+        <div class="counts" aria-label="服务槽位统计">
+          <div class="count"><strong id="count-running">0</strong><span>运行</span></div>
+          <div class="count"><strong id="count-error">0</strong><span>错误</span></div>
+          <div class="count"><strong id="count-stopped">0</strong><span>停止</span></div>
+        </div>
+      </header>
+      <div class="toolbar">
+        <label class="field search-field"><span>搜索工作空间</span><input id="search" type="search" placeholder="搜索论文、路径、操作或报告…" autocomplete="off"></label>
+        <label class="field"><span>状态</span><select id="state-filter"><option value="all">全部状态</option><option value="running">运行中</option><option value="busy">处理中</option><option value="error">错误</option><option value="stopped">已停止</option></select></label>
+        <button type="button" class="refresh" id="refresh">刷新列表</button>
+      </div>
+      <div id="notice" class="feedback" role="status" aria-live="polite"></div>
+      <div id="connection" class="feedback" role="status" aria-live="polite"></div>
+      <div class="view-heading"><h2 id="view-title">论文</h2><span id="view-caption">置顶优先 · 服务独立管理</span></div>
+      <div class="workarea" id="workarea">
+        <div>
+          <section class="list" id="papers" aria-label="论文列表"></section>
+          <button type="button" id="more" hidden>加载更多</button>
+        </div>
+        <aside class="detail" id="detail" aria-label="论文详情" hidden></aside>
+      </div>
+      <footer><span>关闭页面不会停止服务。请使用「停止」结束受管服务。</span><span id="sync-status">等待同步</span></footer>
+    </main>
+  </div>
+  <dialog id="alias-dialog" aria-labelledby="alias-title">
+    <form id="alias-form">
+      <h2 id="alias-title">编辑论文别名</h2>
+      <p id="alias-paper"></p>
+      <label class="field"><span>别名（留空使用入口文件名）</span><input id="alias-input" maxlength="120" autocomplete="off"></label>
+      <p id="alias-error" class="diagnostic" role="alert"></p>
+      <div class="actions"><button type="button" data-close="alias-dialog">取消</button><button type="submit" class="primary" id="alias-save">保存</button></div>
+    </form>
+  </dialog>
+  <dialog id="confirm-dialog" aria-labelledby="confirm-title">
+    <form id="confirm-form">
+      <h2 id="confirm-title">清除历史报告</h2>
+      <p id="confirm-description"></p>
+      <p id="confirm-error" class="diagnostic" role="alert"></p>
+      <div class="actions"><button type="button" data-close="confirm-dialog">取消</button><button type="submit" class="danger" id="confirm-submit">确认清除</button></div>
+    </form>
+  </dialog>
+  <script>
+    'use strict';
+    const token = '__TOKEN__';
+    const kinds = ['live', 'diff'];
+    const kindNames = { live: '持续预览', diff: '差异报告' };
+    const labels = {
+      ready: '运行中', stopped: '已停止', unconfigured: '未配置', starting: '正在启动', updating: '正在更新',
+      stopping: '正在停止', failed: '失败', blocked: '等待旧进程退出', queued: '排队中',
+      running: '执行中', cancelled: '已取消', succeeded: '已完成', completed: '已完成'
+    };
+    const actionNames = { ensure: '启动服务', start: '启动服务', stop: '停止服务', snapshot: '保存历史报告', retry: '重试操作', update: '更新服务', exit: '工作进程退出' };
+    const terminalStates = new Set(['ready', 'failed', 'cancelled', 'stopped', 'succeeded', 'completed']);
+    const busyStates = new Set(['queued', 'starting', 'updating', 'stopping', 'running', 'blocked']);
+    const titles = { papers: '论文', failures: '故障', operations: '操作历史', reports: '报告历史', archived: '已归档' };
+    const state = {
+      papers: [], operations: [], reports: [], reportErrors: [], view: 'papers', selected: null,
+      query: '', filter: 'all', limit: 30, loaded: false, refreshing: false,
+      pending: new Map(), logs: new Map(), errors: new Map(), aliasId: null, deleting: null
+    };
+    const $ = selector => document.querySelector(selector);
+    const endpoint = id => `/api/v1/papers/${encodeURIComponent(id)}`;
+    const slotKey = (id, kind) => `slot:${id}:${kind}`;
+    const paperById = id => state.papers.find(p => p.paper_id === id);
+    const paperName = paper => paper ? paper.alias || paper.entry || paper.paper_id : '未知论文';
+    const slotOf = (paper, kind) => {
+      const slot = paper.slots?.[kind];
+      if (!slot || (!slot.request && slot.state === 'stopped')) return { ...slot, state: 'unconfigured' };
+      return slot;
+    };
+
+    function node(tag, text, className, key) {
+      const result = document.createElement(tag);
+      if (text !== undefined && text !== null) result.textContent = String(text);
+      if (className) result.className = className;
+      if (key) result.dataset.key = key;
+      return result;
+    }
+
+    function button(text, action, data = {}, className = '') {
+      const result = node('button', text, className);
+      result.type = 'button';
+      result.dataset.action = action;
+      Object.assign(result.dataset, data);
+      return result;
+    }
+
+    function link(text, url, key) {
+      const result = node('a', text, 'link', key);
+      // Keep the resident entry origin, including when accessed through a forwarded port.
+      try {
+        const parsed = new URL(url, location.href);
+        if (!['http:', 'https:'].includes(parsed.protocol)) return node('span', '链接不可用', 'muted', key);
+        result.href = parsed.pathname + parsed.search + parsed.hash;
+      } catch { return node('span', '链接不可用', 'muted', key); }
+      result.target = '_blank';
+      result.rel = 'noopener noreferrer';
+      return result;
+    }
+
+    function category(value) {
+      if (['failed', 'error', 'blocked'].includes(value)) return 'error';
+      if (busyStates.has(value)) return 'busy';
+      if (['ready', 'succeeded', 'completed'].includes(value)) return 'running';
+      return 'stopped';
+    }
+
+    function badge(value, operation = false) {
+      const type = category(value);
+      return node('span', operation && value === 'ready' ? '已完成' : labels[value] || value || '未知状态',
+        `state ${type === 'running' ? 'good' : type === 'error' ? 'bad' : type === 'busy' ? 'busy' : ''}`);
+    }
+
+    function dateText(value) {
+      if (!value) return '时间未记录';
+      const date = new Date(value);
+      return Number.isNaN(date.getTime()) ? String(value) : date.toLocaleString('zh-CN', { hour12: false });
+    }
+
+    function timestamp(value) {
+      const result = node('time', dateText(value));
+      if (value) result.dateTime = value;
+      return result;
+    }
+
+    function bytesText(bytes) {
+      if (bytes === undefined || bytes === null) return '大小未记录';
+      if (bytes < 1024) return `${bytes} B`;
+      if (bytes < 1048576) return `${(bytes / 1024).toFixed(1)} KB`;
+      return `${(bytes / 1048576).toFixed(1)} MB`;
+    }
+
+    function formatted(value) {
+      return typeof value === 'string' ? value : JSON.stringify(value ?? {}, null, 2);
+    }
+
+    function matches(value) {
+      return !state.query || formatted(value).toLocaleLowerCase().includes(state.query);
+    }
+
+    function matchesPaper(id, value) {
+      const p = paperById(id);
+      return matches([paperName(p), id, p?.entry, p?.root, value]);
+    }
+
+    function announce(message) { $('#notice').textContent = message; }
+
+    async function api(path, body) {
+      const response = await fetch(path, body === undefined ? { cache: 'no-store' } : {
+        method: 'POST', headers: { 'Content-Type': 'application/json', 'X-LaTeX-Review-Token': token },
+        body: JSON.stringify(body)
+      });
+      const value = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(value.message || value.error || `请求失败（${response.status}）`);
+      return value;
+    }
+
+    // Keyed reconciliation leaves unchanged elements in place. In particular, details.open,
+    // keyboard focus, log scroll positions and dialog input values belong to the user.
+    function reconcile(parent, desired) {
+      const old = [...parent.childNodes];
+      const used = new Set();
+      const keyed = new Map(old.filter(n => n.nodeType === 1 && n.dataset.key).map(n => [n.dataset.key, n]));
+      desired.forEach((fresh, index) => {
+        const key = fresh.nodeType === 1 && fresh.dataset.key;
+        let current = key ? keyed.get(key) : old.find(n => !used.has(n) &&
+          !(n.nodeType === 1 && n.dataset.key) && n.nodeName === fresh.nodeName);
+        if (current && current.nodeName !== fresh.nodeName) current = null;
+        if (!current) current = fresh;
+        else patch(current, fresh);
+        used.add(current);
+        const position = parent.childNodes[index];
+        if (position !== current) parent.insertBefore(current, position || null);
+      });
+      old.forEach(child => { if (!used.has(child)) child.remove(); });
+    }
+
+    function patch(current, fresh) {
+      if (current.nodeType === Node.TEXT_NODE) {
+        if (current.data !== fresh.data) current.data = fresh.data;
+        return;
+      }
+      for (const attr of [...current.attributes]) {
+        if (current.tagName === 'DETAILS' && attr.name === 'open') continue;
+        if (!fresh.hasAttribute(attr.name)) current.removeAttribute(attr.name);
+      }
+      for (const attr of [...fresh.attributes]) {
+        if (current.getAttribute(attr.name) !== attr.value) current.setAttribute(attr.name, attr.value);
+      }
+      reconcile(current, [...fresh.childNodes]);
+    }
+
+    function failureItems() {
+      const failures = new Map();
+      const recent = [...state.operations].sort((a, b) => String(b.created_at || '').localeCompare(String(a.created_at || '')));
+      const recovered = new Set();
+      for (const op of recent) {
+        const slot = slotKey(op.paper_id, op.kind);
+        if (['ready', 'completed', 'succeeded'].includes(op.state)) recovered.add(slot);
+        const key = `${op.action === 'snapshot' ? 'snapshot' : 'service'}:${op.paper_id}:${op.kind}`;
+        if (op.state !== 'failed' || recovered.has(slot) || failures.has(key)) continue;
+        failures.set(key, { key, paper_id: op.paper_id, kind: op.kind,
+          title: actionNames[op.action] || op.action || '操作', message: op.message || '操作失败', operation: op });
+      }
+      for (const p of state.papers) {
+        for (const kind of kinds) {
+          const s = slotOf(p, kind);
+          const key = `service:${p.paper_id}:${kind}`;
+          if (['failed', 'blocked'].includes(s.state) && !failures.has(key)) {
+            failures.set(key, { key, paper_id: p.paper_id, kind,
+              title: `${kindNames[kind]}异常`, message: s.message || labels[s.state],
+              operation: s.operation_id ? state.operations.find(op => op.operation_id === s.operation_id && op.state === 'failed') : null });
+          }
+          if (s.history_error) {
+            const historyKey = `snapshot:${p.paper_id}:${kind}`;
+            failures.set(historyKey, { ...failures.get(historyKey), key: historyKey, paper_id: p.paper_id,
+              kind, title: '保存历史报告失败', message: formatted(s.history_error), snapshot: kind === 'diff' });
+          }
+        }
+      }
+      state.reportErrors.forEach(error => {
+        const key = `snapshot:${error.paper_id}:diff`;
+        if (!failures.has(key)) failures.set(key, { key, paper_id: error.paper_id, kind: 'diff',
+          title: '保存历史报告失败', message: error.message, snapshot: true });
+      });
+      return [...failures.values()];
+    }
+
+    function slotView(paper, kind) {
+      const s = slotOf(paper, kind);
+      const pending = state.pending.get(slotKey(paper.paper_id, kind));
+      const result = node('section', null, 'slot', kind);
+      result.setAttribute('aria-label', `${paperName(paper)} · ${kindNames[kind]}`);
+      result.setAttribute('aria-busy', String(Boolean(pending)));
+      result.append(node('h3', kindNames[kind]), badge(s.state));
+      const actions = node('div', null, 'actions', 'actions');
+      if (s.state === 'ready' && s.url) actions.append(link('打开', s.url, 'open'));
+      if (!paper.archived && s.request && !['ready', 'starting', 'updating', 'stopping', 'blocked', 'queued', 'running'].includes(s.state)) {
+        const start = button('启动', 'ensure', { id: paper.paper_id, kind });
+        start.dataset.key = 'ensure';
+        start.disabled = Boolean(pending);
+        actions.append(start);
+      }
+      if (['ready', 'starting', 'updating', 'blocked', 'queued', 'running'].includes(s.state)) {
+        const stop = button('停止', 'stop', { id: paper.paper_id, kind });
+        stop.dataset.key = 'stop';
+        stop.disabled = Boolean(pending);
+        actions.append(stop);
+      }
+      if (paper.archived) actions.append(node('span', '在详情中取消归档', 'muted'));
+      result.append(actions);
+      if (pending) result.append(node('p', pending.message, 'progress', 'progress'));
+      if (s.message) result.append(node('p', s.message, 'diagnostic', 'message'));
+      return result;
+    }
+
+    function paperView(paper) {
+      const result = node('article', null, `paper${state.selected === paper.paper_id ? ' selected' : ''}`, paper.paper_id);
+      const head = node('div', null, 'paper-head', 'head');
+      const title = node('h3');
+      const open = button(paperName(paper), 'select', { id: paper.paper_id }, 'paper-title');
+      open.setAttribute('aria-expanded', String(state.selected === paper.paper_id));
+      open.setAttribute('aria-controls', 'detail');
+      title.append(open);
+      const pin = button(paper.pinned ? '已置顶' : '置顶', 'pin', { id: paper.paper_id }, 'pin');
+      pin.setAttribute('aria-pressed', String(Boolean(paper.pinned)));
+      pin.setAttribute('aria-label', `${paper.pinned ? '取消置顶' : '置顶'} ${paperName(paper)}`);
+      pin.disabled = state.pending.has(`metadata:${paper.paper_id}`);
+      head.append(title, pin);
+      const secondary = node('p', paper.alias ? paper.entry : paper.root.replace(/[\\/]+$/, '').split(/[\\/]/).pop(), 'path', 'path');
+      secondary.title = `${paper.root} / ${paper.entry}`;
+      result.append(head, secondary);
+      const slots = node('div', null, 'slots', 'slots');
+      kinds.forEach(kind => slots.append(slotView(paper, kind)));
+      result.append(slots);
+      return result;
+    }
+
+    function definitionList(entries) {
+      const result = node('dl');
+      for (const [label, value] of entries) {
+        result.append(node('dt', label), node('dd', value ?? '—', 'path'));
+      }
+      return result;
+    }
+
+    function diagnosticView(paper, kind) {
+      const s = slotOf(paper, kind);
+      const key = slotKey(paper.paper_id, kind);
+      const log = state.logs.get(key);
+      const result = node('details', null, '', `diagnostic:${paper.paper_id}:${kind}`);
+      result.append(node('summary', `${kindNames[kind]} · 诊断与日志`));
+      const content = node('div', null, 'detail-section');
+      content.append(definitionList([
+        ['状态', labels[s.state] || s.state], ['进程', s.pid], ['端口', s.port], ['日志', s.log], ['操作', s.operation_id]
+      ]));
+      if (s.message) content.append(node('p', s.message, 'diagnostic', 'message'));
+      if (s.history_error) content.append(node('p', `历史报告：${formatted(s.history_error)}`, 'diagnostic', 'history-error'));
+      if (s.baselines) {
+        content.append(node('h3', '比较基线', '', 'baseline-title'), node('pre', formatted(s.baselines), '', 'baselines'));
+      }
+      if (s.request) {
+        const request = node('details', null, '', 'request');
+        request.append(node('summary', '已保存启动配置（只读）'), node('pre', formatted(s.request)));
+        content.append(request);
+      }
+      const load = button(log?.loading ? '读取中…' : log ? '刷新日志' : '读取日志', 'logs', { id: paper.paper_id, kind });
+      load.dataset.key = 'logs-button';
+      load.disabled = Boolean(log?.loading);
+      content.append(load);
+      if (log?.error) content.append(node('p', log.error, 'diagnostic', 'log-error'));
+      if (log?.text !== undefined) {
+        content.append(node('p', log.truncated ? '仅显示日志末尾，前文已截断。' : '日志内容', 'muted', 'log-label'));
+        const pre = node('pre', log.text || '日志为空。', '', 'log-text');
+        pre.tabIndex = 0;
+        pre.setAttribute('aria-label', `${kindNames[kind]}日志`);
+        content.append(pre);
+      }
+      result.append(content);
+      return result;
+    }
+
+    function canArchive(paper) {
+      return kinds.every(kind => ['stopped', 'failed', 'unconfigured'].includes(slotOf(paper, kind).state) &&
+        !state.pending.has(slotKey(paper.paper_id, kind)));
+    }
+
+    function detailView(paper) {
+      const header = node('div', null, 'detail-header', 'header');
+      header.append(node('h2', '论文详情'), button('关闭', 'close-detail', {}, 'quiet'));
+      const content = node('div', null, 'detail-content', paper.paper_id);
+      const identity = node('div', null, '', 'identity');
+      identity.append(node('h3', paperName(paper), 'detail-name'), node('p', paper.paper_id, 'path'));
+      content.append(identity, definitionList([['根目录', paper.root], ['主入口', paper.entry], ['别名', paper.alias || '未设置']]));
+      const actions = node('div', null, 'actions', 'metadata-actions');
+      const edit = button('编辑别名', 'alias', { id: paper.paper_id });
+      const archive = button(paper.archived ? '取消归档' : '归档论文', 'archive', { id: paper.paper_id });
+      edit.disabled = state.pending.has(`metadata:${paper.paper_id}`);
+      archive.disabled = edit.disabled || (!paper.archived && !canArchive(paper));
+      archive.title = archive.disabled ? '请先停止此论文的全部服务。' : '';
+      actions.append(edit, archive);
+      const diff = slotOf(paper, 'diff');
+      if (diff.history_error) {
+        const snapshot = button('重试保存历史报告', 'snapshot', { id: paper.paper_id, kind: 'diff' });
+        snapshot.disabled = !diff.request || state.pending.has(slotKey(paper.paper_id, 'diff'));
+        snapshot.title = '重新保存自动快照失败的历史报告';
+        actions.append(snapshot);
+      }
+      content.append(actions);
+      if (!paper.archived && !canArchive(paper)) content.append(node('p', '停止全部服务后可归档。', 'muted', 'archive-help'));
+      kinds.forEach(kind => content.append(diagnosticView(paper, kind)));
+      return [header, content];
+    }
+
+    function restoreButton(id, kind) {
+      const paper = paperById(id);
+      const s = paper && slotOf(paper, kind);
+      const result = button('恢复上次可用服务', 'ensure', { id, kind });
+      result.disabled = !s?.request || paper?.archived || state.pending.has(slotKey(id, kind)) || busyStates.has(s?.state);
+      result.title = paper?.archived ? '请先在论文详情中取消归档。' : s?.request ? '使用上次可用配置启动服务。' : '此服务没有已保存启动配置。';
+      return result;
+    }
+
+    function retryButton(operation) {
+      const result = button(operation.action === 'snapshot' ? '重试保存历史报告' : '重试失败操作', 'retry', {
+        id: operation.paper_id, kind: operation.kind, operation: operation.operation_id
+      });
+      result.disabled = state.pending.has(slotKey(operation.paper_id, operation.kind)) ||
+        (Boolean(paperById(operation.paper_id)?.archived) && operation.action !== 'snapshot');
+      result.title = '重新执行此失败操作。';
+      return result;
+    }
+
+    function failureView(failure) {
+      const result = node('article', null, 'record', failure.key);
+      const head = node('div', null, 'record-head');
+      head.append(node('h3', `${paperName(paperById(failure.paper_id))} · ${failure.title}`, 'record-title'), badge('failed', true));
+      if (failure.operation) head.append(timestamp(failure.operation.finished_at || failure.operation.created_at));
+      result.append(head, node('p', failure.message, 'diagnostic'));
+      const actions = node('div', null, 'actions');
+      if (failure.operation) actions.append(retryButton(failure.operation));
+      if (failure.snapshot && !failure.operation) {
+        const retry = button('重试保存历史报告', 'snapshot', { id: failure.paper_id, kind: 'diff' });
+        retry.disabled = state.pending.has(slotKey(failure.paper_id, 'diff'));
+        actions.append(retry);
+      }
+      if (kinds.includes(failure.kind)) actions.append(restoreButton(failure.paper_id, failure.kind));
+      if (paperById(failure.paper_id)) actions.append(button('查看诊断', 'select', { id: failure.paper_id }));
+      result.append(actions);
+      const pending = state.pending.get(slotKey(failure.paper_id, failure.kind));
+      if (pending) result.append(node('p', pending.message, 'progress', 'progress'));
+      return result;
+    }
+
+    function operationView(operation) {
+      const result = node('article', null, 'record', operation.operation_id);
+      const head = node('div', null, 'record-head');
+      head.append(node('h3', paperName(paperById(operation.paper_id)), 'record-title'), badge(operation.state, true), timestamp(operation.created_at));
+      const meta = node('div', null, 'record-meta');
+      meta.append(node('span', kindNames[operation.kind] || operation.kind), node('span', actionNames[operation.action] || operation.action));
+      if (operation.finished_at) meta.append(node('span', `结束：${dateText(operation.finished_at)}`));
+      result.append(head, meta, node('p', operation.message || (terminalStates.has(operation.state) ? '服务器已返回操作结果。' : '操作正在执行。')));
+      const info = node('details', null, '', 'operation-details');
+      info.append(node('summary', '操作记录'), definitionList([['操作 ID', operation.operation_id], ['论文 ID', operation.paper_id], ['重试来源', operation.retry_of]]));
+      result.append(info);
+      const actions = node('div', null, 'actions');
+      if (operation.state === 'failed') actions.append(retryButton(operation), restoreButton(operation.paper_id, operation.kind));
+      if (paperById(operation.paper_id)) actions.append(button('论文详情', 'select', { id: operation.paper_id }));
+      result.append(actions);
+      const pending = state.pending.get(slotKey(operation.paper_id, operation.kind));
+      if (pending) result.append(node('p', pending.message, 'progress', 'progress'));
+      return result;
+    }
+
+    function reportView(report) {
+      const result = node('article', null, 'record', report.report_id);
+      const head = node('div', null, 'record-head');
+      head.append(node('h3', paperName(paperById(report.paper_id)), 'record-title'), timestamp(report.created_at));
+      const meta = node('div', null, 'record-meta');
+      const reasons = { manual: '手动保存', snapshot: '手动快照', replaced: '报告替换', update: '报告更新', stop: '停止服务' };
+      meta.append(node('span', `原因：${reasons[report.reason] || report.reason || '未记录'}`), node('span', `已保存 · ${bytesText(report.bytes)}`));
+      result.append(head, meta);
+      const detail = node('details', null, '', 'report-details');
+      detail.append(node('summary', '报告信息与比较基线'), node('p', report.report_id, 'path'), node('pre', formatted(report.baselines)));
+      result.append(detail);
+      const actions = node('div', null, 'actions');
+      actions.append(link('打开', `/history/${encodeURIComponent(report.report_id)}/report.html`, 'open'));
+      if (paperById(report.paper_id)) actions.append(button('论文详情', 'select', { id: report.paper_id }));
+      const clear = button('清除', 'delete-report', { report: report.report_id }, 'danger');
+      clear.disabled = state.pending.has(`delete:${report.report_id}`);
+      actions.append(clear);
+      result.append(actions);
+      return result;
+    }
+
+    function importProgress() {
+      const waiting = state.papers.filter(p => !p.history_initialized && p.history_import === 'pending').length;
+      const importing = state.papers.filter(p => !p.history_initialized && p.history_import === 'importing').length;
+      return waiting || importing ? `首次导入：等待 ${waiting} 篇 · 正在导入 ${importing} 篇` : '';
+    }
+
+    function emptyView() {
+      const result = node('div', null, 'empty', 'empty');
+      if (!state.loaded) result.append(node('h3', '正在读取工作空间'), node('p', '等待本地入口返回论文列表。'));
+      else if (state.query || state.filter !== 'all') result.append(node('h3', '没有匹配结果'), node('p', '请调整搜索内容或状态筛选。'));
+      else if (state.view === 'papers') result.append(node('h3', '尚未注册论文'), node('p', '在终端启动持续预览或打开已有报告后，论文会出现在这里。'));
+      else if (state.view === 'reports' && importProgress()) result.append(node('h3', '正在导入现有报告'), node('p', `${importProgress()}。完成后自动显示。`));
+      else result.append(node('h3', { failures: '暂无故障记录', operations: '暂无操作历史', reports: '暂无历史报告', archived: '暂无已归档论文' }[state.view]));
+      return result;
+    }
+
+    function render() {
+      const focused = document.activeElement;
+      const failures = failureItems();
+      const counts = { running: 0, error: 0, stopped: 0 };
+      state.papers.forEach(p => kinds.forEach(kind => {
+        const s = slotOf(p, kind);
+        if (s.state === 'ready' || s.state === 'updating') counts.running++;
+        if (['failed', 'blocked'].includes(s.state)) counts.error++;
+        if (s.state === 'stopped') counts.stopped++;
+      }));
+      for (const [key, count] of Object.entries(counts)) $(`#count-${key}`).textContent = count;
+      const navCounts = { papers: state.papers.filter(p => !p.archived).length, archived: state.papers.filter(p => p.archived).length,
+        failures: failures.length, operations: state.operations.length, reports: state.reports.length };
+      Object.entries(navCounts).forEach(([key, count]) => { $(`#nav-${key}`).textContent = count; });
+      document.querySelectorAll('[data-view]').forEach(item => {
+        if (item.dataset.view === state.view) item.setAttribute('aria-current', 'page');
+        else item.removeAttribute('aria-current');
+      });
+      $('#view-title').textContent = titles[state.view];
+      let items;
+      let renderer;
+      const recentFirst = (a, b) => String(b.created_at || '').localeCompare(String(a.created_at || ''));
+      if (state.view === 'papers' || state.view === 'archived') {
+        items = state.papers.filter(p => Boolean(p.archived) === (state.view === 'archived') && matchesPaper(p.paper_id, p) &&
+          (state.filter === 'all' || kinds.some(kind => category(slotOf(p, kind).state) === state.filter)))
+          .sort((a, b) => Number(Boolean(b.pinned)) - Number(Boolean(a.pinned)) || paperName(a).localeCompare(paperName(b), 'zh-CN') || a.paper_id.localeCompare(b.paper_id));
+        renderer = paperView;
+      } else if (state.view === 'failures') {
+        items = failures.filter(f => matchesPaper(f.paper_id, f) && ['all', 'error'].includes(state.filter));
+        renderer = failureView;
+      } else if (state.view === 'operations') {
+        items = state.operations.filter(op => matchesPaper(op.paper_id, op) && (state.filter === 'all' || category(op.state) === state.filter)).sort(recentFirst);
+        renderer = operationView;
+      } else {
+        items = state.reports.filter(report => matchesPaper(report.paper_id, report)).sort(recentFirst);
+        renderer = reportView;
+      }
+      $('#state-filter').disabled = state.view === 'reports';
+      const shown = items.slice(0, state.limit);
+      const totalBytes = state.reports.reduce((total, report) => total + (Number(report.bytes) || 0), 0);
+      const caption = state.view === 'reports' ? `每篇最近20份 · 只读 · 总占用 ${bytesText(totalBytes)}${importProgress() ? ' · ' + importProgress() : ''}`
+        : state.view === 'operations' ? '保留90天'
+        : state.view === 'papers' || state.view === 'archived' ? '置顶优先' : '待处理故障';
+      $('#view-caption').textContent = `${caption} · ${shown.length} / ${items.length}`;
+      reconcile($('#papers'), shown.length ? shown.map(renderer) : [emptyView()]);
+      const listLabel = `${titles[state.view]}列表`;
+      if ($('#papers').getAttribute('aria-label') !== listLabel) $('#papers').setAttribute('aria-label', listLabel);
+      $('#more').hidden = items.length <= state.limit;
+      $('#more').textContent = `加载更多（剩余 ${Math.max(0, items.length - state.limit)}）`;
+      const paper = paperById(state.selected);
+      $('#detail').hidden = !paper;
+      $('#workarea').classList.toggle('has-detail', Boolean(paper));
+      if (paper) reconcile($('#detail'), detailView(paper));
+      $('#connection').textContent = [...state.errors.values()].join('；');
+      // Moving keyed rows during pin sorting can blur their focused control.
+      if (focused?.isConnected && document.activeElement !== focused) focused.focus({ preventScroll: true });
+    }
+
+    function track(operation, fallback) {
+      if (!operation.operation_id || terminalStates.has(operation.state)) return false;
+      const id = operation.paper_id || fallback?.id;
+      const kind = operation.kind || fallback?.kind;
+      if (!id || !kind) return false;
+      const key = slotKey(id, kind);
+      const old = state.pending.get(key);
+      if (old && old.operationId !== operation.operation_id) return false;
+      state.pending.set(key, { ...old, id, kind, operationId: operation.operation_id,
+        action: operation.action || fallback?.action, message: `${actionNames[operation.action || fallback?.action] || '操作'}：${labels[operation.state] || '处理中'}…` });
+      return true;
+    }
+
+    async function pollOperations() {
+      await Promise.all([...state.pending.entries()].filter(([, item]) => item.operationId).map(async ([key, item]) => {
+        try {
+          const operation = await api(`/api/v1/operations/${encodeURIComponent(item.operationId)}`);
+          if (state.pending.get(key) !== item) return;
+          state.errors.delete(key);
+          if (terminalStates.has(operation.state)) {
+            state.pending.delete(key);
+            const index = state.operations.findIndex(op => op.operation_id === item.operationId);
+            if (index >= 0) state.operations[index] = { ...state.operations[index], ...operation };
+            const prefix = `${paperName(paperById(item.id))} · ${actionNames[item.action] || '操作'}`;
+            announce(['failed', 'cancelled'].includes(operation.state) ? `${prefix}：${operation.message || labels[operation.state]}` : `${prefix}已完成。`);
+          } else {
+            item.message = `${actionNames[item.action] || '操作'}：${labels[operation.state] || operation.state || '处理中'}…`;
+          }
+        } catch (error) {
+          // A poll failure is not an operation failure. Keep the submit lock and resume polling.
+          item.message = '状态暂不可读，仍在等待服务器结果…';
+          state.errors.set(key, `操作状态读取失败：${error.message}。将继续查询。`);
+        }
+      }));
+    }
+
+    async function refresh() {
+      if (state.refreshing) return;
+      state.refreshing = true;
+      try {
+        await pollOperations();
+        const sources = [
+          ['papers', '/api/v1/papers', value => { state.papers = value.papers || []; state.loaded = true; }],
+          ['operations', '/api/v1/history/operations', value => {
+            state.operations = value.operations || [];
+            if (value.warning) state.errors.set('history-storage', value.warning);
+            else state.errors.delete('history-storage');
+          }],
+          ['reports', '/api/v1/history/reports', value => { state.reports = value.reports || []; state.reportErrors = value.errors || []; }]
+        ];
+        await Promise.all(sources.map(async ([key, path, apply]) => {
+          try { apply(await api(path)); state.errors.delete(key); }
+          catch (error) { state.errors.set(key, `${{ papers: '论文', operations: '操作历史', reports: '报告历史' }[key]}同步失败：${error.message}`); }
+        }));
+        state.operations.forEach(op => track(op));
+        state.papers.forEach(p => kinds.forEach(kind => {
+          const s = slotOf(p, kind);
+          if (s.operation_id && busyStates.has(s.state)) track({ ...s, paper_id: p.paper_id, kind });
+        }));
+        $('#sync-status').textContent = state.errors.size ? '同步未完成 · 5 秒后重试' : `已同步 ${new Date().toLocaleTimeString('zh-CN', { hour12: false })}`;
+        render();
+      } finally {
+        state.refreshing = false;
+      }
+    }
+
+    async function runService(id, kind, action, operationId) {
+      const key = slotKey(id, kind);
+      if (state.pending.has(key)) return;
+      const pending = { id, kind, action, message: `${actionNames[action] || '重试操作'}：正在提交…` };
+      state.pending.set(key, pending);
+      render();
+      try {
+        const path = action === 'retry' ? `/api/v1/operations/${encodeURIComponent(operationId)}/retry`
+          : `${endpoint(id)}/${kind}/${action}`;
+        const value = await api(path, action === 'ensure' ? { reuse_saved: true, request_id: crypto.randomUUID() } : {});
+        if (value.operation_id && !terminalStates.has(value.state)) {
+          pending.operationId = value.operation_id;
+          pending.action = value.action || action;
+          pending.message = '已提交，正在等待服务器结果…';
+          announce(`${paperName(paperById(id))}：操作已提交。`);
+        } else if (['failed', 'cancelled'].includes(value.state)) {
+          throw new Error(value.message || labels[value.state]);
+        } else if (terminalStates.has(value.state) || (action === 'snapshot' && (value.report_id || value.snapshot))) {
+          state.pending.delete(key);
+          announce(`${paperName(paperById(id))} · ${actionNames[action] || '操作'}已完成。`);
+        } else {
+          // No terminal result and no operation ID: do not invent a successful outcome.
+          pending.message = '服务器未返回终态或操作 ID。请检查服务状态后刷新。';
+          state.errors.set(key, pending.message);
+        }
+      } catch (error) {
+        state.pending.delete(key);
+        announce(`${paperName(paperById(id))}：${error.message}`);
+      }
+      render();
+      await refresh();
+    }
+
+    async function metadata(id, changes) {
+      const key = `metadata:${id}`;
+      if (state.pending.has(key)) return false;
+      state.pending.set(key, { message: '正在保存论文信息…' });
+      render();
+      try {
+        await api(`${endpoint(id)}/metadata`, changes);
+        const paper = paperById(id);
+        if (paper) Object.assign(paper, changes);
+        announce('论文信息已保存。');
+        return true;
+      } finally {
+        state.pending.delete(key);
+        render();
+      }
+    }
+
+    async function loadLog(id, kind) {
+      const key = slotKey(id, kind);
+      if (state.logs.get(key)?.loading) return;
+      state.logs.set(key, { ...state.logs.get(key), loading: true, error: null });
+      render();
+      try { state.logs.set(key, { ...await api(`${endpoint(id)}/${kind}/logs`), loading: false }); }
+      catch (error) { state.logs.set(key, { ...state.logs.get(key), loading: false, error: error.message }); }
+      render();
+    }
+
+    function openAlias(id) {
+      state.aliasId = id;
+      const paper = paperById(id);
+      $('#alias-paper').textContent = `${paper.root} / ${paper.entry}`;
+      $('#alias-input').value = paper.alias || '';
+      $('#alias-error').textContent = '';
+      $('#alias-dialog').showModal();
+      $('#alias-input').focus();
+    }
+
+    document.addEventListener('click', async event => {
+      const target = event.target.closest('button');
+      if (!target) return;
+      if (target.dataset.view) {
+        state.view = target.dataset.view;
+        state.limit = 30;
+        render();
+        return;
+      }
+      if (target.dataset.close) { document.getElementById(target.dataset.close).close(); return; }
+      const { action, id, kind, operation, report } = target.dataset;
+      try {
+        if (['ensure', 'stop', 'snapshot', 'retry'].includes(action)) await runService(id, kind, action, operation);
+        else if (action === 'pin') await metadata(id, { pinned: !paperById(id).pinned });
+        else if (action === 'archive') await metadata(id, { archived: !paperById(id).archived });
+        else if (action === 'alias') openAlias(id);
+        else if (action === 'select') {
+          state.selected = id;
+          render();
+          $('#detail').scrollIntoView({ block: 'nearest' });
+          const close = $('#detail [data-action="close-detail"]');
+          close.focus({ preventScroll: true });
+        } else if (action === 'close-detail') {
+          const previous = state.selected;
+          state.selected = null;
+          render();
+          [...document.querySelectorAll('[data-action="select"]')].find(item => item.dataset.id === previous)?.focus({ preventScroll: true });
+        } else if (action === 'logs') await loadLog(id, kind);
+        else if (action === 'refresh') await refresh();
+        else if (action === 'delete-report') {
+          state.deleting = report;
+          const item = state.reports.find(r => r.report_id === report);
+          $('#confirm-description').textContent = `清除「${paperName(paperById(item.paper_id))}」在 ${dateText(item.created_at)} 保存的历史报告（${bytesText(item.bytes)}）？此操作不可撤销。论文源码和当前服务不受影响。`;
+          $('#confirm-error').textContent = '';
+          $('#confirm-dialog').showModal();
+          $('#confirm-dialog [data-close]').focus();
+        }
+      } catch (error) { announce(error.message); }
+    });
+
+    $('#alias-form').addEventListener('submit', async event => {
+      event.preventDefault();
+      if ($('#alias-save').disabled) return;
+      $('#alias-save').disabled = true;
+      try {
+        if (await metadata(state.aliasId, { alias: $('#alias-input').value.trim() })) $('#alias-dialog').close();
+      } catch (error) { $('#alias-error').textContent = error.message; }
+      finally { $('#alias-save').disabled = false; }
+    });
+
+    $('#confirm-form').addEventListener('submit', async event => {
+      event.preventDefault();
+      const id = state.deleting;
+      const key = `delete:${id}`;
+      if (state.pending.has(key)) return;
+      state.pending.set(key, { message: '正在清除历史报告…' });
+      $('#confirm-submit').disabled = true;
+      render();
+      try {
+        await api(`/api/v1/history/reports/${encodeURIComponent(id)}/delete`, {});
+        state.reports = state.reports.filter(report => report.report_id !== id);
+        $('#confirm-dialog').close();
+        announce('历史报告已清除。');
+      } catch (error) { $('#confirm-error').textContent = error.message; }
+      finally {
+        state.pending.delete(key);
+        $('#confirm-submit').disabled = false;
+        render();
+      }
+    });
+
+    // Form values live outside the reconciled views, so automatic polling cannot replace edits.
+    $('#search').addEventListener('input', event => {
+      state.query = event.target.value.trim().toLocaleLowerCase();
+      state.limit = 30;
+      render();
+    });
+    $('#state-filter').addEventListener('change', event => {
+      state.filter = event.target.value;
+      state.limit = 30;
+      render();
+    });
+    $('#more').addEventListener('click', () => { state.limit += 30; render(); });
+    $('#refresh').addEventListener('click', refresh);
+
+    const themeMedia = matchMedia('(prefers-color-scheme: dark)');
+    let explicitTheme;
+    try { explicitTheme = localStorage.getItem('latex-review-theme'); } catch { /* Storage may be unavailable. */ }
+    function setTheme(theme) {
+      document.documentElement.dataset.theme = theme;
+      $('#theme').textContent = theme === 'dark' ? '浅色外观' : '深色外观';
+      $('#theme').setAttribute('aria-label', theme === 'dark' ? '切换浅色主题' : '切换深色主题');
+    }
+    setTheme(explicitTheme || (themeMedia.matches ? 'dark' : 'light'));
+    $('#theme').addEventListener('click', () => {
+      explicitTheme = document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark';
+      setTheme(explicitTheme);
+      try { localStorage.setItem('latex-review-theme', explicitTheme); } catch { /* Keep the session preference. */ }
+    });
+    themeMedia.addEventListener('change', event => { if (!explicitTheme) setTheme(event.matches ? 'dark' : 'light'); });
+    refresh();
+    setInterval(refresh, 5000);
+  </script>
+</body>
+</html>

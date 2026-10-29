@@ -168,7 +168,18 @@ def _rebuild_report(report):
                 data['artifacts'] = {name: str((report / name).resolve()) for name in data.get('artifacts', {})}
                 from .run_manifest import write_manifest
                 write_manifest(stage, data)
-        return {'status': 'updated', 'message': '源码已修改，报告已更新。',
-                'report_directory': str(report), 'previous_report': str(candidate.previous_report)}
+        result = {'status': 'updated', 'message': '源码已修改，报告已更新。',
+                  'report_directory': str(report), 'previous_report': str(candidate.previous_report)}
+        # Managed difference reports freeze each successful body revision.
+        # This is outside the report replacement transaction: a history failure
+        # never undoes a successful source edit or the rebuilt current report.
+        try:
+            from .local_history_events import capture_managed_report
+            history = capture_managed_report(report)
+            if history:
+                result['history'] = history
+        except (OSError, ValueError) as exc:
+            result['history'] = {'error': str(exc)}
+        return result
     except (OSError, ValueError, TypeError, KeyError) as exc:
         return {'status': 'pending', 'message': '源码已修改，报告待更新：' + str(exc)}

@@ -1,5 +1,6 @@
 (function () {
   'use strict';
+  const readonly = document.querySelector('meta[name="latex-review-readonly"]')?.content === 'snapshot';
   const data = JSON.parse(document.getElementById('reader-data').textContent);
   const cards = Array.from(document.querySelectorAll('.change-card'));
   const ids = new Set(cards.map(card => card.id));
@@ -28,7 +29,7 @@
     return validRecords(value.records);
   }
   try {
-    const saved = localStorage.getItem(key);
+    const saved = readonly ? null : localStorage.getItem(key);
     if (saved) {
       const value = JSON.parse(saved);
       records = readEnvelope(value);
@@ -50,7 +51,7 @@
   }
   function envelope() { return {version: 1, fingerprint: data.fingerprint, records, ui: snapshot()}; }
   function persist() {
-    if (restoring) return;
+    if (readonly || restoring) return;
     try { localStorage.setItem(key, JSON.stringify(envelope())); return true; }
     catch (error) { storageStatus.textContent = '浏览器无法保存记录；请导出 JSON 备份。'; return false; }
   }
@@ -75,7 +76,7 @@
   }
   function select(id) {
     current = ids.has(id) ? id : null;
-    stateInput.disabled = noteInput.disabled = !current;
+    stateInput.disabled = noteInput.disabled = readonly || !current;
     stateInput.value = records[current]?.state || 'unreviewed';
     noteInput.value = records[current]?.note || '';
     document.getElementById('review-current').textContent = current ?
@@ -83,7 +84,7 @@
   }
   document.addEventListener('review-selection', event => { select(event.detail); persist(); });
   function edit() {
-    if (!current) return;
+    if (readonly || !current) return;
     records[current] = {state: stateInput.value, note: noteInput.value};
     renderProgress(); persist();
     if (reviewFilter.value !== 'all') navigation.filter();
@@ -92,6 +93,7 @@
   noteInput.addEventListener('input', edit);
   reviewFilter.addEventListener('change', () => { navigation.filter(); persist(); });
   cards.forEach((card, index) => {
+    if (readonly) return;
     const controls = [];
     for (const container of [card, document.getElementById('inline-' + card.id)]) {
       if (!container) continue;
@@ -119,7 +121,9 @@
     link.href = url; link.download = 'review-' + data.fingerprint.slice(0, 12) + '.json'; link.click();
     setTimeout(() => URL.revokeObjectURL(url), 1000);
   });
+  document.getElementById('review-import').disabled = readonly;
   document.getElementById('review-import').addEventListener('change', async event => {
+    if (readonly) return;
     const file = event.target.files[0];
     if (!file) return;
     try {

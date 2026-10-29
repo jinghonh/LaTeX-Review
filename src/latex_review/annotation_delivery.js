@@ -1,6 +1,7 @@
 /* Portable annotation contract. IndexedDB transactions serialize same-origin windows. */
 (async () => {
   'use strict';
+  const readonly = document.querySelector('meta[name="latex-review-readonly"]')?.content === 'snapshot';
   const api=window.reviewAnnotations;
   const readJSON=id=>JSON.parse(document.getElementById(id)?.textContent||'null');
   if(!api)return;
@@ -27,6 +28,7 @@
   let content=readJSON('annotation-content')||(currentVersion&&embedded?.versions?.[currentVersion]);
   if(!api)return;
   if(!content){
+    if(readonly){document.getElementById('annotation-status').textContent='历史快照未包含批注。';return;}
     if(location.protocol==='file:'){document.getElementById('annotation-status').textContent='请使用 latex-review-preview 打开本机报告，或使用独立导出的 HTML。';return;}
     try{const response=await fetch('api/annotations/content');if(!response.ok)throw Error('正文读取失败');content=await response.json();}
     catch(e){document.getElementById('annotation-status').textContent=e.message;return;}
@@ -129,6 +131,22 @@
       if(!t.associations[content.version_id])a.persisted=false;
       if(a.container){const u=content.units.find(u=>u.id===a.container.unit_id);if(u)Object.assign(a.container,{selector:u.selector,order:u.order});}if(a.anchor)a.anchor=anchor(content,selection(a.anchor));a.candidates.forEach(x=>x.anchor=anchor(content,selection(x.anchor)));result.association=a;return result;
     })};
+  }
+  if(readonly) {
+    if(!embedded){document.getElementById('annotation-status').textContent='历史快照未包含批注。';return;}
+    validateBundle(embedded);
+    const frozen=view(embedded);
+    await api.setAdapter({
+      async read(){return [copy(content),copy(frozen)];},
+      async readRevision(){return copy(frozen);},
+      async readChanges(){return copy(frozen);},
+      async readJobs(){return {jobs:[]};},
+      async update(){throw Error('历史快照只读。');}
+    });
+    window.reviewAnnotationDelivery=Object.freeze({backup:async()=>copy(embedded)});
+    window.reviewAnnotationDeliveryReady=api.isReady();
+    document.getElementById('annotation-status').textContent=`历史快照只读 · ${frozen.threads.length} 条批注`;
+    return;
   }
   function associate(t,a,method,now) {
     const signature=x=>stable([x.quote,x.unit_text,x.raw_latex,x.atoms.map(a=>[a.offset,a.raw_latex])]);
