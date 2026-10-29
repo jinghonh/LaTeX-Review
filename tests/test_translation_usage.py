@@ -50,7 +50,7 @@ def provider(monkeypatch, responses):
 
 
 def response(data=None, *, usage=None, invalid=False):
-    text = "中文 [[LR_1]] 和 [[LR_0]]。" if invalid else "中文 [[LR_0]] 和 [[LR_1]]。"
+    text = "中文 [[LR_0]]。" if invalid else "中文 [[LR_0]] 和 [[LR_1]]。"
     return {"choices": [{"finish_reason": "stop", "message": {"content": json.dumps({
         "sentences": [{"id": 1, "text": text}]}, ensure_ascii=False)}}], "usage": usage}
 
@@ -72,7 +72,7 @@ def test_failed_attempt_usage_is_counted_before_validation_and_retry_keeps_prefi
     assert requests[1]["messages"][:2] == requests[0]["messages"]
     assert requests[1]["messages"][2]["role"] == "assistant"
     feedback = json.loads(requests[1]["messages"][-1]["content"])["validation_feedback"]
-    assert feedback["placeholder_order"] == [{"id": 1, "tokens": ["[[LR_0]]", "[[LR_1]]"]}]
+    assert feedback["sentence_constraints"] == [translation_module._request_sentence(unit()["sentences"][0])]
     assert [r["outcome"] for r in records] == ["validation_failed", "success"]
     assert [r["attempt"] for r in records] == [1, 2]
     assert [r["prompt_tokens"] for r in records] == [100, 100]
@@ -218,3 +218,15 @@ def test_partial_usage_only_uses_reported_inputs_for_hit_rate(config, monkeypatc
         assert usage["prompt_tokens"] == 1000 and usage["completion_tokens"] is None
     finally:
         manager.close()
+
+
+def test_valid_atomic_reordering_does_not_retry(config, monkeypatch):
+    result = response()
+    result['choices'][0]['message']['content'] = json.dumps({
+        'sentences': [{'id': 1, 'text': '先考虑 [[LR_1]]。再考虑 [[LR_0]]。'}]}, ensure_ascii=False)
+    requests = provider(monkeypatch, [result])
+    records = []
+    assert request_translation(unit(), replace(config, max_retries=2), Event(), on_attempt=records.append) == [
+        '先考虑 [[LR_1]]。再考虑 [[LR_0]]。']
+    assert len(requests) == 1
+    assert records[0]['outcome'] == 'success'

@@ -262,14 +262,14 @@ def test_cached_translations_remain_readable_without_key(provider, translation_r
         cached.close()
 
 
-def _reordered_translation_responses(monkeypatch, unit, *, recover):
+def _missing_placeholder_responses(monkeypatch, unit, *, recover):
     monkeypatch.setenv("TEST_REPAIR_KEY", "fake-repair-key")
     valid = {"sentences": [{"id": s["number"], "text": "译：" + s["text"]} for s in unit["sentences"]]}
     invalid = json.loads(json.dumps(valid))
     source = next(s for s in unit["sentences"] if len(s["protected"]) >= 2)
     first, second = [p["token"] for p in source["protected"][:2]]
     entry = next(s for s in invalid["sentences"] if s["id"] == source["number"])
-    entry["text"] = entry["text"].replace(first, "__FIRST__").replace(second, first).replace("__FIRST__", second)
+    entry["text"] = entry["text"].replace(first, "")
     requests = []
 
     class Opener:
@@ -283,9 +283,9 @@ def _reordered_translation_responses(monkeypatch, unit, *, recover):
     return requests
 
 
-def test_reordered_placeholders_retry_with_exact_sequence_feedback(translation_report, monkeypatch):
+def test_missing_placeholders_retry_with_sentence_constraints(translation_report, monkeypatch):
     unit = translation_report[1][0]
-    requests = _reordered_translation_responses(monkeypatch, unit, recover=True)
+    requests = _missing_placeholder_responses(monkeypatch, unit, recover=True)
     config = TranslationConfig("https://example.invalid/v1", "test-model", api_key_env="TEST_REPAIR_KEY",
                                max_retries=1)
     texts = request_translation(unit, config, Event())
@@ -294,14 +294,14 @@ def test_reordered_placeholders_retry_with_exact_sequence_feedback(translation_r
     retry = json.loads(requests[1]["messages"][-1]["content"])
     assert "validation_feedback" not in original
     assert requests[1]["messages"][:2] == requests[0]["messages"]
-    assert retry["validation_feedback"]["placeholder_order"] == [
-        {"id": s["number"], "tokens": [p["token"] for p in s["protected"]]} for s in unit["sentences"]]
+    assert retry["validation_feedback"]["sentence_constraints"] == [
+        translation_module._request_sentence(s) for s in unit["sentences"]]
 
 
 @pytest.mark.parametrize("max_retries", [0, 2])
 def test_invalid_translation_retries_remain_bounded(translation_report, monkeypatch, max_retries):
     unit = translation_report[1][0]
-    requests = _reordered_translation_responses(monkeypatch, unit, recover=False)
+    requests = _missing_placeholder_responses(monkeypatch, unit, recover=False)
     config = TranslationConfig("https://example.invalid/v1", "test-model", api_key_env="TEST_REPAIR_KEY",
                                max_retries=max_retries)
     with pytest.raises(TranslationError, match="占位符"):
@@ -910,6 +910,49 @@ def test_preview_exits_promptly_with_translation_in_flight(provider, translation
         if process.poll() is None:
             process.kill()
         process.communicate()
+
+
+def test_atomic_reordering_and_multiple_chinese_sentences_preserve_alignment():
+    source = _protected_sentence(r'The error is bounded by $C$ when $t>0$.', lambda text: text)
+    unit = {'sentences': [{'number': 1, **source}]}
+    text = '当 [[LR_1]] 时，误差不超过 [[LR_0]]。这是适用条件。'
+    assert validate_translation(unit, {'sentences': [{'id': 1, 'text': text}]}) == [text]
+    assert [p['kind'] for p in source['protected']] == ['math', 'math']
+
+
+@pytest.mark.parametrize('text', [
+    '[[LR_0]] [[LR_0]]',  # duplicate and missing
+    '[[LR_0]] [[LR_9]]',  # foreign identity
+])
+def test_atomic_reordering_still_rejects_invalid_inventory(text):
+    source = _protected_sentence(r'$x$ and $y$.', lambda text: text)
+    with pytest.raises(TranslationError):
+        validate_translation({'sentences': [{'number': 1, **source}]},
+                             {'sentences': [{'id': 1, 'text': text}]})
+
+
+def test_format_scope_allows_internal_reordering_but_rejects_escape_and_crossing():
+    source = _protected_sentence(r'\textbf{$x$ and \emph{$y$ and $z$}} then $w$.', lambda text: text)
+    unit = {'sentences': [{'number': 1, **source}]}
+    # open strong, x, open em, y, z, close em, close strong, w
+    valid = '[[LR_0]][[LR_1]][[LR_2]][[LR_4]] 和 [[LR_3]][[LR_5]][[LR_6]][[LR_7]]'
+    assert validate_translation(unit, {'sentences': [{'id': 1, 'text': valid}]}) == [valid]
+    for invalid in [valid.replace('[[LR_1]]', 'TEMP').replace('[[LR_7]]', '[[LR_1]]').replace('TEMP', '[[LR_7]]'),
+                    valid.replace('[[LR_5]][[LR_6]]', '[[LR_6]][[LR_5]]')]:
+        with pytest.raises(TranslationError, match='格式'):
+            validate_translation(unit, {'sentences': [{'id': 1, 'text': invalid}]})
+
+
+def test_request_includes_readonly_types_without_link_addresses(provider):
+    config, calls, _, _ = provider
+    source = _protected_sentence(r'\href{https://example.org/private}{See $x$ at 3} \cite{key}.', lambda text: text)
+    request_translation({'sentences': [{'number': 1, **source}]}, config, Event())
+    messages = calls[0]['body']['messages']
+    sent = json.loads(messages[1]['content'])['sentences'][0]
+    assert {(p['kind'], p['source']) for p in sent['placeholders']} >= {
+        ('math', '$x$'), ('number', '3'), ('citation', r'\cite{key}'), ('format_open', 'href')}
+    assert 'https://example.org/private' not in json.dumps(messages)
+    assert '多个中文句子' in messages[0]['content']
 
 
 def test_manifest_uses_unique_tokens_across_sentences_and_rejects_transfer(tmp_path):
