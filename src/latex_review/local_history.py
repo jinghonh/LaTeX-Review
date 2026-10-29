@@ -259,6 +259,15 @@ class History:
             self._prune_reports(paper_id)
             return json.loads(row[0]) if row[0] else {'paper_id': paper_id, 'state': 'ready', 'skipped': True}
         results, warnings = _cached_results(directory, request)
+        if results is not None:
+            saved = re.search(r'<script type="application/json" id="translation-results">(.*?)</script>',
+                              source_html, re.S)
+            if saved:
+                # Cache eviction must not erase translations already carried by
+                # the report. Valid cache hits take precedence for matching IDs.
+                embedded = json.loads(saved[1])
+                if isinstance(embedded, dict):
+                    results = {**embedded, **results}
         html = _readonly_html(publication_html(directory, results=results, warnings=warnings, include_assets=False))
         # Frozen annotations do not inline images; all linked resources remain
         # ordinary files, without publication's single-file size limits.

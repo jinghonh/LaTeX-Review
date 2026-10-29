@@ -230,7 +230,9 @@
       const payload=await encodeRequest(e);
       const task=await json('api/annotations/update'+(slow?'?async=1':''),{method:'POST',headers:{'Content-Type':'application/json','X-LaTeX-Review-Token':token,'X-LaTeX-Review-Delta-Encoding':'request-bodies',...payload.headers},body:payload.body});
       if(!task.task_id)return restoreRequestBodies(task,e.request);
-      while(true){const job=await json(task.status_url);if(job.state==='complete')return job.result;if(job.state==='failed')fail(job.message||'批注任务失败');progress?.(job);await new Promise(resolve=>setTimeout(resolve,300));}
+      // Keep polling under this report's proxy prefix, just like the submission.
+      const statusURL='api/annotations/jobs/'+encodeURIComponent(task.task_id);
+      while(true){const job=await json(statusURL);if(job.state==='complete')return job.result;if(job.state==='failed')fail(job.message||'批注任务失败');progress?.(job);await new Promise(resolve=>setTimeout(resolve,300));}
     }
   };
   async function backup(){return local?transaction(copy):json('api/annotations/export');}

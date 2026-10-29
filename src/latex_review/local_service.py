@@ -126,7 +126,7 @@ class Slot:
                         value['baselines'] = {}
             return value
 
-    def submit(self, request, fingerprint, prepare_candidate, request_id):
+    def submit(self, request, fingerprint, prepare_candidate, request_id, *, retry_of=None):
         with self.condition:
             if self.manager.papers.get(self.paper_id, {}).get('archived'):
                 raise LocalError('请先恢复已归档论文，再启动服务', 409)
@@ -134,10 +134,10 @@ class Slot:
             if request.get('port') and self.worker and self.worker.recipe.get('bound_port') != request['port']:
                 raise LocalError('活动工作端口不同；请先stop-paper再更改端口', 409)
             for operation in ([self.current] if self.current else []) + list(self.queue):
-                if operation['action'] == 'ensure' and operation['fingerprint'] == fingerprint:
+                if not retry_of and operation['action'] == 'ensure' and operation['fingerprint'] == fingerprint:
                     return operation
             if self.worker and self.state == 'ready' and self.fingerprint == fingerprint:
-                operation = self.manager.operation(self, 'ensure', request_id, state='ready')
+                operation = self.manager.operation(self, 'ensure', request_id, state='ready', retry_of=retry_of)
                 operation.update(pid=self.worker.process.pid, port=self.worker.recipe['bound_port'],
                                  generation=self.worker.recipe['nonce'], request=request)
                 self.manager.record_operation(operation)
@@ -145,14 +145,14 @@ class Slot:
             if len(self.queue) >= 16:
                 raise LocalError('槽位等待队列已满', 429)
             candidate = prepare_candidate() if prepare_candidate else None
-            operation = self.manager.operation(self, 'ensure', request_id)
+            operation = self.manager.operation(self, 'ensure', request_id, retry_of=retry_of)
             operation.update(request=request, fingerprint=fingerprint, candidate=str(candidate) if candidate else None)
             self.manager.record_operation(operation)
             self.queue.append(operation)
             self.condition.notify_all()
             return operation
 
-    def stop_request(self, request_id):
+    def stop_request(self, request_id, *, retry_of=None):
         with self.condition:
             self.cancel.set()
             while self.queue:
@@ -161,7 +161,7 @@ class Slot:
                 self.manager.record_operation(operation)
                 if operation.get('candidate'):
                     shutil.rmtree(operation['candidate'], ignore_errors=True)
-            operation = self.manager.operation(self, 'stop', request_id)
+            operation = self.manager.operation(self, 'stop', request_id, retry_of=retry_of)
             self.queue.append(operation)
             self.condition.notify_all()
             return operation
@@ -224,6 +224,14 @@ class Slot:
         if lock_busy(self.lock_path) and not self.worker:
             self.state = 'blocked'
             raise LocalError('旧工作进程仍持有槽位锁；不能启动第二份', 409)
+        # Explicit retries have their own queued records. Once an earlier request
+        # has made this exact service ready, reuse it without restarting it.
+        if (not self.cancel.is_set() and self.worker and self.worker.process.poll() is None
+                and self.fingerprint == operation['fingerprint']):
+            self.state, self.error = 'ready', ''
+            operation.update(state='ready', url=self.url, pid=self.worker.process.pid,
+                             port=self.worker.recipe['bound_port'], generation=self.worker.recipe['nonce'])
+            return
         if self.kind == 'live':
             candidate = Path(tempfile.mkdtemp(prefix='live-', dir=self.manager.state / 'jobs'))
             operation['candidate'] = str(candidate)
@@ -453,9 +461,11 @@ class Manager:
             if slot and slot.saved and not self.papers[paper_id].get('history_initialized'):
                 return self.capture_snapshot(paper_id, '启用工作台时导入', cancel=cancel)
 
-    def operation(self, slot, action, request_id, *, state='queued'):
+    def operation(self, slot, action, request_id, *, state='queued', retry_of=None):
         operation = {'operation_id': uuid.uuid4().hex, 'paper_id': slot.paper_id, 'kind': slot.kind,
                      'action': action, 'state': state, 'url': slot.url, 'created_at': timestamp()}
+        if retry_of:
+            operation['retry_of'] = retry_of
         with self.lock:
             self.operations[operation['operation_id']] = operation
         self.record_operation(operation)
@@ -574,7 +584,7 @@ class Manager:
             paper_lock = self.paper_locks.setdefault(paper_id, RLock())
         with receipt_lock, paper_lock:
             try:
-                result = self._ensure_request(paper_id, kind, value)
+                result = self._ensure_request(paper_id, kind, value, retry_of=retry_of)
             except (OSError, ValueError, TypeError, KeyError) as exc:
                 if paper_id not in self.papers and valid_id(paper_id) and kind in ('live', 'diff'):
                     try:
@@ -599,11 +609,6 @@ class Manager:
                     self.operations[operation['operation_id']] = operation
                     self.record_operation(operation)
                 raise
-            if retry_of:
-                operation = self.operations[result['operation_id']]
-                operation['retry_of'] = retry_of
-                self.record_operation(operation)
-                result = self.public_operation(operation)
             return result
 
     @staticmethod
@@ -617,7 +622,7 @@ class Manager:
             return None
         return request
 
-    def _ensure_request(self, paper_id, kind, value):
+    def _ensure_request(self, paper_id, kind, value, *, retry_of=None):
         if self.closed.is_set():
             raise LocalError('入口正在停止', 503)
         request, request_id = self.validate(value, paper_id, kind)
@@ -657,7 +662,8 @@ class Manager:
                 except BaseException:
                     shutil.rmtree(candidate, ignore_errors=True)
                     raise
-            operation = slot.submit(request, fingerprint, prepare_candidate if kind == 'diff' else None, request_id)
+            operation = slot.submit(request, fingerprint, prepare_candidate if kind == 'diff' else None,
+                                    request_id, retry_of=retry_of)
             with self.lock:
                 self.receipts[receipt_key] = (fingerprint, operation)
             return self.public_operation(operation)
@@ -713,7 +719,7 @@ class Manager:
             slot = self.slots.get((paper_id, kind))
             if not slot:
                 raise LocalError('服务槽位不存在', 404)
-            operation = slot.stop_request(uuid.uuid4().hex)
+            operation = slot.stop_request(uuid.uuid4().hex, retry_of=operation_id)
         else:
             request = deepcopy(original.get('request'))
             if not request:
@@ -722,8 +728,6 @@ class Manager:
             request['request_id'] = uuid.uuid4().hex
             value = self.ensure(paper_id, kind, request, retry_of=operation_id)
             operation = self.operations[value['operation_id']]
-        operation['retry_of'] = operation_id
-        self.record_operation(operation)
         return self.public_operation(operation)
 
     def capture_snapshot(self, paper_id, reason='重试保存', *, request=None, cancel=None):
@@ -777,7 +781,9 @@ class Manager:
 
     def report_history(self):
         errors = []
-        for paper_id in self.papers:
+        with self.lock:
+            paper_ids = list(self.papers)
+        for paper_id in paper_ids:
             value = self.history_errors.get(paper_id) or read_json(self.state / 'history-errors' / (paper_id + '.json'))
             if value:
                 errors.append({'paper_id': paper_id, 'message': value['message']})
