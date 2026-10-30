@@ -228,3 +228,13 @@ def test_inline_unknown_macro_keeps_both_raw_formulas(tmp_path):
     assert result.document.changes[0].details[0].old_text == r"$\mystery{x}$"
     assert result.document.changes[0].details[0].new_text == r"$\mystery{y}$"
     assert any(d.code == "equation_diff_fallback" for d in result.document.diagnostics)
+
+
+def test_standard_star_macro_keeps_formula_changes_without_unknown_warning(tmp_path):
+    _, _, result = _compare(tmp_path,
+        r"Weights $\mathcal L_i$ and $\lambda_i$ remain.",
+        r"Weights $\mathcal L_\star$ and $\lambda_\star$ remain.")
+    assert not any(d.code in {"unknown_latex", "equation_diff_fallback"}
+                   for d in result.document.diagnostics)
+    details = result.document.changes[0].details
+    assert [d.new_text for d in details] == [r"$\mathcal L_\star$", r"$\lambda_\star$"]

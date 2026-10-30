@@ -96,13 +96,49 @@ def test_same_section_move_is_one_primary_change_and_not_double_occupied(tmp_pat
     assert f'data-old="{moved[0].old_node_id}" data-new="{moved[0].new_node_id}"' in html
 
 
-def test_ambiguous_short_reorder_falls_back_to_remove_and_add(tmp_path):
-    _, _, result = _compare(tmp_path,
+def test_unique_swap_keeps_identity_despite_ambiguous_move_direction(tmp_path):
+    old, new, result = _compare(tmp_path,
         "\\section{Results}\nAlpha unique paragraph.\n\nBeta unique paragraph.",
         "\\section{Results}\nBeta unique paragraph.\n\nAlpha unique paragraph.")
-    assert not any(change.kind == "moved" for change in result.document.changes)
-    assert [change.kind for change in result.document.changes].count("removed") == 2
-    assert [change.kind for change in result.document.changes].count("added") == 2
+    assert [change.kind for change in result.document.changes] == ["moved", "moved"]
+    assert result.document.summary.added_words == result.document.summary.removed_words == 0
+    assert not any(d.code == "low_confidence_match" for d in result.document.diagnostics)
+    assert all("无法唯一确定" in c.summary for c in result.document.changes)
+    assert all("相对顺序" in c.details[0].summary for c in result.document.changes)
+    assert dumps(result.document) == dumps(compare_projects(old, new).document)
+
+
+def test_swapped_list_items_keep_paragraph_pairs(tmp_path):
+    first = "We formulate history-conditioned prediction of dynamic convex sets."
+    second = "We propose a causal spectral operator for coefficient prediction."
+    old, new, result = _compare(tmp_path,
+        "\\section{Introduction}\n\\begin{itemize}\\item " + first + "\\item " + second + "\\end{itemize}",
+        "\\section{Introduction}\n\\begin{itemize}\\item " + second + "\\item " + first + "\\end{itemize}")
+    assert len(result.document.changes) == 2
+    assert all(c.kind == "moved" for c in result.document.changes)
+    assert result.document.summary.added_words == result.document.summary.removed_words == 0
+    for pair in result.mapping.pairs:
+        if old.by_id()[pair.old_id].review.type == "paragraph":
+            assert old.by_id()[pair.old_id].review.raw_latex == new.by_id()[pair.new_id].review.raw_latex
+
+
+def test_ambiguous_swap_with_formula_edits_does_not_invent_identity(tmp_path):
+    _, _, result = _compare(tmp_path,
+        "\\section{Results}\nAlpha unique paragraph $x$.\n\nBeta unique paragraph $y$.",
+        "\\section{Results}\nBeta unique paragraph $z$.\n\nAlpha unique paragraph $w$.")
+    assert not any(c.kind == "moved" for c in result.document.changes)
+    assert [c.kind for c in result.document.changes] == ["removed", "removed", "added", "added"]
+
+
+def test_unique_label_swap_keeps_local_formula_changes(tmp_path):
+    _, _, result = _compare(tmp_path,
+        "\\section{Results}\n\\begin{equation}x=1\\label{eq:a}\\end{equation}\n"
+        "\\begin{equation}y=2\\label{eq:b}\\end{equation}",
+        "\\section{Results}\n\\begin{equation}y=3\\label{eq:b}\\end{equation}\n"
+        "\\begin{equation}x=4\\label{eq:a}\\end{equation}")
+    assert len(result.document.changes) == 2
+    assert all(c.kind == "moved" and set(c.categories) == {"move", "equation"}
+               for c in result.document.changes)
 
 
 def test_cross_section_move_with_local_edit_and_repeated_content_fallback(tmp_path):

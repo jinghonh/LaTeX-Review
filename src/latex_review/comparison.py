@@ -131,8 +131,10 @@ def _space_description(space: tuple[bool, bool]) -> str:
 def _move_detail(left: ReviewNode, right: ReviewNode, number: int) -> ChangeDetail:
     old_section = " / ".join(left.section_path) or "文档根部"
     new_section = " / ".join(right.section_path) or "文档根部"
+    summary = (f"同章节相对顺序变化：{old_section}" if left.section_path == right.section_path else
+               f"位置移动：{old_section} → {new_section}")
     return ChangeDetail(f"detail-{number:03d}", "move", "moved", old_section, new_section,
-                        f"位置移动：{old_section} → {new_section}", left.source, right.source)
+                        summary, left.source, right.source)
 
 
 def compare_projects(old: ParsedProject, new: ParsedProject, *, review_comments: bool = False) -> ComparisonResult:

@@ -3,6 +3,7 @@ import os
 from pathlib import Path
 import subprocess
 import sys
+from dataclasses import replace
 
 import pytest
 
@@ -93,6 +94,44 @@ def test_number_unknown_and_deleted_valid_citation_do_not_invent_error(tmp_path)
         rules = check_rules(parse_project(pair.old.expand()), parse_project(pair.new.expand()))
     assert [item.code for item in rules] == ["equation_number_unknown"]
     assert rules[0].evidence[1:3] == ("旧侧显式编号：未知", "新侧显式编号：未知")
+
+
+@pytest.mark.parametrize(("before_number", "after_number", "expected"), [
+    ("13", "12", "equation_number_changed"),
+    ("13", "13", None),
+    ("13", None, "equation_number_unknown"),
+    (None, "12", "equation_number_unknown"),
+])
+def test_equation_rules_use_compiled_numbers(tmp_path, before_number, after_number, expected):
+    old, new = _pair(tmp_path,
+        r"\documentclass{IEEEtran}\begin{document}\begin{equation}x=1\label{eq:x}\end{equation}\end{document}",
+        r"\documentclass{IEEEtran}\begin{document}\begin{equation}y=2\end{equation}\begin{equation}x=1\label{eq:x}\end{equation}\end{document}")
+    with resolve_sources(entry="main.tex", old_dir=old, new_dir=new) as pair:
+        before = replace(parse_project(pair.old.expand()),
+                         compiled_numbering={"labels": {"eq:x": before_number} if before_number else {}})
+        after = replace(parse_project(pair.new.expand()),
+                        compiled_numbering={"labels": {"eq:x": after_number} if after_number else {}})
+        report = write_report(before, after, compare_projects(before, after), tmp_path / "report", pdf_converter="")
+    rules = [d for d in report.document.diagnostics if d.code.startswith("equation_number_")]
+    assert [d.code for d in rules] == ([expected] if expected else [])
+    if expected:
+        assert rules[0].severity == "info"
+        assert rules[0].source_old and rules[0].source_new
+        if before_number:
+            assert f"旧侧编译编号：{before_number}" in rules[0].evidence
+        if after_number:
+            assert f"新侧编译编号：{after_number}" in rules[0].evidence
+
+
+def test_compiled_equation_numbers_take_precedence_over_literal_tags(tmp_path):
+    source = r"\begin{document}\begin{equation}x=1\tag{A}\label{eq:x}\end{equation}\end{document}"
+    old, new = _pair(tmp_path, source, source)
+    with resolve_sources(entry="main.tex", old_dir=old, new_dir=new) as pair:
+        before = replace(parse_project(pair.old.expand()), compiled_numbering={"labels": {"eq:x": "S1"}})
+        after = replace(parse_project(pair.new.expand()), compiled_numbering={"labels": {"eq:x": "S2"}})
+        rules = check_rules(before, after)
+    assert [d.code for d in rules] == ["equation_number_changed"]
+    assert "S1" in rules[0].message and "S2" in rules[0].message
 
 
 def test_rule_warning_does_not_set_cli_exit_code(tmp_path):

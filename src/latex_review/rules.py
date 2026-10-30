@@ -168,7 +168,7 @@ def _rule_diagnostic(code: str, key: str, old: list[_Site], new: list[_Site]) ->
                       status, evidence, old_sources, new_sources)
 
 
-def _equations(project: ParsedProject) -> dict[str, tuple[int, ParsedNode, str | None]]:
+def _equations(project: ParsedProject) -> dict[str, tuple[int, ParsedNode, str | None, str]]:
     labels, _, _ = _sites(project)
     equation_nodes = [node for node in project.nodes if node.review.type == "equation" and
                       re.match(r"\\begin\s*\{equation\}", node.review.raw_latex)]
@@ -185,12 +185,17 @@ def _equations(project: ParsedProject) -> dict[str, tuple[int, ParsedNode, str |
                 if argument:
                     tags.append(argument[1].strip())
         tag = tags[0] if len(tags) == 1 and tags[0] and "\\" not in tags[0] else None
-        result[key] = (equation_nodes.index(node), node, tag)
+        # Only actual compilation metadata can override the literal tag here.
+        # Preview counter estimates do not establish the final printed number.
+        compiled = project.compiled_numbering.get("labels", {}).get(key)
+        number = project.numbering.labels.get(key) if compiled else None
+        result[key] = (equation_nodes.index(node), node, number or tag,
+                       "编译编号" if number else "显式编号")
     return result
 
 
 def check_rules(old: ParsedProject, new: ParsedProject) -> tuple[Diagnostic, ...]:
-    """合并两侧规则命中；只有显式单值标签可证明公式显示编号变化。"""
+    """合并两侧规则命中；使用实际编译编号或显式单值标签比较公式编号。"""
     before, after = _findings(old), _findings(new)
     bibliography_comparable = _bibliography_reliable(old) and _bibliography_reliable(new)
     diagnostics = [_rule_diagnostic(code, key, before.get((code, key), []), after.get((code, key), []))
@@ -198,22 +203,23 @@ def check_rules(old: ParsedProject, new: ParsedProject) -> tuple[Diagnostic, ...
                    if code != "bibliography_key_unresolved" or bibliography_comparable]
     old_equations, new_equations = _equations(old), _equations(new)
     for key in sorted(old_equations.keys() & new_equations.keys()):
-        old_index, old_node, old_tag = old_equations[key]
-        new_index, new_node, new_tag = new_equations[key]
-        if old_tag is not None and new_tag is not None:
-            if old_tag == new_tag:
+        old_index, old_node, old_number, old_basis = old_equations[key]
+        new_index, new_node, new_number, new_basis = new_equations[key]
+        if old_number is not None and new_number is not None:
+            if old_number == new_number:
                 continue
-            code, severity = "equation_number_changed", "warning"
-            message = f"新增：公式 {key} 的显式编号由 {old_tag} 变为 {new_tag}"
-        elif old_index != new_index or old_tag != new_tag or old_node.review.section_path != new_node.review.section_path:
+            compiled = "编译编号" in (old_basis, new_basis)
+            code, severity = "equation_number_changed", "info" if compiled else "warning"
+            message = f"新增：公式 {key} 的{'显示' if compiled else '显式'}编号由 {old_number} 变为 {new_number}"
+        elif old_index != new_index or old_number != new_number or old_node.review.section_path != new_node.review.section_path:
             code, severity = "equation_number_unknown", "info"
             message = f"新增：公式 {key} 的最终编号未知"
         else:
             continue
         old_source, new_source = old_node.review.source, new_node.review.source
         diagnostics.append(Diagnostic(code, severity, message, old_source, new_source, "new",
-                                      (f"公式标签：{key}", f"旧侧显式编号：{old_tag or '未知'}",
-                                       f"新侧显式编号：{new_tag or '未知'}",
+                                      (f"公式标签：{key}", f"旧侧{old_basis}：{old_number or '未知'}",
+                                       f"新侧{new_basis}：{new_number or '未知'}",
                                        f"旧侧结构序位：{old_index + 1}；新侧结构序位：{new_index + 1}"),
                                       (old_source,), (new_source,)))
     return tuple(diagnostics)

@@ -129,17 +129,20 @@ def match_nodes(old: ParsedProject, new: ParsedProject) -> NodeMapping:
     def scope_compatible(i: int, j: int) -> bool:
         return a_scope[i] == b_scope[j] or bool(a[i].review.parent_id and parents_match(i, j))
 
-    # 重复标签没有身份语义，不能覆盖先前的标签映射。
-    for i, item in enumerate(a):
-        if i in used_a:
-            continue
-        labels = {label for label in a_effective_labels[i]
-                  if a_labels[item.review.type, label] == b_labels[item.review.type, label] == 1}
-        options = [j for j, candidate in enumerate(b) if j not in used_b and
-                   candidate.review.type == item.review.type and labels.intersection(b_effective_labels[j]) and
-                   scope_compatible(i, j) and parents_match(i, j)]
-        if len(options) == 1:
-            add(i, options[0], .99, "两侧唯一标签、类型和章节一致")
+    def match_unique_labels() -> None:
+        # 重复标签没有身份语义，不能覆盖先前的标签映射。
+        for i, item in enumerate(a):
+            if i in used_a:
+                continue
+            labels = {label for label in a_effective_labels[i]
+                      if a_labels[item.review.type, label] == b_labels[item.review.type, label] == 1}
+            options = [j for j, candidate in enumerate(b) if j not in used_b and
+                       candidate.review.type == item.review.type and labels.intersection(b_effective_labels[j]) and
+                       scope_compatible(i, j) and parents_match(i, j)]
+            if len(options) == 1:
+                add(i, options[0], .99, "两侧唯一标签、类型和章节一致")
+
+    match_unique_labels()
 
     # 前言与摘要是结构容器；同一已配对父节点下唯一的同类容器可以可靠对应。
     # 先建立父容器，再允许其内部段落用常规内容和邻域证据配对。
@@ -230,6 +233,9 @@ def match_nodes(old: ParsedProject, new: ParsedProject) -> NodeMapping:
             similarity = SequenceMatcher(None, a_text[i], b_text[j], autojunk=False).ratio()
             if similarity >= .35:
                 add(i, j, .65, "已配对父结构内唯一剩余相似段落")
+
+    # 父章节可能刚通过内容匹配；先重试标签，避免按顺序错配已交换的公式。
+    match_unique_labels()
 
     # 图表与独立公式按同一父结构内的剩余顺序配对；只有两侧剩余数量相等才使用
     # 此锚点。多项内部字段同时改变时，原始字符串相似度不足以可靠建立配对。
@@ -348,7 +354,22 @@ def match_nodes(old: ParsedProject, new: ParsedProject) -> NodeMapping:
             index = predecessor[index]
         return kept
 
-    # 文档内重排以唯一最长保序锚点识别；并且移动节点本身必须有唯一身份。
+    # Identity is independent of which longest ordered subsequence stays put.
+    # Keep unique matches in a swap, without inventing a single move direction.
+    a_full = [normalized_text(raw) for raw in a_raw]
+    b_full = [normalized_text(raw) for raw in b_raw]
+    a_full_counts = Counter((node.review.type, text) for node, text in zip(a, a_full))
+    b_full_counts = Counter((node.review.type, text) for node, text in zip(b, b_full))
+
+    def unique_identity(pair: NodePair) -> bool:
+        i, j = a_indices[pair.old_id], b_indices[pair.new_id]
+        kind = a[i].review.type
+        labelled = any(a_labels[kind, label] == b_labels[kind, label] == 1
+                       for label in a_effective_labels[i] & b_effective_labels[j])
+        exact = (a_full[i] == b_full[j] and len(a_full[i]) >= 12 and
+                 a_full_counts[kind, a_full[i]] == b_full_counts[kind, b_full[j]] == 1)
+        return labelled or exact
+
     pair_positions = {pair.old_id: index for index, pair in enumerate(pairs)}
     b_indices = {node.review.id: index for index, node in enumerate(b)}
     ambiguous_order: set[str] = set()
@@ -363,19 +384,22 @@ def match_nodes(old: ParsedProject, new: ParsedProject) -> NodeMapping:
             sequence = [b_indices[pair.new_id] for pair in old_order]
             kept = unique_lis(sequence)
             if kept is None:
-                ambiguous_order.update(old_order[index].old_id for index in range(len(sequence))
-                                       if any(sequence[index] > sequence[next_index] for next_index in range(index + 1, len(sequence)))
-                                       or any(sequence[previous] > sequence[index] for previous in range(index)))
+                for index, pair in enumerate(old_order):
+                    crossed = (any(sequence[index] > value for value in sequence[index + 1:]) or
+                               any(value > sequence[index] for value in sequence[:index]))
+                    if not crossed:
+                        continue
+                    if unique_identity(pair):
+                        pairs[pair_positions[pair.old_id]] = NodePair(
+                            pair.old_id, pair.new_id, pair.confidence,
+                            pair.reason + "；同章节相对顺序变化，无法唯一确定单个移动方向", True)
+                    else:
+                        ambiguous_order.add(pair.old_id)
                 continue
             for index, pair in enumerate(old_order):
                 if index in kept:
                     continue
-                i, j = a_indices[pair.old_id], b_indices[pair.new_id]
-                identity = ("唯一标签" in pair.reason or
-                            a_text[i] == b_text[j] and len(a_text[i]) >= 12 and
-                            sum(t == a_text[i] and n.review.type == kind for n, t in zip(a, a_text)) == 1 and
-                            sum(t == b_text[j] and n.review.type == kind for n, t in zip(b, b_text)) == 1)
-                if identity:
+                if unique_identity(pair):
                     pairs[pair_positions[pair.old_id]] = NodePair(pair.old_id, pair.new_id, pair.confidence,
                                                                   pair.reason + "；同章节保序锚点确认移动", True)
                 else:

@@ -23,7 +23,7 @@ from .structure import ParsedNode, ParsedProject, parse_project
 CACHE_FORMAT = 1
 OWNER_FILE = ".latex-review-owner"
 _PARSER_FILES = ("cache.py", "sources.py", "source_map.py", "bibliography.py", "macros.py", "structure.py", "matching.py", "comparison.py",
-                 "structured_diff.py", "text_diff.py", "contract.py")
+                 "structured_diff.py", "text_diff.py", "contract.py", "latex_commands.py")
 _RENDERER_FILES = ("preview.py", "report.py", "numbering.py", "reading_position.js")
 
 

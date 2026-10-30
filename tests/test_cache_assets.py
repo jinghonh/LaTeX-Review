@@ -7,6 +7,8 @@ import subprocess
 import sys
 import tempfile
 
+import pytest
+
 import latex_review.cache as cache_module
 from latex_review.sources import resolve_sources
 from latex_review.structure import ParsedProject
@@ -423,7 +425,8 @@ def test_graphicspath_changes_resolved_path_with_same_bytes(tmp_path):
     assert sum("图资源路径变化" in detail["summary"] for detail in details) == 1
 
 
-def test_cache_module_change_invalidates_parse_key(tmp_path, monkeypatch):
+@pytest.mark.parametrize("changed_module", ["cache.py", "latex_commands.py"])
+def test_cache_module_change_invalidates_parse_key(tmp_path, monkeypatch, changed_module):
     module_root = tmp_path / "module-copy"
     module_root.mkdir()
     original_root = Path(cache_module.__file__).parent
@@ -443,7 +446,8 @@ def test_cache_module_change_invalidates_parse_key(tmp_path, monkeypatch):
         warm = cache_module.ParseCache(directory)
         warm.parse(expanded, parser=parse)
         assert warm.events[0]["state"] == "hit"
-        (module_root / "cache.py").write_bytes((module_root / "cache.py").read_bytes() + b"\n# serialization update\n")
+        path = module_root / changed_module
+        path.write_bytes(path.read_bytes() + b"\n# implementation update\n")
         changed = cache_module.ParseCache(directory)
         changed.parse(expanded, parser=parse)
         assert changed.events[0]["state"] == "miss"
