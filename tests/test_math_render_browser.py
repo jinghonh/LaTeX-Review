@@ -93,3 +93,41 @@ def test_tagged_display_equations_do_not_scroll_vertically(chrome,tmp_path):
         equation=equations.nth(index);equation.hover();page.mouse.wheel(0,200)
         assert equation.evaluate('n=>n.scrollTop')==0
     page.close()
+
+
+def test_multline_stays_compact_on_wide_and_narrow_pages(chrome, tmp_path):
+    from latex_review.contract import ComparisonSource
+    from latex_review.preview import render_preview
+    from latex_review.sources import ProjectSource
+    from latex_review.structure import parse_project
+
+    source = r'''\documentclass{article}\begin{document}
+\begin{multline}
+D_{e_k}\varphi_m(\omega)\approx\\
+\frac{\varphi_m(\cos\varepsilon\,\omega+\sin\varepsilon\,e_k)-\varphi_m(\cos\varepsilon\,\omega-\sin\varepsilon\,e_k)}{2\varepsilon},
+\tag{16}\end{multline}
+\end{document}'''
+    (tmp_path / 'main.tex').write_text(source)
+    project = parse_project(ProjectSource('new', tmp_path, 'main.tex',
+                            ComparisonSource('directory', str(tmp_path))).expand())
+    report = tmp_path / 'preview.html'
+    style = Path(__file__).parents[1].joinpath('src/latex_review/report.css').read_text()
+    report.write_text(render_preview(None, project).compose(style=style))
+    page = chrome.new_page(viewport={'width': 2400, 'height': 800})
+    try:
+        page.goto(report.as_uri())
+        page.wait_for_function("document.querySelector('#math-status').dataset.state==='ready'", timeout=45000)
+        equation = page.locator('.node-equation')
+        original = equation.locator('.math-tex').get_attribute('data-annotation-math-source')
+        for width in (2400, 1280, 390):
+            page.set_viewport_size({'width': width, 'height': 800})
+            left = equation.locator('mjx-mtr mjx-mtd > mjx-msub').first.bounding_box()
+            fraction = equation.locator('mjx-mlabeledtr mjx-mfrac').bounding_box()
+            assert abs(fraction['x'] - left['x']) < 100
+            assert fraction['y'] > left['y']
+            assert equation.locator('[id="mjx-eqn:16"]').count() == 1
+            assert equation.locator('.math-tex').get_attribute('data-annotation-math-source') == original
+            assert equation.evaluate('n => n.scrollHeight <= n.clientHeight + 1')
+            assert page.evaluate('document.documentElement.scrollWidth <= innerWidth')
+    finally:
+        page.close()

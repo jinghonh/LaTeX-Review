@@ -295,6 +295,16 @@ main {
   margin:1em 0;
 }
 
+.review-node p,.review-node figcaption,.translation-block {
+  text-align:justify;
+}
+
+/* Keep multline's first and last rows together on wide reading pages. */
+.math-tex[data-display="true"][data-annotation-math-source*="{multline"] {
+  width:fit-content;
+  margin-inline:auto;
+}
+
 .node-section,.node-subsection,.node-subsubsection {
   margin-top:1.8rem;
 }

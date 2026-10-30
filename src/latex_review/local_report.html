@@ -6,11 +6,11 @@
 <title>__TITLE__ · LaTeX Review</title>
 <style>
 html,body{margin:0;width:100%;height:100%;overflow:hidden}
-body{display:flex;flex-direction:column}nav{padding:8px 14px;font:14px system-ui;background:#f4f5f7;display:flex;gap:16px}nav[hidden]{display:none}iframe{display:block;width:100%;flex:1;border:0}
+body{display:flex;flex-direction:column}nav{padding:8px 14px;font:14px system-ui;background:#f3f2ed;border-bottom:1px solid #dddfd6;display:flex;flex-shrink:0}nav a{display:inline-flex;align-items:center;gap:6px;padding:6px 12px;color:#32634f;background:#fffefa;border:1px solid #dddfd6;border-radius:6px;text-decoration:none}nav a:hover{background:#e9ede6}nav a:focus-visible{outline:2px solid #32634f;outline-offset:3px}iframe{display:block;width:100%;flex:1;min-height:0;border:0}
 </style>
 </head>
 <body>
-<nav id="entries" aria-label="论文入口" hidden></nav>
+<nav aria-label="工作空间导航"><a href="/"><span aria-hidden="true">←</span>返回工作空间</a></nav>
 <iframe title="__TITLE__" src="__WORKER_BASE__/report.html" referrerpolicy="no-referrer"></iframe>
 <script>
 const generation=__GENERATION__;
@@ -20,15 +20,8 @@ async function refreshWorker(){
     if(!response.ok)return;
     const {papers}=await response.json();
     const paper=papers.find(p=>p.paper_id==='__PAPER_ID__');
-    const nav=document.querySelector('#entries');
-    nav.replaceChildren();
-    for(const other of papers.filter(p=>p.root===paper?.root)){
-      const peer=other.slots?.__KIND__;
-      if(peer?.url){const a=document.createElement('a');a.textContent=other.entry;a.href=new URL(peer.url,location.href).pathname;if(other.paper_id===paper.paper_id)a.setAttribute('aria-current','page');nav.append(a)}
-    }
-    nav.hidden=nav.children.length<2;
     const slot=paper?.slots?.__KIND__;
-    if(slot&&slot.state!=='updating'&&slot.generation!==generation)location.reload();
+    if(slot?.state==='ready'&&slot.generation!==generation)location.reload();
   }catch{}
 }
 refreshWorker();
