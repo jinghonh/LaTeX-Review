@@ -277,7 +277,7 @@ class CheckCoordinator:
         return {'available': True, 'read_only': False, 'paper_id': paper_id,
                 'configuration_hash': identity_hash(self._configuration(context)),
                 'capabilities': {'run': True, 'cancel': True, 'knowledge': True,
-                                 'decisions': True, 'semantic_import': True, 'export': True},
+                                 'decisions': True, 'annotation_conversion': True, 'semantic_import': True, 'export': True},
                 'state': latest['state'] if latest else ('stale' if stale else report['status'] if report else 'not_run'),
                 'current_input_id': report['input_id'] if report and not stale else None,
                 'current_run': current_run,
@@ -409,6 +409,10 @@ class CheckCoordinator:
     def review_finding(self, paper_id, finding_key, body):
         from .finding_review import decide
         return decide(self, paper_id, finding_key, body)
+
+    def annotate_finding(self, paper_id, finding_key, body, *, page_snapshot):
+        from .annotation_link import convert
+        return convert(self, paper_id, finding_key, body, page_snapshot=page_snapshot)
 
     def decide(self, paper_id, body):
         with self.lock:

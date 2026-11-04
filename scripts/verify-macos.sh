@@ -7,3 +7,16 @@ fi
 python3 -m pytest -q
 latex-review --help >/dev/null
 latex-review --version >/dev/null
+latex-review-check --help >/dev/null
+latex-review-check query --help >/dev/null
+latex-review-check semantic export --help >/dev/null
+# Synthetic core timing only; no provider, TeX compilation, or private paper.
+performance_json=$(mktemp "${TMPDIR:-/tmp}/latex-review-check-performance.XXXXXX")
+python3 Docs/design/writing-check/evidence/benchmark_checks.py --output "$performance_json"
+python3 - "$performance_json" <<'PY'
+import json
+import sys
+from pathlib import Path
+result = json.loads(Path(sys.argv[1]).read_text())
+assert result['cold_target_met'] and result['hot_target_met'], result
+PY

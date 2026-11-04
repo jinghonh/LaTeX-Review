@@ -1,5 +1,5 @@
 /* Shared workspace: existing reader styles are intentionally left intact. */
-#review-workspace > [role=tablist] {display:flex;gap:.4rem;flex-wrap:wrap;padding:.65rem 1rem;background:#f7f9fc;border-bottom:1px solid #cbd5e1;position:sticky;top:0;z-index:35;}
+#review-workspace > [role=tablist] {display:flex;gap:.4rem;flex-wrap:wrap;padding:.65rem 1rem;background:#f7f9fc;border-bottom:1px solid #cbd5e1;position:static;}
 #review-workspace > [role=tablist] button {font:inherit;padding:.5rem .75rem;border:1px solid #9caec3;border-radius:.4rem;color:#24374d;background:white;cursor:pointer;}
 #review-workspace > [role=tablist] button[aria-selected=true] {background:#173e68;color:white;border-color:#173e68;font-weight:600;}
 #review-workspace [hidden] {display:none!important;}

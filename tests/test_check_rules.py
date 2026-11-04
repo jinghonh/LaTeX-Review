@@ -36,6 +36,45 @@ def test_current_rules_deterministic_exact_grouped_evidence(tmp_path):
         validate_report(bad)
 
 
+def test_definition_rename_rechecks_unchanged_cross_file_use_with_full_fallback(tmp_path):
+    entry = tmp_path / 'main.tex'
+    entry.write_text(r'\begin{document}\input{definition}\input{uses}\end{document}')
+    definition, uses = tmp_path / 'definition.tex', tmp_path / 'uses.tex'
+    definition.write_text(r'\label{shared}')
+    uses.write_text(r'Unchanged cross-file use: \ref{shared}.')
+    unchanged = uses.read_bytes()
+    before = evaluate_current(build_check_document(capture_snapshot(entry)))
+    assert not before['findings']
+    definition.write_text(r'\label{renamed}')
+    after = evaluate_current(build_check_document(capture_snapshot(entry)), previous=before, scope='changed')
+    assert after['evaluation_mode'] == 'full'
+    assert after['fallback_reason'] == 'full_scan_required_for_global_rules'
+    assert uses.read_bytes() == unchanged
+    finding = next(f for f in after['findings'] if f['rule_id'] == 'unresolved_reference' and f['target'] == 'shared')
+    assert finding['evidence'][0]['file'] == 'uses.tex'
+    assert finding['evidence'][0]['quote'] == r'\ref{shared}'
+
+
+def test_new_knowledge_policy_searches_unchanged_included_text(tmp_path):
+    from latex_review.checks.registry import empty_registry
+    entry = tmp_path / 'main.tex'
+    entry.write_text(r'\begin{document}\input{uses}\end{document}')
+    uses = tmp_path / 'uses.tex'
+    uses.write_text('Previously unregistered AliasToken in unchanged prose.')
+    unchanged = uses.read_bytes()
+    document = build_check_document(capture_snapshot(entry))
+    registry = empty_registry()
+    before = evaluate_current(document, knowledge=registry)
+    assert not before['findings']
+    registry['concepts'].append({'id': 'new-term', 'canonical_name': 'Preferred', 'forbidden_names': ['AliasToken']})
+    after = evaluate_current(document, previous=before, knowledge=registry, scope='changed')
+    assert after['evaluation_mode'] == 'full' and uses.read_bytes() == unchanged
+    finding = next(f for f in after['findings'] if f['rule_id'] == 'term.forbidden_name')
+    assert finding['evidence'][0]['file'] == 'uses.tex' and finding['evidence'][0]['quote'] == 'AliasToken'
+    assert finding['delta_status'] == 'not_comparable'
+    assert 'knowledge_hash_changed' in after['comparison']['reasons']
+
+
 def test_resolution_only_when_comparable_complete(tmp_path):
     _, before = evaluate(tmp_path, r'\ref{gone}')
     _, after = evaluate(tmp_path, 'Fixed', previous=before)

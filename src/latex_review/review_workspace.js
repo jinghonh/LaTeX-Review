@@ -16,6 +16,8 @@
     };
     let frozen = null;
     try { frozen = JSON.parse(document.getElementById('checks-data')?.textContent || 'null'); } catch (_) { /* readable old report */ }
+    let previewDiagnostics = {diagnostics: []};
+    try { previewDiagnostics = JSON.parse(document.getElementById('preview-diagnostics-data')?.textContent || 'null') || previewDiagnostics; } catch (_) { /* old reports have no diagnostic adapter */ }
     const root = element('div', undefined, {id: 'review-workspace'});
     const nav = element('nav', undefined, {'aria-label': '论文工作区', role: 'tablist'});
     const reading = element('section', undefined, {id: 'workspace-reading', role: 'tabpanel', 'aria-label': '阅读与变更'});
@@ -38,7 +40,10 @@
       panels[key].setAttribute('aria-labelledby', tabs[key].id);
       nav.append(tabs[key]);
     });
-    let current = 'reading', readingY = window.scrollY;
+    // Initial selection is not a tab switch: do not save a transient parser-time
+    // layout adjustment as the reading position. The reader restores persisted
+    // positions after load; later switches capture the actual reading position.
+    let current = null, readingY = location.hash ? window.scrollY : 0;
     function select(key, focus = false) {
       if (!panels[key]) key = 'reading';
       if (current === 'reading') readingY = window.scrollY;
@@ -48,11 +53,15 @@
         tabs[name].setAttribute('aria-selected', String(name === key));
         tabs[name].tabIndex = name === key ? 0 : -1;
       });
-      try {
-        const url = new URL(location.href);
-        url.searchParams.set('panel', key);
-        history.replaceState(null, '', url);
-      } catch (_) { /* opaque historical origin */ }
+      // Do not rewrite the initial/default report URL or frozen-history routes.
+      // Some history readers intentionally accept only their exact published URL.
+      if (focus && document.querySelector('meta[name="latex-review-readonly"]')?.content !== 'snapshot') {
+        try {
+          const url = new URL(location.href);
+          url.searchParams.set('panel', key);
+          history.replaceState(null, '', url);
+        } catch (_) { /* opaque historical origin */ }
+      }
       if (focus) tabs[key].focus({preventScroll: true});
       window.scrollTo(0, key === 'reading' ? readingY : 0);
     }
@@ -74,7 +83,7 @@
     panels.checks.append(filter);
     const filterFields = {};
     const filterBar = element('div', undefined, {class: 'workspace-actions'});
-    Object.entries({severity: ['严重度', 'info', 'warning', 'error'], origin: ['来源', 'deterministic', 'semantic'], review_state: ['人工状态', 'unreviewed', 'confirmed', 'rejected', 'waived'], lifecycle: ['生命周期', 'current', 'resolved', 'stale', 'unknown'], delta_status: ['与基线比较', 'new', 'existing', 'resolved', 'not_comparable']}).forEach(([field, values]) => {
+    Object.entries({severity: ['严重度', 'info', 'warning', 'error'], origin: ['来源', 'deterministic', 'preview_diagnostic', 'semantic'], review_state: ['人工状态', 'unreviewed', 'confirmed', 'rejected', 'waived'], lifecycle: ['生命周期', 'current', 'resolved', 'stale', 'unknown'], delta_status: ['与基线比较', 'new', 'existing', 'resolved', 'not_comparable']}).forEach(([field, values]) => {
       const select = element('select', undefined, {'aria-label': values[0]});
       select.append(element('option', values[0] + '：全部', {value: ''}));
       values.slice(1).forEach(value => select.append(element('option', value, {value})));
@@ -98,6 +107,39 @@
       (target || filter).focus({preventScroll: true});
     }
     drawer.addEventListener('keydown', event => { if (event.key === 'Escape') { event.preventDefault(); closeEvidence(); } });
+    let diagnosticProvenance = new Map();
+    const diagnosticLocations = record => [record.diagnostic.source_new, ...(record.diagnostic.related_sources_new || [])].filter(Boolean);
+    function sameLocation(location, evidence) {
+      if (location.confidence !== 1 || location.uncertainty_reason || evidence.reliability !== 'exact' || location.file !== evidence.file) return false;
+      const coordinates = [location.start_line, location.start_column, location.end_line, location.end_column, evidence.start_line, evidence.start_column, evidence.end_line, evidence.end_column];
+      if (!coordinates.every(Number.isInteger)) return false;
+      const before = (line, column, otherLine, otherColumn) => line < otherLine || (line === otherLine && column <= otherColumn);
+      return before(location.start_line, location.start_column, evidence.start_line, evidence.start_column) && before(evidence.end_line, evidence.end_column, location.end_line, location.end_column);
+    }
+    function unifiedIssues() {
+      diagnosticProvenance = new Map();
+      const result = [...findings], candidates = new Map();
+      const comparable = previewDiagnostics.content_id && previewDiagnostics.content_id === report?.input?.content_id;
+      findings.filter(finding => finding.origin === 'deterministic' && finding.lifecycle === 'current').forEach(finding => {
+        const key = JSON.stringify([finding.rule_id, finding.target]);
+        candidates.set(key, [...(candidates.get(key) || []), finding]);
+      });
+      (previewDiagnostics.diagnostics || []).forEach(record => {
+        const diagnostic = record.diagnostic, locations = diagnosticLocations(record);
+        const match = comparable && record.target && (candidates.get(JSON.stringify([diagnostic.code, record.target])) || []).find(finding => locations.some(location => (finding.evidence || []).some(evidence => sameLocation(location, evidence))));
+        if (match) {
+          diagnosticProvenance.set(match.finding_key, [...(diagnosticProvenance.get(match.finding_key) || []), record]);
+        } else {
+          const key = 'preview:' + record.id;
+          diagnosticProvenance.set(key, [record]);
+          result.push({finding_key: key, rule_id: diagnostic.code, message: diagnostic.message,
+            severity: diagnostic.severity, origin: 'preview_diagnostic', assessment: 'preview_only',
+            lifecycle: comparable && !capability.stale ? 'unknown' : 'stale', review_state: 'not_applicable',
+            delta_status: diagnostic.rule_status || 'not_comparable', evidence: [], related_occurrences: []});
+        }
+      });
+      return result;
+    }
     function showEvidence(finding, trigger) {
       drawerTrigger = trigger;
       drawer.replaceChildren(button('关闭证据', closeEvidence), element('h2', finding.message || finding.rule_id || finding.hypothesis));
@@ -115,7 +157,13 @@
         }));
         drawer.append(block);
       });
-      if (capability.available && capability.capabilities?.decisions && !capability.stale && report?.input_id === capability.current_input_id && finding.origin !== 'semantic' && finding.lifecycle === 'current') {
+      const diagnostics = diagnosticProvenance.get(finding.finding_key) || [];
+      if (diagnostics.length) {
+        drawer.append(element('h3', '预览诊断来源（仅展示，不是检查源码证据）'));
+        diagnostics.forEach(record => drawer.append(element('pre', JSON.stringify(record.diagnostic, null, 2))));
+        if (finding.origin === 'preview_diagnostic') drawer.append(element('p', '该诊断没有独立验证的源码证据，不提供作者决定或源码批注操作。'));
+      }
+      if (capability.available && capability.capabilities?.decisions && !capability.stale && report?.input_id === capability.current_input_id && finding.origin === 'deterministic' && finding.lifecycle === 'current') {
         const decisions = element('div', undefined, {class: 'workspace-actions'});
         [['confirm', '作者确认问题'], ['reject', '拒绝此建议'], ['waive', '添加有条件例外'], ['defer', '暂不决定']].forEach(([action, label]) => {
           const control = button(label, async () => {
@@ -141,6 +189,28 @@
         });
         drawer.append(decisions);
       }
+      if (capability.available && capability.capabilities?.annotation_conversion && !capability.stale && report?.input_id === capability.current_input_id && finding.origin === 'deterministic' && finding.lifecycle === 'current' && finding.evidence?.length && finding.evidence.every(e => e.reliability === 'exact')) {
+        const convert = button('转为批注（不解决问题）', async () => {
+          if (!window.confirm('将此问题转入现有批注？不会修改 LaTeX 源文件，也不会将问题标为已解决。重复操作会打开同一批注。')) return;
+          convert.disabled = true;
+          try {
+            const annotations = window.reviewAnnotations;
+            if (!annotations?.isReady() || !annotations.refresh || !annotations.focus) throw new Error('当前页面的批注接口不可用，请重建或刷新预览。');
+            if (!crypto.subtle) throw new Error('浏览器不支持本地证据校验，请使用 localhost 安全上下文。');
+            const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(JSON.stringify(finding.evidence)));
+            const fingerprint = Array.from(new Uint8Array(digest), byte => byte.toString(16).padStart(2, '0')).join('');
+            const linked = await api(`findings/${encodeURIComponent(finding.finding_key)}/annotation`, {input_id: report.input_id, evidence_fingerprint: fingerprint});
+            await annotations.refresh();
+            const thread = annotations.getSnapshot().threads.find(item => item.id === linked.annotation_thread_id);
+            if (!thread) throw new Error('该问题已关联批注，但批注已删除或当前页面无法显示；不会重复新建。');
+            select('reading');
+            drawer.hidden = true;
+            annotations.focus(thread);
+          } catch (error) { drawer.append(element('p', error.message, {role: 'alert'})); }
+          finally { convert.disabled = false; }
+        });
+        drawer.append(convert);
+      }
       const occurrence = (finding.related_occurrences || []).find(item => item.node_id);
       if (occurrence) drawer.append(button('在论文中查看', () => {
         select('reading');
@@ -152,15 +222,18 @@
       drawer.focus({preventScroll: true});
     }
     function render() {
-      const selected = findings.filter(item => (!filter.value || JSON.stringify(item).toLocaleLowerCase().includes(filter.value.toLocaleLowerCase())) && Object.entries(filterFields).every(([field, select]) => !select.value || (field === 'lifecycle' && capability.stale ? 'stale' : item[field]) === select.value));
+      const issues = unifiedIssues();
+      const selected = issues.filter(item => (!filter.value || JSON.stringify([item, diagnosticProvenance.get(item.finding_key)]).toLocaleLowerCase().includes(filter.value.toLocaleLowerCase())) && Object.entries(filterFields).every(([field, select]) => !select.value || (field === 'origin' && select.value === 'preview_diagnostic' ? diagnosticProvenance.has(item.finding_key) : (field === 'lifecycle' && capability.stale ? 'stale' : item[field]) === select.value)));
       if (offset >= selected.length) offset = 0;
-      count.textContent = `问题条目数 ${selected.length} · 命中位置数 ${selected.reduce((sum, item) => sum + (item.evidence?.length || 0), 0)}`;
+      const hits = item => item.origin === 'preview_diagnostic' ? new Set((diagnosticProvenance.get(item.finding_key) || []).flatMap(diagnosticLocations).filter(location => location.file && location.start_line).map(location => JSON.stringify([location.file, location.start_line, location.start_column, location.end_line, location.end_column]))).size : (item.evidence?.length || 0);
+      count.textContent = `问题条目数 ${selected.length} · 命中位置数 ${selected.reduce((sum, item) => sum + hits(item), 0)}`;
       list.replaceChildren();
       selected.slice(offset, offset + 50).forEach(finding => {
         const row = element('li');
         const open = button(`${finding.message || finding.rule_id} · ${finding.lifecycle} · ${finding.review_state}`, () => showEvidence(finding, open));
         open.dataset.findingKey = finding.finding_key;
-        row.append(open);
+        const source = finding.origin === 'preview_diagnostic' ? '预览诊断（仅展示）' : finding.origin === 'semantic' ? 'AI 候选' : '确定性规则';
+        row.append(open, element('span', ` · 来源：${source}${finding.origin !== 'preview_diagnostic' && diagnosticProvenance.has(finding.finding_key) ? ' + 预览诊断' : ''}`));
         list.append(row);
       });
       paging.replaceChildren();
@@ -180,7 +253,7 @@
       }
       if (report) {
         const incomplete = (report.coverage || []).some(item => !item.complete);
-        notice.textContent = `${capability.stale ? '上次结果（已过期） · ' : ''}${findings.length ? '检查结果' : '已检查范围内未发现规则问题'}${incomplete ? ' · 部分范围未检查' : ''}`;
+        notice.textContent = `${capability.stale ? '上次结果（已过期） · ' : ''}${issues.length ? '检查与预览问题' : '已检查范围内未发现规则问题'}${incomplete ? ' · 部分范围未检查' : ''}`;
       }
       runAll.disabled = runChanged.disabled = !capability.available || !capability.capabilities?.run || !!activeRun;
       cancel.disabled = !activeRun;
@@ -253,7 +326,7 @@
     window.addEventListener('review-knowledge-updated', async () => {
       try { capability = await api('status'); render(); } catch (error) { notice.textContent = error.message; }
     });
-    window.reviewWorkspace = {element, button, panels, api, showEvidence, get capability() { return capability; }, get report() { return report; }, refresh: render};
+    window.reviewWorkspace = {element, button, panels, api, showEvidence, get capability() { return capability; }, get report() { return report; }, get unifiedIssues() { return unifiedIssues(); }, refresh: render};
     select(new URLSearchParams(location.search).get('panel') || 'reading');
     render();
     window.dispatchEvent(new Event('review-workspace-ready'));

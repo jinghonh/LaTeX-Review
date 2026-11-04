@@ -71,6 +71,8 @@ def dispatch(coordinator, paper_id, suffix, method, query, body=None):
         return coordinator.evidence(paper_id, cursor=int(one('cursor', '0')), limit=int(one('limit', '50'))), 200
     if suffix == 'knowledge' and method in ('GET', 'POST'):
         return coordinator.knowledge(paper_id, body if method == 'POST' else None, source=one('source')), 200
+    if len(parts) == 3 and parts[0] == 'findings' and parts[2] == 'annotation' and method == 'POST':
+        return coordinator.annotate_finding(paper_id, parts[1], body, page_snapshot=page_snapshot), 200
     if len(parts) == 3 and parts[0] == 'findings' and parts[2] == 'decisions' and method == 'POST':
         return coordinator.review_finding(paper_id, parts[1], body), 200
     if suffix == 'decisions' and method == 'POST':
@@ -214,6 +216,8 @@ def worker_route(handler):
             body = {**body, '_page_snapshot': metadata}
         if suffix == 'runs' and body is not None:
             body = {**body, 'paper_id': paper_id, 'page_version': page_version}
+        if body is not None and suffix.startswith('findings/') and suffix.endswith('/annotation'):
+            body = {**body, '_annotation_directory': str(handler.directory), 'page_version': page_version}
         from ..local_client import checks_request
         try:
             value = checks_request(paper_id, suffix, body, query=parsed.query)
@@ -222,7 +226,7 @@ def worker_route(handler):
                 raise
             value = {'available': False, 'read_only': True, 'paper_id': paper_id, 'state': 'unavailable',
                      'current_input_id': None, 'current_run': None, 'stale': True, 'coverage': [],
-                     'capabilities': {key: False for key in ('run', 'cancel', 'knowledge', 'decisions', 'semantic_import', 'export')},
+                     'capabilities': {key: False for key in ('run', 'cancel', 'knowledge', 'decisions', 'annotation_conversion', 'semantic_import', 'export')},
                      'message': '本地入口不可用；仅可阅读已有冻结结果。'}
         if bootstrap:
             value = {**value, 'paper_id': paper_id, 'page_version': page_version, 'token': token}

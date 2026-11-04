@@ -536,7 +536,8 @@ def _report_html(document: ReviewDocument, preview: PreviewResult, old: ParsedPr
     }
     fingerprint = sha256(json.dumps(fingerprint_data, ensure_ascii=False, sort_keys=True).encode()).hexdigest()
     reading = build_reading(new, units, old=old, pairs=pairs, fingerprint=fingerprint,
-                            checks_report=checks_report)
+                            checks_report=checks_report,
+                            preview_diagnostics=(*document.diagnostics, *preview.diagnostics))
     severity_labels = {"error": "错误", "warning": "提醒", "info": "说明"}
     diagnostics_html = "".join(
         f'<li><strong>{_e(severity_labels.get(item.severity, item.severity))}</strong> · {_e(item.message)}</li>'

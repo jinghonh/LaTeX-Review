@@ -791,6 +791,15 @@ class AnnotationSession:
         fast = incremental and operation not in ('import', 'suggestion_preview', 'suggestion_apply')
         return self._store._dispatch(content, request, progress=progress, incremental=fast)
 
+    def receipt(self, request_id):
+        """Read a durable idempotency receipt without executing a mutation."""
+        _text(request_id, 'request_id', 256)
+        if not self.stored:
+            return None
+        with self._store._locked() as data:
+            previous = data['requests'].get(request_id)
+            return deepcopy(previous['response']) if previous else None
+
     def read(self, *, progress=None):
         return self._store._read(self.content, progress=progress)
 

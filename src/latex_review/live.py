@@ -86,7 +86,8 @@ def build(source: ProjectSource, output: Path, revision: int = 1) -> list[str]:
     # to the exact capture used to render the page.
     from dataclasses import replace
     snapshot = replace(snapshot, parsed=project)
-    reading = build_reading(project, units, revision=revision, check_snapshot=snapshot)
+    reading = build_reading(project, units, revision=revision, check_snapshot=snapshot,
+                            preview_diagnostics=all_diagnostics)
     _write(output / 'checks.json', json.dumps(reading.checks, ensure_ascii=False))
     _write(output / 'checks-page.json', json.dumps({**snapshot.identity,
            'page_version': annotation_content['version_id'],

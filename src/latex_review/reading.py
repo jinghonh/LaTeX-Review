@@ -35,7 +35,8 @@ def _script(name: str, revision: int | None = None) -> str:
 
 def build_reading(new: ParsedProject, units: list[dict], *, old: ParsedProject | None = None,
                   pairs: tuple[tuple[str, str], ...] = (), fingerprint: str = '',
-                  revision: int = 1, check_snapshot=None, checks_report=None) -> ReadingFeatures:
+                  revision: int = 1, check_snapshot=None, checks_report=None,
+                  preview_diagnostics=()) -> ReadingFeatures:
     live = old is None
     projects = [('new', new)] if live else [('old', old), ('new', new)]
     nodes = [{'side': side, 'id': node.review.id, 'type': node.review.type,
@@ -67,7 +68,10 @@ def build_reading(new: ParsedProject, units: list[dict], *, old: ParsedProject |
         previous = evaluate_current(build_check_document(snapshot_from_project(old))) if old is not None else None
         frozen_checks = evaluate_current(build_check_document(check_snapshot or snapshot_from_project(new)), previous=previous)
     workspace_css = files('latex_review').joinpath('review_workspace.css').read_text(encoding='utf-8')
-    scripts += (_data('checks-data', frozen_checks) + '<style>' + workspace_css + '</style>'
+    from .checks.diagnostics import preview_diagnostics_data
+    display_diagnostics = preview_diagnostics_data(preview_diagnostics, frozen_checks['input']['content_id'])
+    scripts += (_data('checks-data', frozen_checks) + _data('preview-diagnostics-data', display_diagnostics)
+                + '<style>' + workspace_css + '</style>'
                 + _script('review_workspace.js') + _script('review_knowledge.js')
                 + _script('review_semantic.js'))
     options = [('bilingual', '英中对照'), ('original', '英文原文')]
