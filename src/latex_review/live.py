@@ -9,7 +9,7 @@ import json
 import os
 from pathlib import Path
 import sys
-from threading import Thread
+from threading import Lock, Thread, Timer
 import webbrowser
 
 from .contract import ComparisonSource
@@ -49,9 +49,12 @@ def _write(path: Path, content: str) -> None:
 
 def build(source: ProjectSource, output: Path, revision: int = 1) -> list[str]:
     from .project_profile import settings
-    from .macros import validate_macros
+    from .identity import identity_hash
     configuration = settings(source)
-    project = parse_project(source.expand(), macros=validate_macros(configuration.get("macros", {})), include_title=True)
+    from .checks.snapshot import capture_snapshot
+    snapshot = capture_snapshot(source.entry, root=source.root, configuration=configuration,
+                                source=source, include_title=True)
+    project = snapshot.parsed
     compile_diagnostics = []
     compiled_link = ""
     if configuration.get("compile", {}).get("enabled", False):
@@ -79,7 +82,15 @@ def build(source: ProjectSource, output: Path, revision: int = 1) -> list[str]:
     all_diagnostics = [*compile_diagnostics, *preview.diagnostics, *diagnostics]
     messages = [item.message for item in all_diagnostics]
     from .reading import build_reading
-    reading = build_reading(project, units, revision=revision)
+    # Compilation may add numbering metadata, while all evidence remains bound
+    # to the exact capture used to render the page.
+    from dataclasses import replace
+    snapshot = replace(snapshot, parsed=project)
+    reading = build_reading(project, units, revision=revision, check_snapshot=snapshot)
+    _write(output / 'checks.json', json.dumps(reading.checks, ensure_ascii=False))
+    _write(output / 'checks-page.json', json.dumps({**snapshot.identity,
+           'page_version': annotation_content['version_id'],
+           'configuration_hash': identity_hash(snapshot.configuration)}, ensure_ascii=False))
     style = files('latex_review').joinpath('report.css').read_text(encoding='utf-8')
     diagnostic_items = ''
     for item in all_diagnostics:
@@ -156,6 +167,80 @@ def prepare_request(entry, *, root=None, output=None, config=None, cache=None, p
             'configuration_fingerprint': identity_hash(values)}
 
 
+def _check_saved_recipe(recipe, configuration):
+    """Notify the existing entry after a successful build; never start a daemon."""
+    settings = configuration.get('checks', {})
+    if not settings.get('enabled', True) or not settings.get('on_save', True):
+        return
+    from .local_client import checks_request
+    from .local_protocol import LocalError
+    from .annotations import load_content
+    try:
+        content = load_content(recipe['output'])
+        # Debounce may outlive the last successful rebuild. Bind notification
+        # to that trusted rendered capture, never newer unrendered disk bytes.
+        page = json.loads((Path(recipe['output']) / 'checks-page.json').read_text(encoding='utf-8'))
+        latest = load_content(recipe['output'])
+        if (not isinstance(page, dict) or page.get('page_version') != content['version_id']
+                or latest['version_id'] != content['version_id'] or latest['entry'] != content['entry']
+                or page.get('entry') != content['entry'] or page.get('paper_id') != recipe['paper_id']):
+            return  # Mixed/legacy publication must be rebuilt; never guess a capture.
+        checks_request(recipe['paper_id'], 'runs', {'scope': 'changed', '_page_snapshot': page,
+                       'paper_id': recipe['paper_id'], 'page_version': content['version_id']})
+    except (LocalError, OSError, ValueError, KeyError):
+        # Checks have their own status/error channel; a failed coordinator may
+        # never take down or relabel a successfully built reading preview.
+        pass
+
+
+class _SavedCheckNotifier:
+    """Debounce only background check notification, never the preview rebuild."""
+    def __init__(self, recipe, stop):
+        self.recipe, self.stop = recipe, stop
+        self.lock = Lock()
+        self.timer = None
+        self.generation = 0
+        self.closed = False
+
+    def schedule(self, configuration):
+        settings = configuration.get('checks', {})
+        with self.lock:
+            self.generation += 1
+            generation = self.generation
+            if self.timer is not None:
+                self.timer.cancel()
+                self.timer = None
+            if (self.closed or self.stop.is_set() or not settings.get('enabled', True)
+                    or not settings.get('on_save', True)):
+                return
+            self.timer = Timer(settings.get('debounce_ms', 800) / 1000,
+                               self._notify, args=(generation, configuration))
+            self.timer.daemon = True
+            self.timer.start()
+
+    def _notify(self, generation, configuration):
+        with self.lock:
+            if self.closed or self.stop.is_set() or generation != self.generation:
+                return
+            self.timer = None
+        _check_saved_recipe(self.recipe, configuration)
+
+    def cancel_pending(self):
+        with self.lock:
+            self.generation += 1
+            if self.timer is not None:
+                self.timer.cancel()
+                self.timer = None
+
+    def close(self):
+        with self.lock:
+            self.closed = True
+            self.generation += 1
+            if self.timer is not None:
+                self.timer.cancel()
+                self.timer = None
+
+
 def run_worker(recipe, stop):
     """Internal runtime; public main always uses the resident service."""
     from .file_events import ProjectEvents
@@ -170,6 +255,8 @@ def run_worker(recipe, stop):
     config = _config(Path(recipe['config']), recipe['config_explicit'])
     source = ProjectSource('new', root, recipe['entry'], ComparisonSource('directory', str(root)), configuration=config)
     with ExitStack() as stack:
+        notifier = _SavedCheckNotifier(recipe, stop)
+        stack.callback(notifier.close)
         stack.enter_context(output_lease(output, wait=False, persistent=True))
         output.mkdir(parents=True, exist_ok=True)
         events = stack.enter_context(ProjectEvents(root, output, cache, force_polling=recipe['poll_files'],
@@ -195,6 +282,8 @@ def run_worker(recipe, stop):
         _write(output / 'live-status.json', json.dumps({'revision': revision, 'message': '持续预览已启动。'}, ensure_ascii=False))
         write_json(recipe['ready'], {'nonce': recipe['nonce'], 'pid': os.getpid(),
                                     'port': server.server_port, 'directory': str(output)})
+        from .project_profile import settings
+        notifier.schedule(settings(source))
         previous = initial
         # A source save between candidate generation and watcher creation must
         # trigger a refresh, even if the new watcher has not seen an event.
@@ -207,6 +296,7 @@ def run_worker(recipe, stop):
                     break
                 if current != previous or pending:
                     previous, pending = current, False
+                    notifier.cancel_pending()
                     try:
                         with rebuild_lock(output):
                             with report_directory(output) as candidate:
@@ -214,6 +304,7 @@ def run_worker(recipe, stop):
                                 source = replace(source, configuration=_config(Path(recipe["config"]), recipe["config_explicit"]))
                                 messages = build(source, candidate.directory, revision + 1)
                         revision += 1
+                        notifier.schedule(settings(source))
                         message = events.warning + f'已更新当前论文。预览诊断：{len(messages)} 项。'
                     except (OSError, ValueError, RuntimeError, SourceError) as exc:
                         message = f'更新失败，保留上次预览：{exc}'
@@ -222,6 +313,7 @@ def run_worker(recipe, stop):
                     warning = events.warning
                     _write(output / 'live-status.json', json.dumps({'revision': revision, 'message': warning}, ensure_ascii=False))
         finally:
+            notifier.close()
             server.shutdown()
             thread.join()
     return 0

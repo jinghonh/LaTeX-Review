@@ -387,6 +387,8 @@ class Manager:
         self.papers = {}
         self.slots = {}
         self.history_errors = {}
+        from .checks.service import CheckCoordinator
+        self.checks = CheckCoordinator(state, self.check_paper)
         self.history = History(state)
         self.history.recover_operations()
         (state / 'jobs').mkdir(exist_ok=True, mode=0o700)
@@ -418,6 +420,14 @@ class Manager:
         for (paper_id, kind), slot in self.slots.items():
             if kind == 'diff' and slot.saved and not self.papers[paper_id].get('history_initialized'):
                 self.papers[paper_id]['history_import'] = 'pending'
+
+    def check_paper(self, paper_id):
+        with self.lock:
+            paper = self.papers.get(paper_id)
+            if paper is None:
+                return None
+            slot = self.slots.get((paper_id, 'live')) or self.slots.get((paper_id, 'diff'))
+            return {**paper, 'checks_recipe': dict(slot.saved or {}) if slot else {}}
 
     @contextmanager
     def history_gate(self, paper_id, cancel=None):
@@ -803,6 +813,7 @@ class Manager:
         return {'text': raw.decode('utf-8', errors='replace'), 'truncated': size > 65536}
 
     def close(self):
+        self.checks.close()
         self.closed.set()
         for slot in list(self.slots.values()):
             slot.close()
@@ -842,6 +853,9 @@ class Handler(BaseHTTPRequestHandler):
         self.wfile.write(data)
 
     def do_GET(self):
+        from .checks.http import entry_route
+        if entry_route(self):
+            return
         try:
             path = urlsplit(self.path).path
             if history_image_request(self.headers, self.client_address[0], path):
@@ -944,7 +958,8 @@ class Handler(BaseHTTPRequestHandler):
         # Never use a client-supplied host or forwarded header as a proxy target.
         headers = {key: self.headers[key] for key in (
             'Content-Type', 'Content-Encoding', HEADER_TOKEN, 'X-LaTeX-Review-Delta-Encoding',
-            'Range', 'If-Modified-Since') if key in self.headers}
+            'Range', 'If-Modified-Since', 'X-LaTeX-Review-Paper-ID',
+            'X-LaTeX-Review-Page-Version', 'X-LaTeX-Review-Checks-Content-ID') if key in self.headers}
         if self.headers.get('Origin'):
             headers['Origin'] = f"http://127.0.0.1:{snapshot['port']}"
         connection = HTTPConnection('127.0.0.1', snapshot['port'], timeout=60)
@@ -977,6 +992,9 @@ class Handler(BaseHTTPRequestHandler):
         return True
 
     def do_POST(self):
+        from .checks.http import entry_route
+        if entry_route(self):
+            return
         try:
             self.local()
             if self.proxy_worker():

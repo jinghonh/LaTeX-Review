@@ -72,12 +72,18 @@ def _merge_translation(global_values: dict, project_values: dict) -> dict:
 def _config(path: Path, explicit: bool) -> dict:
     global_path = global_config_path()
     shared = _read_config(global_path, False)
-    if extra := set(shared) - {"translation"}:
-        raise ConfigurationError(f"全局配置 {global_path} 仅支持 [translation]，含未知字段：{', '.join(sorted(extra))}")
+    if extra := set(shared) - {"translation", "checks", "knowledge", "semantic"}:
+        raise ConfigurationError(f"全局配置 {global_path} 含未知字段：{', '.join(sorted(extra))}")
     data = _read_config(path.expanduser(), explicit)
     if "translation" in shared or "translation" in data:
         data["translation"] = _merge_translation(shared.get("translation", {}), data.get("translation", {}))
-    allowed = {"entry", "ignore", "render", "diff", "git", "output", "macros", "compile", "translation", "source", "project"}
+    for section in ("checks", "knowledge", "semantic"):
+        if section in shared or section in data:
+            inherited, local = shared.get(section, {}), data.get(section, {})
+            if not isinstance(inherited, dict) or not isinstance(local, dict):
+                raise ConfigurationError(f"配置 [{section}] 必须是表")
+            data[section] = {**inherited, **local}
+    allowed = {"entry", "ignore", "render", "diff", "git", "output", "macros", "compile", "translation", "source", "project", "checks", "knowledge", "semantic"}
     if extra := set(data) - allowed:
         raise ConfigurationError(f"配置含未知字段：{', '.join(sorted(extra))}")
     for key in ("entry", "output"):
@@ -342,6 +348,9 @@ def generate_report(options: dict, output: Path, *, configuration: dict,
         from .sources import SourcePair
         pair = SourcePair(*(replace(source, configuration=config) for source in (pair.old, pair.new)))
         old_expanded, new_expanded = pair.old.expand(), pair.new.expand()
+        # Retain dependency bytes at expansion time, not from a later render.
+        from .checks.snapshot import _raw_files, snapshot_from_project
+        check_bytes = [_raw_files(expanded) for expanded in (old_expanded, new_expanded)]
         from .identity import paper_identity
         local_identity = paper_identity(pair.new.worktree_origin or pair.new.root, pair.new.entry)
         run["baselines"] = {"old": baseline(old_expanded), "new": baseline(new_expanded)}
@@ -359,6 +368,9 @@ def generate_report(options: dict, output: Path, *, configuration: dict,
             except Exception as exc:
                 parsed.append(None)
                 failures.append((expanded.source.side, str(exc)))
+        for expanded, captured in zip((old_expanded, new_expanded), check_bytes):
+            if _raw_files(expanded) != captured:
+                raise SourceError('source_changed', expanded.source.side, '解析期间来源发生改变，请重试', expanded.source.entry)
         source_fallback = bool(failures or any(item and any(d.code == "plastex_parse_error" for d in item.diagnostics) for item in parsed))
         run["stages"]["parse"] = "degraded" if source_fallback else "complete"
         statuses = None
@@ -403,10 +415,14 @@ def generate_report(options: dict, output: Path, *, configuration: dict,
                                            parsed=tuple(parsed), extra_diagnostics=compile_diagnostics,
                                            rendering=rendering, statuses=statuses)
         else:
+            from .project_profile import settings as project_settings
             report = write_report(parsed[0], parsed[1], comparison, output,
                                   extra_diagnostics=compile_diagnostics,
                                   rendering=rendering, statuses=statuses,
-                                  annotation_project_root=_source_roots(options)[-1])
+                                  annotation_project_root=_source_roots(options)[-1],
+                                  check_snapshot=snapshot_from_project(parsed[1], raw_files=check_bytes[1],
+                                                                        configuration=project_settings(parsed[1].expanded.source),
+                                                                        include_title=True))
         write_cache_metadata(output, cache.metadata())
         from .report_rebuild import save_recipe
         save_recipe(output, old_expanded, new_expanded, config)

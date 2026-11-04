@@ -50,6 +50,9 @@ class ReportHandler(SimpleHTTPRequestHandler):
         self.wfile.write(content)
 
     def do_GET(self):
+        from .checks.http import worker_route
+        if worker_route(self):
+            return
         path = urlsplit(self.path).path
         if path == "/api/local-worker/health" and getattr(self.server, "local_nonce", None):
             if not self._local_request():
@@ -102,6 +105,9 @@ class ReportHandler(SimpleHTTPRequestHandler):
             self._json({"message": "未知的翻译接口"}, 404)
 
     def do_POST(self):
+        from .checks.http import worker_route
+        if worker_route(self):
+            return
         if urlsplit(self.path).path.startswith("/api/annotations"):
             return self._annotation_post()
         if not self._local_request():
@@ -267,6 +273,7 @@ class ReportServer(ThreadingHTTPServer):
         self.annotation_content_key = None
         self.annotation_cached_session = None
         self.annotation_token = secrets.token_urlsafe(32)
+        self.checks_token = secrets.token_urlsafe(32)
         super().__init__(*args, **kwargs)
 
     def annotation_session(self, directory):

@@ -1,0 +1,875 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://latex-review.dev/schemas/knowledge.schema.json",
+  "title": "KnowledgeRegistry",
+  "description": "One activated source; knowledge and reader introduction are distinct. Relative source coordinates use Unicode characters.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "revision",
+    "concepts",
+    "symbol_bindings",
+    "occurrences",
+    "relations",
+    "exceptions",
+    "decisions"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "1.0"
+    },
+    "revision": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "concepts": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/concept"
+      },
+      "maxItems": 100000
+    },
+    "symbol_bindings": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/symbol_binding"
+      },
+      "maxItems": 100000
+    },
+    "occurrences": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/occurrence"
+      },
+      "maxItems": 100000
+    },
+    "relations": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/relation"
+      },
+      "maxItems": 100000
+    },
+    "exceptions": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/exception"
+      },
+      "maxItems": 100000
+    },
+    "decisions": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/decision"
+      },
+      "maxItems": 100000
+    }
+  },
+  "$defs": {
+    "scope": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "entry": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 8192
+        },
+        "domain": {
+          "enum": [
+            "project",
+            "abstract",
+            "body",
+            "supplement",
+            "section",
+            "theorem",
+            "proof",
+            "algorithm",
+            "local"
+          ]
+        },
+        "parent_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "node_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "include_instance": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 8192
+        },
+        "start_order": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "end_order": {
+          "type": "integer",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "id"
+      ]
+    },
+    "evidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "entry": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 8192
+        },
+        "file": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 8192
+        },
+        "file_sha256": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "start": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "end": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "quote": {
+          "type": "string",
+          "maxLength": 1000000
+        },
+        "reliability": {
+          "enum": [
+            "exact",
+            "unknown"
+          ]
+        },
+        "reason": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 8192
+        },
+        "include_instance": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 8192
+        },
+        "content_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 8192
+        },
+        "start_line": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "start_column": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "end_line": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "end_column": {
+          "type": "integer",
+          "minimum": 1
+        }
+      },
+      "required": [
+        "entry",
+        "file",
+        "file_sha256",
+        "start",
+        "end",
+        "quote",
+        "reliability",
+        "reason",
+        "include_instance",
+        "content_id",
+        "start_line",
+        "start_column",
+        "end_line",
+        "end_column"
+      ]
+    },
+    "name_policy": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "text": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 8192
+        },
+        "contexts": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 8192
+          },
+          "maxItems": 100000
+        },
+        "case_sensitive": {
+          "type": "boolean"
+        },
+        "language": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 8192
+        },
+        "word_boundary": {
+          "type": "boolean"
+        },
+        "scope": {
+          "$ref": "#/$defs/scope"
+        }
+      },
+      "required": [
+        "text"
+      ]
+    },
+    "concept": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "status": {
+          "enum": [
+            "confirmed",
+            "stale"
+          ]
+        },
+        "scope": {
+          "$ref": "#/$defs/scope"
+        },
+        "evidence": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/evidence"
+          },
+          "maxItems": 100000
+        },
+        "source": {
+          "enum": [
+            "manual",
+            "declaration",
+            "author_confirmed"
+          ]
+        },
+        "notes": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 8192
+        },
+        "canonical_name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 8192
+        },
+        "allowed_names": {
+          "type": "array",
+          "items": {
+            "oneOf": [
+              {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 8192
+              },
+              {
+                "$ref": "#/$defs/name_policy"
+              }
+            ]
+          },
+          "maxItems": 100000
+        },
+        "forbidden_names": {
+          "type": "array",
+          "items": {
+            "oneOf": [
+              {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 8192
+              },
+              {
+                "$ref": "#/$defs/name_policy"
+              }
+            ]
+          },
+          "maxItems": 100000
+        },
+        "code_identifiers": {
+          "type": "array",
+          "items": {
+            "oneOf": [
+              {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 8192
+              },
+              {
+                "$ref": "#/$defs/name_policy"
+              }
+            ]
+          },
+          "maxItems": 100000
+        },
+        "contexts": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 8192
+          },
+          "maxItems": 100000
+        },
+        "case_sensitive": {
+          "type": "boolean"
+        },
+        "language": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 8192
+        },
+        "type": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 8192
+        },
+        "entries": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 8192
+          },
+          "maxItems": 100000
+        },
+        "definitions": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/evidence"
+          },
+          "maxItems": 100000
+        },
+        "acronym": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "short": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 8192
+            },
+            "expansion": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 8192
+            },
+            "case_sensitive": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "short",
+            "expansion"
+          ]
+        }
+      },
+      "required": [
+        "id",
+        "canonical_name"
+      ]
+    },
+    "symbol_binding": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "status": {
+          "enum": [
+            "confirmed",
+            "stale"
+          ]
+        },
+        "scope": {
+          "$ref": "#/$defs/scope"
+        },
+        "evidence": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/evidence"
+          },
+          "maxItems": 100000
+        },
+        "source": {
+          "enum": [
+            "manual",
+            "declaration",
+            "author_confirmed"
+          ]
+        },
+        "notes": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 8192
+        },
+        "symbol": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 8192
+        },
+        "meaning": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 8192
+        },
+        "concept_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "type": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 8192
+        },
+        "dimensions": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 8192
+        },
+        "shadows": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "incompatible_with": {
+          "type": "array",
+          "items": {"type": "string", "minLength": 1, "maxLength": 256},
+          "uniqueItems": true
+        }
+      },
+      "required": [
+        "id",
+        "symbol",
+        "meaning",
+        "scope",
+        "evidence"
+      ]
+    },
+    "occurrence": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "status": {
+          "enum": [
+            "confirmed",
+            "stale"
+          ]
+        },
+        "scope": {
+          "$ref": "#/$defs/scope"
+        },
+        "evidence": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/evidence"
+          },
+          "maxItems": 100000
+        },
+        "source": {
+          "enum": [
+            "manual",
+            "declaration",
+            "author_confirmed"
+          ]
+        },
+        "notes": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 8192
+        },
+        "target_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "role": {
+          "enum": [
+            "definition",
+            "formal_use",
+            "preview",
+            "mention",
+            "example",
+            "quoted",
+            "unknown"
+          ]
+        },
+        "entry": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 8192
+        },
+        "node_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "include_instance": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 8192
+        },
+        "reading_order": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "introduction_group": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        }
+      },
+      "required": [
+        "id",
+        "target_id",
+        "role",
+        "entry",
+        "scope",
+        "source",
+        "evidence"
+      ]
+    },
+    "relation": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "status": {
+          "enum": [
+            "candidate",
+            "confirmed",
+            "rejected",
+            "stale"
+          ]
+        },
+        "scope": {
+          "$ref": "#/$defs/scope"
+        },
+        "evidence": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/evidence"
+          },
+          "maxItems": 100000
+        },
+        "source": {
+          "enum": [
+            "manual",
+            "declaration",
+            "author_confirmed"
+          ]
+        },
+        "notes": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 8192
+        },
+        "kind": {
+          "enum": [
+            "same_concept",
+            "different_concept",
+            "depends_on",
+            "code_mapping"
+          ]
+        },
+        "from_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "to_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "strength": {
+          "enum": [
+            "strong",
+            "weak"
+          ]
+        }
+      },
+      "required": [
+        "id",
+        "kind",
+        "from_id",
+        "to_id",
+        "status",
+        "evidence"
+      ]
+    },
+    "exception": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "rule_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "object_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "finding_key": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 8192
+        },
+        "scope": {
+          "$ref": "#/$defs/scope"
+        },
+        "evidence": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/evidence"
+          },
+          "maxItems": 100000
+        },
+        "reason": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 8192
+        },
+        "valid_when": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "input_id": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 8192
+            },
+            "evidence_fingerprint": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 8192
+            },
+            "rule_version": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 8192
+            },
+            "knowledge_hash": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 8192
+            }
+          },
+          "required": []
+        },
+        "invalid_when": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 8192
+          },
+          "maxItems": 100000
+        },
+        "status": {
+          "enum": [
+            "active",
+            "stale",
+            "revoked"
+          ]
+        }
+      },
+      "required": [
+        "id",
+        "rule_id",
+        "reason",
+        "scope",
+        "valid_when",
+        "invalid_when"
+      ]
+    },
+    "decision": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "imported": {
+          "type": "boolean",
+          "description": "Imported audit history preserves foreign before/after values but is not executable undo authority."
+        },
+        "request_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "collection": {
+          "enum": [
+            "concepts",
+            "symbol_bindings",
+            "occurrences",
+            "relations",
+            "exceptions"
+          ]
+        },
+        "object_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "action": {
+          "enum": [
+            "confirm",
+            "reject",
+            "waive",
+            "edit",
+            "create",
+            "undo"
+          ]
+        },
+        "reason": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 8192
+        },
+        "author": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 8192
+        },
+        "timestamp": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 8192
+        },
+        "evidence_fingerprint": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 8192
+        },
+        "input_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 8192
+        },
+        "scope": {
+          "$ref": "#/$defs/scope"
+        },
+        "before": {
+          "anyOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/concept"
+            },
+            {
+              "$ref": "#/$defs/symbol_binding"
+            },
+            {
+              "$ref": "#/$defs/occurrence"
+            },
+            {
+              "$ref": "#/$defs/relation"
+            },
+            {
+              "$ref": "#/$defs/exception"
+            }
+          ]
+        },
+        "after": {
+          "anyOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/concept"
+            },
+            {
+              "$ref": "#/$defs/symbol_binding"
+            },
+            {
+              "$ref": "#/$defs/occurrence"
+            },
+            {
+              "$ref": "#/$defs/relation"
+            },
+            {
+              "$ref": "#/$defs/exception"
+            }
+          ]
+        },
+        "undoes": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        }
+      },
+      "required": [
+        "id",
+        "collection",
+        "object_id",
+        "action",
+        "reason",
+        "author",
+        "timestamp",
+        "evidence_fingerprint",
+        "scope",
+        "before",
+        "after"
+      ]
+    }
+  }
+}

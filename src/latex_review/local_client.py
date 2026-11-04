@@ -41,9 +41,11 @@ def endpoint(*, verify=True):
     return value
 
 
-def request(path, body=None, *, endpoint_value=None, timeout=10):
+def request(path, body=None, *, endpoint_value=None, timeout=10, authenticated=False):
     value = endpoint_value or endpoint(verify=False)
     headers = {'Accept': 'application/json'}
+    if authenticated:
+        headers[HEADER_TOKEN] = value['token']
     data = None
     if body is not None:
         headers.update({'Content-Type': 'application/json', HEADER_TOKEN: value['token']})
@@ -53,12 +55,28 @@ def request(path, body=None, *, endpoint_value=None, timeout=10):
             return json.load(response)
     except HTTPError as exc:
         try:
-            message = json.load(exc).get('message', str(exc))
+            payload = json.load(exc)
+            message = payload.get('message', str(exc))
         except (ValueError, AttributeError):
-            message = str(exc)
-        raise LocalError(message, exc.code) from exc
+            payload, message = {}, str(exc)
+        error = LocalError(message, exc.code)
+        error.code = payload.get('code', 'entry_error')
+        error.details = payload
+        raise error from exc
     except (URLError, TimeoutError, OSError) as exc:
         raise LocalError(f'本地入口不可用：{exc}', 503) from exc
+
+
+def checks_request(paper_id, suffix, body=None, *, query=''):
+    """Worker-only bridge; never starts an entry or exposes its credential."""
+    from urllib.parse import quote
+    from .local_protocol import valid_id
+    if not valid_id(paper_id) or any(part in ('', '.', '..') for part in suffix.split('/')):
+        raise LocalError('检查路由无效', 422)
+    path = '/api/v1/papers/' + paper_id + '/checks/' + quote(suffix, safe='/')
+    if query:
+        path += '?' + query
+    return request(path, body, authenticated=True)
 
 
 def start(*, port=None, timeout=20):

@@ -41,11 +41,20 @@ def _body_range(mask: str) -> tuple[int, int]:
     return start.end(), start.end() + end.start() if end else len(mask)
 
 
+_MASK_EVENT = re.compile(r"[\\\\%]")
+
+
 def _rule_mask(text: str) -> str:
     """屏蔽注释和逐字片段，保持每个原文下标及换行位置。"""
+    if "\\" not in text and "%" not in text:
+        return text
     chars = list(text)
     index = 0
     while index < len(text):
+        event = _MASK_EVENT.search(text, index)
+        if event is None:
+            break
+        index = event.start()
         if text[index] == "%":
             end = index
             while end < len(text) and text[end] not in "\r\n":
@@ -77,8 +86,8 @@ def _rule_mask(text: str) -> str:
     return "".join(chars)
 
 
-def _sites(project: ParsedProject) -> tuple[dict[str, list[_Site]], dict[str, list[_Site]], dict[str, list[_Site]]]:
-    masked = _rule_mask(project.expanded.text)
+def _sites(project: ParsedProject, *, mask=None) -> tuple[dict[str, list[_Site]], dict[str, list[_Site]], dict[str, list[_Site]]]:
+    masked = _rule_mask(project.expanded.text) if mask is None else mask
     start, end = _body_range(masked)
     labels: dict[str, list[_Site]] = defaultdict(list)
     citations: dict[str, list[_Site]] = defaultdict(list)
@@ -122,8 +131,8 @@ def _bibliography_reliable(project: ParsedProject) -> bool:
     return True
 
 
-def _findings(project: ParsedProject) -> dict[tuple[str, str], list[_Site]]:
-    labels, citations, references = _sites(project)
+def _findings(project: ParsedProject, *, sites=None) -> dict[tuple[str, str], list[_Site]]:
+    labels, citations, references = _sites(project) if sites is None else sites
     findings: dict[tuple[str, str], list[_Site]] = {}
     bibliography_reliable = _bibliography_reliable(project)
     for key, sites in citations.items():
@@ -140,6 +149,51 @@ def _findings(project: ParsedProject) -> dict[tuple[str, str], list[_Site]]:
             if kind in {"figure", "table"}:
                 findings[(f"{kind}_unreferenced", key)] = sites
     return findings
+
+
+def current_findings(project: ParsedProject) -> dict:
+    """Public single-side adapter over the same scanner used by check_rules.
+
+    Sites carry expanded Unicode offsets, allowing callers to retain every
+    SourceMap fragment and include instance instead of guessing from line numbers.
+    Completeness/absence gates are the responsibility of the current-check engine;
+    the historic two-side contract intentionally retains its existing behavior.
+    """
+    mask = _rule_mask(project.expanded.text)
+    # Current checks do not interpret macro definitions as executed source. The
+    # legacy two-side scanner keeps its historic behavior unchanged.
+    from .sources import _commands
+    chars = list(mask)
+    unexpanded_rule_macros = []
+    for name, start, end, body in _commands(project.expanded.text):
+        if name in {"macro_definition", "unparsed_macro_definition"}:
+            if name == "unparsed_macro_definition" or any(match.group(1) in {"label", *_REF_COMMANDS, *CITATION_COMMANDS} for match in _COMMAND.finditer(body)):
+                unexpanded_rule_macros.append({"start": start, "end": end})
+            chars[start:end] = [c if c in "\r\n" else " " for c in chars[start:end]]
+    for command in _COMMAND.finditer(mask):
+        if command.group(1) in {"url", "nolinkurl", "path", "href"}:
+            argument = _argument(mask, command.end())
+            if argument:
+                start, end = command.start(), argument[0]
+                chars[start:end] = [c if c in "\r\n" else " " for c in chars[start:end]]
+    mask = "".join(chars)
+    labels, citations, references = _sites(project, mask=mask)
+    def site_data(site):
+        command = _COMMAND.match(mask, site.offset)
+        argument = _argument(mask, command.end()) if command else None
+        return {"start": site.offset, "end": argument[0] if argument else site.offset,
+                "node_id": site.owner.review.id if site.owner else None}
+    return {"findings": [{"rule_id": code, "key": key,
+                           "sites": [site_data(site) for site in sites]}
+                          for (code, key), sites in sorted(_findings(project, sites=(labels, citations, references)).items())],
+            "bibliography_reliable": _bibliography_reliable(project),
+            "unexpanded_rule_macros": unexpanded_rule_macros,
+            "execution_uncertain": bool(re.search(r"\\(?:if(?:false|true|defined|x|num|dim|odd|case|cat|eof|hmode|vmode|mmode|inner|void|hbox|vbox)|else|fi)(?![A-Za-z@])", mask)),
+            "applicable": {"bibliography_key_unresolved": sum(map(len, citations.values())),
+                           "unresolved_reference": sum(map(len, references.values())),
+                           "duplicate_label": sum(map(len, labels.values())),
+                           "figure_unreferenced": sum(s.owner is not None and s.owner.review.type == "figure" for ss in labels.values() for s in ss),
+                           "table_unreferenced": sum(s.owner is not None and s.owner.review.type == "table" for ss in labels.values() for s in ss)}}
 
 
 def _location_text(location: SourceLocation) -> str:

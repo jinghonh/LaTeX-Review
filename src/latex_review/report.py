@@ -518,7 +518,7 @@ def _report_html(document: ReviewDocument, preview: PreviewResult, old: ParsedPr
                  new: ParsedProject, editor_template: str | None,
                  pairs: tuple[tuple[str, str], ...], *, rendering: dict | None = None,
                  statuses: tuple | None = None, translation_units: list[dict] | None = None,
-                 head: str = "") -> str:
+                 head: str = "", checks_report=None) -> str:
     counts = document.summary
     category_counts = " · ".join(f"{_CATEGORY_LABELS.get(key, key)} {value}" for key, value in counts.category_hits.items())
     anchors = preview.anchors()
@@ -535,7 +535,8 @@ def _report_html(document: ReviewDocument, preview: PreviewResult, old: ParsedPr
         "nodes": [[asdict(node) for node in project.review_nodes] for project in (old, new)],
     }
     fingerprint = sha256(json.dumps(fingerprint_data, ensure_ascii=False, sort_keys=True).encode()).hexdigest()
-    reading = build_reading(new, units, old=old, pairs=pairs, fingerprint=fingerprint)
+    reading = build_reading(new, units, old=old, pairs=pairs, fingerprint=fingerprint,
+                            checks_report=checks_report)
     severity_labels = {"error": "错误", "warning": "提醒", "info": "说明"}
     diagnostics_html = "".join(
         f'<li><strong>{_e(severity_labels.get(item.severity, item.severity))}</strong> · {_e(item.message)}</li>'
@@ -586,7 +587,8 @@ def write_report(old: ParsedProject, new: ParsedProject, comparison: ComparisonR
                  conversion_timeout: float = 8.0, editor_url_template: str | None = None,
                  single_file: bool = False, extra_diagnostics: tuple[Diagnostic, ...] = (),
                  rendering: dict | None = None, statuses: tuple | None = None,
-                 fragment_timeout: float = 6.0, annotation_project_root: Path | None = None) -> ReportResult:
+                 fragment_timeout: float = 6.0, annotation_project_root: Path | None = None,
+                 check_snapshot=None) -> ReportResult:
     """在来源快照有效期内写入 report.html、diff.json、diagnostics.json 和双侧资源。"""
     if conversion_timeout <= 0 or fragment_timeout <= 0:
         raise ValueError("转换超时必须为正数")
@@ -674,10 +676,21 @@ def write_report(old: ParsedProject, new: ParsedProject, comparison: ComparisonR
     from .annotations import MANIFEST, build_content, content_meta
     annotation_content = build_content(new, preview.html, project_root=annotation_project_root, changes=document.changes)
     _write_managed(directory, Path(MANIFEST), content=json.dumps(annotation_content, ensure_ascii=False).encode("utf-8"))
+    from .checks.snapshot import snapshot_from_project
+    from .checks.document import build_check_document
+    from .checks.engine import evaluate_current
+    snapshot = check_snapshot or snapshot_from_project(new)
+    previous_checks = evaluate_current(build_check_document(snapshot_from_project(old)))
+    checks = evaluate_current(build_check_document(snapshot), previous=previous_checks)
+    _write_managed(directory, Path('checks.json'), content=json.dumps(checks, ensure_ascii=False).encode('utf-8'))
+    from .identity import identity_hash
+    _write_managed(directory, Path('checks-page.json'), content=json.dumps({**snapshot.identity,
+                   'page_version': annotation_content['version_id'],
+                   'configuration_hash': identity_hash(snapshot.configuration)}, ensure_ascii=False).encode('utf-8'))
     diff_json = dumps(document)
     html = _report_html(document, preview, old, new, editor_url_template, pairs,
                         rendering=rendering, statuses=statuses, translation_units=units,
-                        head=content_meta(annotation_content))
+                        head=content_meta(annotation_content), checks_report=checks)
     from .delivery import local_report_html, publication_html
     html = local_report_html(html)
     _write_managed(directory, Path("diff.json"), content=diff_json.encode("utf-8"))

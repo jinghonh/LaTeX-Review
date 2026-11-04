@@ -87,6 +87,11 @@ class ExpandedProject:
 _COMMAND = re.compile(r"\\(input|include|bibliography|addbibresource|includegraphics|bibliographystyle|graphicspath)(?![A-Za-z@])")
 _MACRO_DEFINITION = re.compile(r"\\(newcommand|renewcommand|providecommand|DeclareRobustCommand|newenvironment|renewenvironment|provideenvironment|def|gdef|edef|xdef)(?![A-Za-z@])")
 _GRAPHICS = (".pdf", ".png", ".jpg", ".jpeg", ".eps", ".svg", ".webp")
+_SOURCE_EVENT = re.compile(r"[\\%]")
+_LINE_END = re.compile(r"[\r\n]")
+_IF_FILE_EXISTS = re.compile(r"\\IfFileExists(?![A-Za-z@])")
+_CONTROL_WORD = re.compile(r"\\[A-Za-z@]+")
+_BARE_INPUT = re.compile(r"[^\s%{}]+")
 
 
 def _git(where: Path, *args: str, check: bool = True) -> subprocess.CompletedProcess[bytes]:
@@ -276,8 +281,8 @@ def _skip_space_comments(text: str, position: int) -> int:
         if text[position].isspace():
             position += 1
         elif text[position] == "%":
-            line_end = re.search(r"[\r\n]", text[position:])
-            position = len(text) if line_end is None else position + line_end.start()
+            line_end = _LINE_END.search(text, position)
+            position = len(text) if line_end is None else line_end.start()
         else:
             break
     return position
@@ -293,10 +298,10 @@ def _group_end(text: str, position: int, opening: str, closing: str) -> int | No
             cursor += 2
             continue
         if text[cursor] == "%":
-            line_end = re.search(r"[\r\n]", text[cursor:])
+            line_end = _LINE_END.search(text, cursor)
             if line_end is None:
                 return None
-            cursor += line_end.start()
+            cursor = line_end.start()
             continue
         if text[cursor] == opening:
             depth += 1
@@ -314,10 +319,10 @@ def _macro_definition_end(text: str, match: re.Match[str]) -> tuple[int, str] | 
         cursor += 1
     cursor = _skip_space_comments(text, cursor)
     if match.group(1) in ("def", "gdef", "edef", "xdef"):
-        name = re.match(r"\\[A-Za-z@]+", text[cursor:])
+        name = _CONTROL_WORD.match(text, cursor)
         if name is None:
             return None
-        cursor += len(name.group())
+        cursor = name.end()
         while cursor < len(text) and text[cursor] != "{":
             cursor += 1
     elif cursor < len(text) and text[cursor] == "{":
@@ -325,10 +330,10 @@ def _macro_definition_end(text: str, match: re.Match[str]) -> tuple[int, str] | 
         if cursor is None:
             return None
     else:
-        name = re.match(r"\\[A-Za-z@]+", text[cursor:])
+        name = _CONTROL_WORD.match(text, cursor)
         if name is None:
             return None
-        cursor += len(name.group())
+        cursor = name.end()
     cursor = _skip_space_comments(text, cursor)
     for _ in range(2):
         if cursor < len(text) and text[cursor] == "[":
@@ -348,11 +353,15 @@ def _commands(text: str, extra_names=(), file_exists=None):
     commands = re.compile(_COMMAND.pattern.replace("input|", "|".join(map(re.escape, extra_names)) + "|input|")) if extra_names else _COMMAND
     index = 0
     while index < len(text):
+        event = _SOURCE_EVENT.search(text, index)
+        if event is None:
+            return
+        index = event.start()
         if text[index] == "%":
-            line_end = re.search(r"[\r\n]", text[index:])
+            line_end = _LINE_END.search(text, index)
             if line_end is None:
                 return
-            index += line_end.start()
+            index = line_end.start()
             continue
         if text.startswith("\\begin{verbatim}", index) or text.startswith("\\begin{lstlisting}", index):
             name = "verbatim" if text.startswith("\\begin{verbatim}", index) else "lstlisting"
@@ -367,9 +376,9 @@ def _commands(text: str, extra_names=(), file_exists=None):
         if text[index] != "\\":
             index += 1
             continue
-        conditional = re.match(r"\\IfFileExists(?![A-Za-z@])", text[index:]) if file_exists else None
+        conditional = _IF_FILE_EXISTS.match(text, index) if file_exists else None
         if conditional:
-            cursor = index + conditional.end()
+            cursor = conditional.end()
             groups = []
             for _ in range(3):
                 cursor = _skip_space_comments(text, cursor)
@@ -421,7 +430,7 @@ def _commands(text: str, extra_names=(), file_exists=None):
             argument = text[cursor + 1:close - 1]
             end = close
         elif name == "input":
-            bare = re.match(r"[^\s%{}]+", text[cursor:])
+            bare = _BARE_INPUT.match(text, cursor)
             if bare is None:
                 index = match.end()
                 continue

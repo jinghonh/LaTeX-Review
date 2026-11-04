@@ -221,3 +221,68 @@ def test_live_section_tree_restores_expansion(tmp_path):
         api.expect(page.get_by_role('button', name='1.1 Second', exact=True, include_hidden=True)).to_have_attribute('aria-current', 'location')
         assert not errors
         browser.close()
+
+
+def test_saved_check_notifier_coalesces_cancels_and_honors_effective_profile(tmp_path, monkeypatch):
+    from threading import Event
+    import latex_review.live as live
+    from latex_review.project_profile import directory, settings
+    monkeypatch.setenv('XDG_CACHE_HOME', str(tmp_path / 'external-cache'))
+    root = tmp_path / 'paper'
+    root.mkdir()
+    (root / 'main.tex').write_text('Paper')
+    profile = directory(root) / 'project.toml'
+    profile.parent.mkdir(parents=True)
+    profile.write_text('[checks]\ndebounce_ms=1350\non_save=false\n')
+    source = ProjectSource('new', root, 'main.tex', ComparisonSource('directory', str(root)))
+    timers, sent = [], []
+    class FakeTimer:
+        def __init__(self, delay, callback, args):
+            self.delay, self.callback, self.args = delay, callback, args
+            self.cancelled = self.started = False
+            timers.append(self)
+        def start(self):
+            self.started = True
+        def cancel(self):
+            self.cancelled = True
+        def fire(self):
+            self.callback(*self.args)
+    monkeypatch.setattr(live, 'Timer', FakeTimer)
+    monkeypatch.setattr(live, '_check_saved_recipe', lambda recipe, config: sent.append((recipe, config)))
+    stop = Event()
+    notifier = live._SavedCheckNotifier({'paper_id': 'owned'}, stop)
+    notifier.schedule(settings(source))
+    assert timers == []  # External profile disables default on-save checks.
+    from dataclasses import replace
+    source = replace(source, configuration={'checks': {'on_save': True}})
+    effective = settings(source)
+    notifier.schedule(effective)
+    assert timers[-1].delay == 1.35 and timers[-1].started and timers[-1].daemon
+    first = timers[-1]
+    notifier.schedule(effective)
+    assert first.cancelled
+    first.fire()  # Already-fired cancelled timers also cannot send stale work.
+    assert sent == []
+    timers[-1].fire()
+    assert sent == [({'paper_id': 'owned'}, effective)]
+    notifier.schedule({})
+    assert timers[-1].delay == .8
+    last = timers[-1]
+    notifier.schedule({'checks': {'enabled': False}})
+    assert last.cancelled
+    last.fire()
+    assert len(sent) == 1
+    notifier.schedule({})
+    pending = timers[-1]
+    notifier.cancel_pending()  # A failed next rebuild must not send old success.
+    pending.fire()
+    assert pending.cancelled and len(sent) == 1
+    notifier.schedule({})  # Cancel is reusable, unlike permanent worker close.
+    stopped = timers[-1]
+    stop.set()
+    stopped.fire()
+    assert len(sent) == 1
+    notifier.close()
+    assert stopped.cancelled
+    notifier.schedule({})
+    assert timers[-1] is stopped
