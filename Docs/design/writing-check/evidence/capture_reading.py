@@ -40,6 +40,7 @@ def run(command, env):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--phase', choices=['before', 'after'], required=True)
+    parser.add_argument('--output-dir', type=Path, help='Write captures to this directory instead of the phase default; use distinct before-final/after-final directories to preserve historical fixtures.')
     parser.add_argument('--validate-workspace', action='store_true', help='Also run real checks, inspect evidence and exercise keyboard/narrow layout (After only).')
     parser.add_argument('--validate-offline-panels', action='store_true', help='Also register synthetic knowledge and export/import fixed semantic candidates after baseline captures; no model invocation.')
     args = parser.parse_args()
@@ -47,7 +48,7 @@ def main():
         parser.error('--validate-offline-panels requires --validate-workspace')
     if args.validate_workspace and args.phase != 'after':
         parser.error('--validate-workspace requires --phase after')
-    evidence = Path(__file__).resolve().parent / args.phase
+    evidence = args.output_dir.resolve() if args.output_dir else Path(__file__).resolve().parent / args.phase
     evidence.mkdir(parents=True, exist_ok=True)
     measurements = {
         'phase': args.phase, 'capture_complete': False,
@@ -100,6 +101,10 @@ def main():
         current, old = tmp / 'paper', tmp / 'old'
         shutil.copytree(FIXTURE, current)
         shutil.copytree(FIXTURE, old)
+        measurements['manuscript_input_sha256'] = {
+            str(path.relative_to(current)): sha256(path.read_bytes()).hexdigest()
+            for path in sorted(current.rglob('*')) if path.is_file()}
+        assert measurements['manuscript_input_sha256'] == measurements['fixture_sha256'], 'Fixture changed while copying the capture manuscript'
         intro = old / 'sections/introduction.tex'
         text = intro.read_text(encoding='utf-8')
         text = text.replace('improves reproducibility', 'supports reproducibility')
@@ -288,9 +293,22 @@ def main():
             # Never touch the user's default daemon, only the explicit temporary state.
             if (tmp / 'state/endpoint.json').exists():
                 local_client.stop()
-        measurements['capture_complete'] = True
         measurements['application_source_sha256_at_finish'] = source_hashes()
         measurements['application_source_changed_during_capture'] = measurements['application_source_sha256_at_finish'] != measurements['application_source_sha256']
+        measurements['fixture_sha256_at_finish'] = {
+            str(path.relative_to(FIXTURE)): sha256(path.read_bytes()).hexdigest()
+            for path in sorted(FIXTURE.rglob('*')) if path.is_file()}
+        measurements['fixture_changed_during_capture'] = measurements['fixture_sha256_at_finish'] != measurements['fixture_sha256']
+        measurements['manuscript_input_sha256_at_finish'] = {
+            relative: sha256((current / relative).read_bytes()).hexdigest()
+            for relative in measurements['manuscript_input_sha256']}
+        measurements['manuscript_input_changed_during_capture'] = measurements['manuscript_input_sha256_at_finish'] != measurements['manuscript_input_sha256']
+        # Persist immutable-input diagnostics even when an external edit invalidates the run.
+        (evidence / 'measurements.json').write_text(json.dumps(measurements, ensure_ascii=False, indent=2) + '\n', encoding='utf-8')
+        assert not measurements['application_source_changed_during_capture'], 'Application sources changed during capture'
+        assert not measurements['fixture_changed_during_capture'], 'Fixture changed during capture'
+        assert not measurements['manuscript_input_changed_during_capture'], 'Captured manuscript bytes changed'
+        measurements['capture_complete'] = True
         (evidence / 'measurements.json').write_text(json.dumps(measurements, ensure_ascii=False, indent=2) + '\n', encoding='utf-8')
     print(json.dumps({k: measurements[k] for k in ('phase', 'head', 'browser_version', 'diff_build_median_seconds', 'expand_parse_median_seconds')}, indent=2))
 

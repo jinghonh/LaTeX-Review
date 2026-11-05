@@ -91,7 +91,24 @@ def _expansion_identity(expanded):
 
 
 def capture_snapshot(entry, *, root=None, configuration=None, retries=2, source=None, include_title=True) -> ContentSnapshot:
-    """Expand with the existing reader and parse once per optimistic capture attempt.
+    """Capture a parsed, byte-verified current-disk snapshot."""
+    return _capture(entry, root=root, configuration=configuration, retries=retries,
+                    source=source, include_title=include_title, parse=True)
+
+
+def capture_content_id(entry, *, root=None, configuration=None, retries=2, source=None, include_title=True) -> str:
+    """Verify the same complete input identity without parsing it a second time.
+
+    Both expansion/byte checks, include-graph discovery, profile checks, parser
+    version and title policy are identical to capture_snapshot. Only a caller
+    needing an identity (not a new document) should use this verification path.
+    """
+    return _capture(entry, root=root, configuration=configuration, retries=retries,
+                    source=source, include_title=include_title, parse=False)
+
+
+def _capture(entry, *, root, configuration, retries, source, include_title, parse):
+    """Expand with the existing reader and optionally parse per capture attempt.
 
     Re-expand and byte-verify after parsing (including bibliography reads). This also
     detects a formerly missing dependency appearing, conditional includes changing,
@@ -127,7 +144,8 @@ def capture_snapshot(entry, *, root=None, configuration=None, retries=2, source=
             for segment in expanded.source_map.segments:
                 if expanded.text[segment.expanded_start:segment.expanded_end] != expanded.source_map.files[segment.file][segment.source_start:segment.source_end]:
                     raise ValueError("source changed between include instances")
-            parsed = parse_project(expanded, macros=validate_macros(effective.get("macros", {})), include_title=include_title)
+            macros = validate_macros(effective.get("macros", {}))
+            parsed = parse_project(expanded, macros=macros, include_title=include_title) if parse else None
             verification = source.expand()
             if (effective != settings(source) or raw != _raw_files(verification) or
                     _expansion_identity(expanded) != _expansion_identity(verification)):
@@ -138,6 +156,8 @@ def capture_snapshot(entry, *, root=None, configuration=None, retries=2, source=
                                         "expansion": _expansion_identity(expanded),
                                         "configuration": check_config, "parser_version": PARSER_VERSION,
                                         "include_title": include_title})
+            if not parse:
+                return content_id
             return ContentSnapshot(ident["paper_id"], ident["entry"], content_id,
                                    MappingProxyType(raw), parsed, check_config,
                                    datetime.now(timezone.utc).isoformat())

@@ -30,7 +30,7 @@ def digest(raw):
 
 def code_boundary():
     paths = sorted(p for p in (REPOSITORY / 'src' / 'latex_review').rglob('*')
-                   if p.is_file() and p.suffix in {'.py', '.js', '.json'})
+                   if p.is_file() and '__pycache__' not in p.parts and p.suffix not in {'.pyc', '.pyo'})
     paths.extend([Path(__file__).resolve(), Path(__file__).with_name('benchmark_checks.py')])
     hashes = {str(p.relative_to(REPOSITORY)): digest(p.read_bytes()) for p in paths}
     return {'utc': datetime.now(timezone.utc).isoformat(), 'files': hashes,
@@ -71,6 +71,39 @@ def read_json(path):
         return None
 
 
+def write_saved_revision(path, index, edit_kind):
+    """Keep historical comment appends; optionally edit one visible prose word."""
+    if edit_kind == 'comment':
+        with path.open('a', encoding='utf-8') as stream:
+            stream.write(f'% saved revision {index}\n')
+        return None
+    previous_word = 'synthetic' if index == 1 else f'syntheticrevision{index - 1}'
+    before = f'Paragraph 0 describes a {previous_word} evaluation.'
+    after = f'Paragraph 0 describes a syntheticrevision{index} evaluation.'
+    raw = path.read_text(encoding='utf-8')
+    if raw.count(before) != 1:
+        raise RuntimeError('expected exactly one preceding visible paragraph revision')
+    with path.open('w', encoding='utf-8') as stream:
+        stream.write(raw.replace(before, after, 1))
+    return {'before_text': before, 'after_text': after, 'changed_ordinary_word': True}
+
+
+def visible_publication_proof(output, change, page_version, expected_paragraphs):
+    """Proof from the actually published manifest, not source bytes alone."""
+    content = read_json(output / 'annotation-content.json')
+    if not content or content.get('version_id') != page_version:
+        return None
+    units = [unit for unit in content.get('units', []) if unit.get('kind') == 'text']
+    matching = [unit for unit in units if change['after_text'] in unit.get('text', '')]
+    if (len(units) != expected_paragraphs or len(matching) != 1
+            or any(change['before_text'] in unit.get('text', '') for unit in units)):
+        return None
+    unit = matching[0]
+    return {'verified_visible_text_change': True, 'manifest_version_id': content['version_id'],
+            'published_text_units': len(units), 'unit_id': unit['id'], 'node_id': unit['node_id'],
+            'unit_order': unit['order'], 'unit_text_sha256': digest(unit['text'].encode()), **change}
+
+
 class Observer:
     def __init__(self, url, output, interval, timeout):
         self.url, self.output = url.rstrip('/'), output
@@ -90,7 +123,8 @@ class Observer:
         with self.opener.open(Request(self.url + '/api/checks/' + suffix, headers=headers), timeout=10) as response:
             return json.load(response)
 
-    def settle(self, started, expected_file_hash, previous_input=None, previous_run=None):
+    def settle(self, started, expected_file_hash, previous_input=None, previous_run=None,
+               visible_change=None, expected_paragraphs=None):
         metrics = {'status_polls': 0, 'status_rtt_seconds': [], 'old_input_polls': 0,
                    'no_new_run_polls': 0, 'states_observed': [], 'observation_errors': [],
                    'load_at_start': host_sample()}
@@ -139,6 +173,17 @@ class Observer:
                             and report['input']['content_id'] == metadata['content_id']
                             and report['input_id'] == value['current_input_id']
                             and report['input_id'] == run.get('input_id')):
+                        if visible_change is not None:
+                            began = time.perf_counter()
+                            proof = visible_publication_proof(self.output, visible_change,
+                                                             self.page_version, expected_paragraphs)
+                            latest = read_json(self.output / 'checks-page.json')
+                            if (proof is None or latest is None
+                                    or latest.get('page_version') != self.page_version
+                                    or latest.get('content_id') != report['input']['content_id']):
+                                raise RuntimeError('published visible edit proof is not current')
+                            metrics['visible_change_proof'] = proof
+                            metrics['visible_change_verification_seconds'] = time.perf_counter() - began
                         metrics.update({'save_to_verified_current_seconds': time.perf_counter() - started,
                             'input_id': report['input_id'], 'content_id': report['input']['content_id'],
                             'run_id': run['run_id'], 'status': report['status'], 'requested_scope': report['requested_scope'],
@@ -166,6 +211,8 @@ def main():
     parser.add_argument('--files', type=int, default=40)
     parser.add_argument('--paragraphs', type=int, default=5000)
     parser.add_argument('--saves', type=int, default=10)
+    parser.add_argument('--edit-kind', choices=('comment', 'prose'), default='comment',
+                        help='Historical invisible comment append, or one visible paragraph word revision.')
     parser.add_argument('--poll-seconds', type=float, default=.1)
     parser.add_argument('--settle-timeout', type=float, default=90)
     parser.add_argument('--concurrent-workload', default='Not independently established; inspect recorded host/cgroup samples.')
@@ -179,6 +226,10 @@ def main():
               'python': platform.python_version(), 'source_boundary_begin': code_boundary(),
               'environment_begin': host_sample(), 'concurrent_workload_declared': args.concurrent_workload,
               'source_files': args.files, 'paragraphs': args.paragraphs, 'requested_saves': args.saves,
+              'edit_kind': args.edit_kind,
+              'edit_workload': ('Append an invisible TeX comment; historical recipe, not evidence of visible prose editing performance.'
+                                if args.edit_kind == 'comment' else
+                                'Change one ordinary word in paragraph 0 per save; fixed paragraph/file counts; published visible text proof included.'),
               'notifier_debounce_ms': 800, 'observer_poll_sleep_seconds': args.poll_seconds,
               'per_settle_timeout_seconds': args.settle_timeout, 'samples': [],
               'measurement': 'Real private entry ensure -> live worker native watcher/rebuild -> asynchronous saved notifier -> coordinator -> worker HTTP status/export.',
@@ -245,12 +296,12 @@ def main():
                 previous = baseline
                 for index in range(1, args.saves + 1):
                     started = time.perf_counter()
-                    with (root / 'part0.tex').open('a', encoding='utf-8') as stream:
-                        stream.write(f'% saved revision {index}\n')
+                    visible_change = write_saved_revision(root / 'part0.tex', index, args.edit_kind)
                     write_done = time.perf_counter()
                     try:
                         sample = observer.settle(started, digest((root / 'part0.tex').read_bytes()),
-                                                 previous['input_id'], previous['run_id'])
+                                                 previous['input_id'], previous['run_id'],
+                                                 visible_change=visible_change, expected_paragraphs=args.paragraphs)
                     except SettleTimeout as error:
                         result['failed_save'] = {'save': index, 'metrics': error.metrics}
                         raise

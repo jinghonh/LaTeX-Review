@@ -11,7 +11,7 @@ from ..sources import SourceError
 from .document import build_check_document
 from .engine import evaluate_current
 from .registry import KnowledgeStore
-from .snapshot import capture_snapshot
+from .snapshot import capture_content_id, capture_snapshot
 from .store import CheckStore
 from .service_state import ServiceState
 
@@ -179,9 +179,9 @@ class CheckCoordinator:
                 task['input_id'] = report['input_id']
                 # Re-expand after evaluation: catches new/missing dependencies,
                 # not only modifications to previously known files.
-                current_snapshot = capture_snapshot(entry, root=root, configuration=self._configuration(context), include_title=True)
+                current_content_id = capture_content_id(entry, root=root, configuration=self._configuration(context), include_title=True)
                 current_knowledge = self._knowledge(context).read()
-                stale = (snapshot.content_id != current_snapshot.content_id or
+                stale = (snapshot.content_id != current_content_id or
                          knowledge['content_hash'] != current_knowledge['content_hash'])
                 with self.lock:
                     cancelled = task['cancel'].is_set() or self.closed

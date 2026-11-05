@@ -161,6 +161,27 @@ def _worker_page_snapshot(directory, content, paper_id):
     return metadata
 
 
+def _status_content_identity(handler):
+    """Avoid decoding/validating every unit on unchanged status observations.
+
+    The key hashes actual bytes on every request, never timestamps or size.
+    Changed bytes must pass the same full validation before identity reuse.
+    Keep only a tiny server-owned identity; mutation requests do not use this.
+    """
+    from hashlib import sha256
+    from ..annotations import MANIFEST
+    from ..annotations.content import validate_content
+    raw = (Path(handler.directory) / MANIFEST).read_bytes()
+    key = sha256(raw).digest()
+    cached = getattr(handler.server, '_checks_status_identity', None)
+    if cached is not None and cached[0] == key:
+        return dict(cached[1])
+    content = validate_content(json.loads(raw.decode('utf-8')))
+    identity = {name: content[name] for name in ('entry', 'version_id')}
+    handler.server._checks_status_identity = (key, identity)
+    return dict(identity)
+
+
 def worker_route(handler):
     parsed = urlsplit(handler.path)
     if parsed.path != '/api/checks' and not parsed.path.startswith('/api/checks/'):
@@ -169,14 +190,14 @@ def worker_route(handler):
         if not local_request(handler.headers, handler.client_address[0]):
             raise CheckError('forbidden_origin', '仅允许当前本机页面访问', 403)
         from ..annotations import load_content
-        content = load_content(handler.directory)
+        suffix = parsed.path[len('/api/checks/'):]
+        bootstrap = handler.command == 'GET' and suffix == 'status'
+        content = _status_content_identity(handler) if bootstrap else load_content(handler.directory)
         root = getattr(handler.server, 'annotation_project_root', None)
         if root is None:
             raise CheckError('unavailable', '静态报告没有活动论文身份', 503)
         identity = paper_identity(root, Path(root) / content['entry'], require_entry=True)
         paper_id, page_version = identity['paper_id'], content['version_id']
-        suffix = parsed.path[len('/api/checks/'):]
-        bootstrap = handler.command == 'GET' and suffix == 'status'
         # Status can bootstrap its per-worker paper token, but a supplied page
         # identity must still match. All other requests require all three.
         supplied_paper = handler.headers.get(PAPER_HEADER)

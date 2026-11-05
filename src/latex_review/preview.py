@@ -358,10 +358,28 @@ def _dom_html(node: object, project: ParsedProject, side: str, inline: list[Pars
     return children
 
 
+def _literal_inline_html(raw: str) -> str | None:
+    """Render only unambiguous literal ASCII, preserving plasTeX's padding.
+
+    TeX syntax, typography shortcuts and non-ASCII/control characters retain the
+    existing parser. This avoids constructing a whole TeX context per plain
+    prose/sentence fragment without changing formula/macro or anchor handling.
+    """
+    if ('\\' in raw or re.search(r"[{}$%&#_^~`]|[^\x20-\x7e\t\r\n]", raw)
+            or '--' in raw or "''" in raw):
+        return None
+    text = ' '.join(raw.split())
+    return ' ' + _e(text) + ' ' if text else ''
+
+
 def _inline_html(raw: str, project: ParsedProject, side: str, inline: list[ParsedNode] | None = None,
                  diagnostics: list[Diagnostic] | None = None, source: SourceLocation | None = None,
                  base_start: int | None = None) -> str:
     inline = inline or []
+    if not inline:
+        literal = _literal_inline_html(raw)
+        if literal is not None:
+            return literal
     heading = re.match(r"^(\s*)\\(?:paragraph|subparagraph)\*?\s*\{([^{}]*)\}", raw)
     if heading:
         remainder = heading.end()

@@ -10,6 +10,7 @@ import os
 from pathlib import Path
 import sys
 from threading import Lock, Thread, Timer
+from time import monotonic
 import webbrowser
 
 from .contract import ComparisonSource
@@ -195,7 +196,14 @@ def _check_saved_recipe(recipe, configuration):
 
 
 class _SavedCheckNotifier:
-    """Debounce only background check notification, never the preview rebuild."""
+    """Notify only after publication and the configured save quiet period.
+
+    The quiet period starts at the worker's accepted monotonic watcher event,
+    so a save's rebuild may overlap it instead of adding another full delay.
+    Startup, without a save timestamp, still waits
+    the full configured delay. Watcher generation and page/source validation
+    remain independent fences against edits during build or the remaining wait.
+    """
     def __init__(self, recipe, stop):
         self.recipe, self.stop = recipe, stop
         self.lock = Lock()
@@ -203,7 +211,7 @@ class _SavedCheckNotifier:
         self.generation = 0
         self.closed = False
 
-    def schedule(self, configuration):
+    def schedule(self, configuration, *, observed_at=None, is_current=None):
         settings = configuration.get('checks', {})
         with self.lock:
             self.generation += 1
@@ -212,16 +220,19 @@ class _SavedCheckNotifier:
                 self.timer.cancel()
                 self.timer = None
             if (self.closed or self.stop.is_set() or not settings.get('enabled', True)
-                    or not settings.get('on_save', True)):
+                    or not settings.get('on_save', True) or (is_current is not None and not is_current())):
                 return
-            self.timer = Timer(settings.get('debounce_ms', 800) / 1000,
-                               self._notify, args=(generation, configuration))
+            delay = settings.get('debounce_ms', 800) / 1000
+            if observed_at is not None:
+                delay = max(0, delay - max(0, monotonic() - observed_at))
+            self.timer = Timer(delay, self._notify, args=(generation, configuration, is_current))
             self.timer.daemon = True
             self.timer.start()
 
-    def _notify(self, generation, configuration):
+    def _notify(self, generation, configuration, is_current=None):
         with self.lock:
-            if self.closed or self.stop.is_set() or generation != self.generation:
+            if (self.closed or self.stop.is_set() or generation != self.generation
+                    or (is_current is not None and not is_current())):
                 return
             self.timer = None
         _check_saved_recipe(self.recipe, configuration)
@@ -284,7 +295,7 @@ def run_worker(recipe, stop):
         write_json(recipe['ready'], {'nonce': recipe['nonce'], 'pid': os.getpid(),
                                     'port': server.server_port, 'directory': str(output)})
         from .project_profile import settings
-        notifier.schedule(settings(source))
+        notifier.schedule(settings(source), is_current=lambda: events.generation == initial)
         previous = initial
         # A source save between candidate generation and watcher creation must
         # trigger a refresh, even if the new watcher has not seen an event.
@@ -296,6 +307,7 @@ def run_worker(recipe, stop):
                 if stop.is_set():
                     break
                 if current != previous or pending:
+                    observed_at = monotonic()
                     previous, pending = current, False
                     notifier.cancel_pending()
                     try:
@@ -305,7 +317,11 @@ def run_worker(recipe, stop):
                                 source = replace(source, configuration=_config(Path(recipe["config"]), recipe["config_explicit"]))
                                 messages = build(source, candidate.directory, revision + 1)
                         revision += 1
-                        notifier.schedule(settings(source))
+                        # Promotion has completed. A newer event during build
+                        # needs its own rebuild, not a check of this old capture.
+                        if events.generation == current:
+                            notifier.schedule(settings(source), observed_at=observed_at,
+                                              is_current=lambda generation=current: events.generation == generation)
                         message = events.warning + f'已更新当前论文。预览诊断：{len(messages)} 项。'
                     except (OSError, ValueError, RuntimeError, SourceError) as exc:
                         message = f'更新失败，保留上次预览：{exc}'

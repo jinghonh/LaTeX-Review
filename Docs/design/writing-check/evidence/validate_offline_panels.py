@@ -7,7 +7,7 @@ from playwright.sync_api import expect
 
 
 def _exercise(page, frame, evidence, manuscript):
-    source_files = sorted(p for p in manuscript.rglob('*') if p.suffix in {'.tex', '.bib'})
+    source_files = sorted(p for p in manuscript.rglob('*') if p.suffix in {'.tex', '.bib', '.bst'})
     before = {str(p.relative_to(manuscript)): sha256(p.read_bytes()).hexdigest() for p in source_files}
     page.set_viewport_size({'width': 1440, 'height': 1000})
     frame.get_by_role('tab', name='概念与符号', exact=True).click()
@@ -94,7 +94,7 @@ def _exercise(page, frame, evidence, manuscript):
     assert thread_count_after == thread_count_before + 1, (thread_count_before, thread_count_after)
     persisted = frame.locator('body').evaluate('async key => (await window.reviewWorkspace.api("findings?limit=100")).findings.find(item => item.finding_key === key)', terms[0]['finding_key'])
     assert persisted['lifecycle'] == 'current' and persisted['review_state'] == 'unreviewed', persisted
-    after = {str(p.relative_to(manuscript)): sha256(p.read_bytes()).hexdigest() for p in sorted(manuscript.rglob('*')) if p.suffix in {'.tex', '.bib'}}
+    after = {str(p.relative_to(manuscript)): sha256(p.read_bytes()).hexdigest() for p in sorted(manuscript.rglob('*')) if p.suffix in {'.tex', '.bib', '.bst'}}
     unchanged = before == after
     assert unchanged, 'Knowledge/semantic/annotation action changed manuscript bytes'
     return {'knowledge_registration': True, 'knowledge_stales_previous_checks': True,

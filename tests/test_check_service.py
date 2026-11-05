@@ -546,8 +546,11 @@ def worker(tmp_path, monkeypatch):
     report.mkdir()
     (report / 'report.html').write_text('<html></html>')
     identity = paper_identity(root, root / 'main.tex', require_entry=True)
-    (report / 'checks-page.json').write_text(json.dumps({**identity, 'files': {}, 'page_version': 'page-v1', 'content_id': 'c' * 64}))
-    monkeypatch.setattr('latex_review.annotations.load_content', lambda _: {'entry': 'main.tex', 'version_id': 'page-v1'})
+    (report / 'checks-page.json').write_text(json.dumps({**identity, 'files': {}, 'page_version': 'a' * 64, 'content_id': 'c' * 64}))
+    from latex_review.annotations import MANIFEST
+    (report / MANIFEST).write_text(json.dumps({
+        'schema_version': '1.0', 'project_id': identity['paper_id'], 'entry': 'main.tex',
+        'version_id': 'a' * 64, 'coordinate_system': 'utf16-normalized-whitespace-with-formula-atoms', 'units': []}))
     server = create_server(report, annotation_project_root=root)
     thread = Thread(target=server.serve_forever, daemon=True)
     thread.start()
@@ -568,7 +571,7 @@ def test_worker_checks_three_independent_credentials(worker, monkeypatch):
     assert status == 200 and value['token'] == server.checks_token
     assert 'admin' not in value
     headers = {'X-LaTeX-Review-Token': value['token'], 'X-LaTeX-Review-Paper-ID': identity['paper_id'],
-               'X-LaTeX-Review-Page-Version': 'page-v1', 'X-LaTeX-Review-Checks-Content-ID': 'c' * 64}
+               'X-LaTeX-Review-Page-Version': 'a' * 64, 'X-LaTeX-Review-Checks-Content-ID': 'c' * 64}
     assert request(server, '/api/checks/runs', body={}, headers=headers)[0] == 202
     assert len(calls) == 2
     for key, replacement, expected in [('X-LaTeX-Review-Token', 'wrong', 403),

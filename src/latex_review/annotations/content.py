@@ -3,7 +3,10 @@
 All public values are JSON objects. Text offsets are UTF-16 code units, as in DOM
 Range. Formula atoms count as one U+FFFC; MathJax descendants never supply offsets.
 """
+from collections import OrderedDict
 from copy import deepcopy
+from dataclasses import dataclass
+from threading import Lock
 from difflib import SequenceMatcher
 from html.parser import HTMLParser
 import json
@@ -59,19 +62,8 @@ def _semantic_units(units):
              for k, v in unit.items() if k not in ('selector', 'change_ids')} for unit in units]
 
 
-def build_content(project, preview_html: str, *, project_root: Path | None = None, changes=()):
-    """Extract actual preview text, including unmodified prose and degraded formulas.
-
-    Call while the source snapshot exists. Content identity includes resolved source
-    text, bibliography/macro interpretation and semantic preview coordinates.
-    Selectors and comparison-specific change membership do not affect identity.
-    """
-    from dataclasses import asdict
-    from ..cache import dependency_fingerprints
-    root = (project_root or project.expanded.source.worktree_origin or project.expanded.source.root).resolve()
-    entry = project.expanded.source.entry
-    project_id = digest({'root': str(root), 'entry': entry})
-    nodes = {n.review.id: n for n in project.nodes}
+def _extract_html_units(nodes, preview_html):
+    """Extract only DOM-dependent facts; never retain a parsed project or source."""
     parser = _PreviewParser()
     parser.feed(preview_html)
     blocks, formulas, counters = [], [], {}
@@ -130,11 +122,10 @@ def build_content(project, preview_html: str, *, project_root: Path | None = Non
             if 'data-annotation-latex' in element.attrs:
                 ordinal = sum(f['node_id'] == owner.review.id for f in formulas)
                 formulas.append({'id': f'{owner.review.id}:formula:{ordinal}', 'kind': 'formula',
-                                 'node_id': owner.review.id, 'parent_node_id': owner.review.parent_id,
+                                 'node_id': owner.review.id,
                                  'raw_latex': element.attrs['data-annotation-latex'],
                                  'text': element.attrs['data-annotation-latex'], 'selector': element.selector(),
-                                 'source': asdict(owner.review.source), 'section_path': list(owner.review.section_path),
-                                 'labels': list(owner.labels), 'atoms': []})
+                                 'atoms': []})
                 continue
             # Each leaf block is a paragraph boundary. Container nodes cannot merge paragraphs.
             is_block = element.tag in block_tags
@@ -163,10 +154,9 @@ def build_content(project, preview_html: str, *, project_root: Path | None = Non
             ordinal = counters.get(owner.review.id, 0)
             counters[owner.review.id] = ordinal + 1
             blocks.append({'id': f'{owner.review.id}:block:{ordinal}', 'kind': 'text',
-                           'node_id': owner.review.id, 'parent_node_id': owner.review.parent_id,
-                           'text': text, 'raw_latex': owner.review.raw_latex, 'atoms': atoms,
-                           'selector': element.selector(), 'source': asdict(owner.review.source),
-                           'section_path': list(owner.review.section_path), 'labels': list(owner.labels)})
+                           'node_id': owner.review.id,
+                           'text': text, 'atoms': atoms,
+                           'selector': element.selector()})
             role = element.attrs.get('data-annotation-subunit')
             if element.tag == 'figcaption' or 'table-caption' in element.attrs.get('class', '').split():
                 role = 'caption'
@@ -184,9 +174,95 @@ def build_content(project, preview_html: str, *, project_root: Path | None = Non
                 if node_owner(el):
                     positions[el.selector()] = i
     units = sorted(blocks + formulas, key=lambda u: positions[u['selector']])
-    for order, unit in enumerate(units):
-        unit['order'] = order
-        unit['change_ids'] = [c.id for c in changes if c.new_node_id in (unit['node_id'], unit['parent_node_id'])]
+    html_node_ids = frozenset(el.attrs['data-node-id'] for el in descendants(parser.root)
+                              if el.attrs.get('data-node-id') is not None)
+    return units, html_node_ids
+
+
+@dataclass(frozen=True)
+class _HTMLUnit:
+    id: str
+    kind: str
+    node_id: str
+    text: str
+    selector: str
+    atoms: tuple
+    formula_raw: str | None
+    subunit: tuple
+
+
+@dataclass(frozen=True)
+class _HTMLExtraction:
+    node_ids: frozenset
+    node_types: tuple
+    units: tuple[_HTMLUnit, ...]
+
+
+# Bounded, immutable HTML-only facts. No project, DOM, source span, permission,
+# manifest identity, page binding, or mutable unit dictionary survives a call.
+_HTML_CACHE = OrderedDict()
+_HTML_CACHE_LOCK = Lock()
+_HTML_CACHE_ENTRIES = 2
+_HTML_CACHE_MAX_CHARS = 8_000_000
+_HTML_CACHE_MAX_UNITS = 20_000
+
+
+def _node_types(nodes, ids):
+    return tuple(sorted((id, nodes[id].review.type) for id in ids if id in nodes))
+
+
+def _html_units(nodes, preview_html):
+    cacheable = len(preview_html) <= _HTML_CACHE_MAX_CHARS
+    if cacheable:
+        with _HTML_CACHE_LOCK:
+            cached = _HTML_CACHE.get(preview_html)
+            if cached is not None and cached.node_types == _node_types(nodes, cached.node_ids):
+                _HTML_CACHE.move_to_end(preview_html)
+                return cached.units
+    extracted, node_ids = _extract_html_units(nodes, preview_html)
+    units = tuple(_HTMLUnit(
+        unit['id'], unit['kind'], unit['node_id'], unit['text'], unit['selector'],
+        tuple((atom['offset'], atom['formula_node_id'], atom['raw_latex'], atom['selector'])
+              for atom in unit['atoms']),
+        unit.get('raw_latex') if unit['kind'] == 'formula' else None,
+        tuple(unit.get('subunit', {}).items())) for unit in extracted)
+    if cacheable and len(units) <= _HTML_CACHE_MAX_UNITS:
+        cached = _HTMLExtraction(node_ids, _node_types(nodes, node_ids), units)
+        with _HTML_CACHE_LOCK:
+            _HTML_CACHE[preview_html] = cached
+            _HTML_CACHE.move_to_end(preview_html)
+            while len(_HTML_CACHE) > _HTML_CACHE_ENTRIES:
+                _HTML_CACHE.popitem(last=False)
+    return units
+
+
+def build_content(project, preview_html: str, *, project_root: Path | None = None, changes=()):
+    """Bind immutable DOM extraction facts to this fresh captured project.
+
+    Exact HTML and rendered owner membership/types may reuse pure extraction.
+    Source/order/permissions, dependencies/macros and identity are bound anew.
+    """
+    from dataclasses import asdict
+    from ..cache import dependency_fingerprints
+    root = (project_root or project.expanded.source.worktree_origin or project.expanded.source.root).resolve()
+    entry = project.expanded.source.entry
+    project_id = digest({'root': str(root), 'entry': entry})
+    nodes = {n.review.id: n for n in project.nodes}
+    units = []
+    for order, template in enumerate(_html_units(nodes, preview_html)):
+        owner = nodes[template.node_id]
+        unit = {'id': template.id, 'kind': template.kind, 'node_id': template.node_id,
+                'parent_node_id': owner.review.parent_id, 'text': template.text,
+                'raw_latex': (template.formula_raw if template.kind == 'formula' else owner.review.raw_latex),
+                'atoms': [dict(zip(('offset', 'formula_node_id', 'raw_latex', 'selector'), atom))
+                          for atom in template.atoms],
+                'selector': template.selector, 'source': asdict(owner.review.source),
+                'section_path': list(owner.review.section_path), 'labels': list(owner.labels),
+                'order': order,
+                'change_ids': [c.id for c in changes if c.new_node_id in (template.node_id, owner.review.parent_id)]}
+        if template.subunit:
+            unit['subunit'] = dict(template.subunit)
+        units.append(unit)
     from ..annotation_sources import enrich_content
     enrich_content(project, units, root)
     # Keep legacy coordinates under their old version. Different parse/render

@@ -85,6 +85,14 @@ class TranslationConfig:
         return address if address.endswith("/chat/completions") else address + "/chat/completions"
 
 
+def _plain_sentence_text(raw: str) -> str | None:
+    # With no commands, math or active nonbreaking spaces, the token walker
+    # only folds whitespace and rejoins unchanged text. Keep all special cases.
+    if any(char in raw for char in ('\\', '$', '~')):
+        return None
+    return ' '.join(raw.split())
+
+
 def _protected_sentence(raw: str, render, *, token_start: int = 0) -> dict:
     from .structure import _argument, _masked
 
@@ -139,7 +147,10 @@ def _protected_sentence(raw: str, render, *, token_start: int = 0) -> dict:
     clean = _without_comments(raw)[0]
     if _TOKEN.search(clean):
         raise TranslationError("原文包含保留的翻译占位符，无法可靠翻译")
-    return {"text": walk(clean), "protected": protected}
+    plain = _plain_sentence_text(clean)
+    text = (walk(clean) if plain is None else
+            _NUMBER.sub(lambda m: add(m[0], escape(m[0]), 'number'), plain))
+    return {"text": text, "protected": protected}
 
 
 def _build_unit(project, node, side: str, change_id: str, changed: set[int], *,

@@ -5,8 +5,9 @@
 本台账逐项核对[规格 AC-01–AC-24](<spec.md#L433-L456>)与**实际测试断言**，不以测试函数标题代替证明，也不将测试通过等同于作者验收。界面截图与人工阅读比较另见[验收记录](<acceptance.md>)，真实模型评估前置条件见[语义评估协议](<semantic-evaluation.md>)。本轮只补测试和文档，不改生产实现。
 
 - 上一轮完整写作选择的生产代码基线：`44085641b20d99b86d56fcd0a9f6a0ccfb5a660d`，包含 entry proxy 的冻结内容标识转发修复。其后生产代码因 AC-03/24 实现与旧界面回归修复而解冻；下述 253 用例结果不能自动作为后续新源码提交的通过证据，最终新提交与整套复跑仍待固定、收集。
-- AC-03/09/19/24 的新增专项结果由实施代理及父代理报告，本台账已逐条阅读当前测试断言后补记；未把“代理说功能完成”本身当作断言覆盖。AC-11/18 的 3 个异步专项由台账维护者直接执行。本台账维护者只修改测试和本文，没有修改生产代码。
-- 执行环境：Linux `6.8.0-138-generic` / x86_64 / glibc 2.39，Python 3.11.17，2 个逻辑 CPU。浏览器证据为 Linux headless Chromium，不代表 macOS CI。
+- 可分享的**未完成开发检查点**为 `7834f0598f4cc12bcbbfde6d1968d7d43e6227d5`，父代理已[推送并发布复现说明](<https://github.com/jinghonh/LaTeX-Review/issues/55#issuecomment-6649844143>)；隔离安装、依赖及已知失败见[检查点说明](<checkpoint.md>)。当前界面/性能修复仍在继续，父代理报告已绑定 [Draft PR #56](<https://github.com/jinghonh/LaTeX-Review/pull/56>)；此 SHA 不是最终冻结版本，Draft 也不表示验收完成。
+- AC-03/09/19/22/24 的新增专项结果由实施代理及父代理报告，本台账已逐条阅读当前测试断言后补记；未把“代理说功能完成”本身当作断言覆盖。AC-11/18 的 3 个异步专项由台账维护者直接执行。本台账维护者只修改测试和本文，没有修改生产代码。
+- 本台账直接执行环境：Linux `6.8.0-138-generic` / x86_64 / glibc 2.39，Python 3.11.17，2 个逻辑 CPU。另有下文明确标注 HUMAN-REPORTED 的旧固定版本本机 macOS 选择性结果，不混同本代理执行、macOS CI 或最新修复版结果。
 - **自动化支撑**：该行主要技术边界有已检查的断言；仍限于合成输入，不表示真实论文、人类判断或外部模型已获验收。
 - **部分支撑**：有相关断言，但该 AC 的复合场景尚有明确缺口，列于最后一列。不得据此宣称完整验收。
 - **A** = Python 合成/临时工程、真实解析器/规则/存储；**B** = Chromium 执行生产 JS，但 API 被固定响应拦截；**C** = Chromium → 实际本地 entry proxy → worker → coordinator；**D** = Chromium → 真实 HTTP worker → 测试桥直接 dispatch 真实 coordinator（替换 entry RPC，不是假结果）；**O** = 独立脚本留存的观测。A/B/C/D 的论文内容均为合成数据。
@@ -26,15 +27,23 @@
 | AC-03 新实现相关联跑（实施代理报告） | **28 passed，33.63s** | [诊断发布/适配](<../../../tests/test_check_diagnostics.py>)2 例、[浏览器合并与 7 种拒绝误合并](<../../../tests/test_check_diagnostics_browser.py>)8 例已包含于这次相关联跑；此 28 是联跑总数，非 28 个新增诊断用例，也不是完整写作选择。 |
 | AC-24 新实现相关联跑（实施代理报告） | **57 passed，约 9s** | [新批注转换模块](<../../../tests/test_check_annotation.py>)6 例 + [服务模块](<../../../tests/test_check_service.py>)21 例 + [原批注模块](<../../../tests/test_annotations.py>)30 例。独立 reviewer 对同 6 个转换用例另报 **6 passed，4.34s**、无问题；额外 Unicode/重复 include 人工技术探测不计入这 6 例或正式性能样本。 |
 | AC-09/19 兼容专项（实施代理报告） | **3 passed，4.60s** | [兼容模块](<../../../tests/test_check_compatibility_edges.py>)1 个真实跨文件不连续段落测试 + 2 个冻结旧版本报告浏览器测试；与[分页模块](<../../../tests/test_check_workspace_pagination.py>)联跑为 **4 passed，7.84s**，前 3 例已包含在后 4 例中，不重复相加。 |
-| 最新固定源码的完整写作选择 / 全仓库复跑 | **待收集** | 新实现专项通过不能替代旧界面回归修复后的最终复跑；也不能抹去下述已观察到的 M0 失败。 |
+| AC-22 原生交互/旧报告增强复跑（实施代理报告） | **5 passed，9.29s，0 skipped** | 实际命令：`.venv/bin/python -m pytest -q tests/test_check_workspace_accessibility.py tests/test_check_compatibility_edges.py`。[发布报告双视口增强版](<../../../tests/test_check_workspace_accessibility.py#L46-L194>)为 390×844 与 1440×1000，保留[抽屉/页面/引文无溢出](<../../../tests/test_check_workspace_accessibility.py#L150-L152>)与完整引文可见断言；[390px 原生 Home→scrollTop=0→PageDown→scrollTop>0](<../../../tests/test_check_workspace_accessibility.py#L167-L175>)改正了“第二引文必然在屏外”的夹具假设，没有放松 quote/overflow 校验。[旧报告 current-client-without-checks-data](<../../../tests/test_check_compatibility_edges.py#L127-L192>)也实际通过正常 `.click()`，无事件派发/force，覆盖用户在旧 macOS 源码遇到的那一参数场景。原先 2 passed / 5.55s 早于增强版，仅为历史，不与本次相加。 |
+| 扩展旧回归/保存/分页/AC-22 选择（实施代理报告） | **64 passed / 1 failed，97.25s；失败随后由上行复跑销项** | 原 59 项、保存 3 项及分页已全部通过；唯一失败为上述“第二引文必然在屏外”假设，不是 overflow/引文完整性失败。其后只修正该测试的显式键盘滚动操作，5 项复跑通过。64 和 5 有重叠，不相加为新独立覆盖，也不是最终全仓库输出。 |
+| 本机 macOS 旧固定版本选择（HUMAN-REPORTED，采用原评论最新编辑） | **去重 276 个不同用例通过；未覆盖 skip 0，未解决 failure 1** | 用户转报的本机 Codex 执行，[原始结果](<https://github.com/jinghonh/LaTeX-Review/issues/55#issuecomment-6649842486>)固定 `33135ce13b8fc4776320f0525c7477ece1375cef`：18 核心等模块 237 passed / 2 skipped / 23.35s；两个 skip 的实际原因是 archive 缺固定历史 Git 对象，**不是浏览器尚未安装**。补回原 Git 历史后这两个兼容用例 1 passed / 1 failed（实际点击工作区标签被章节目录遮挡）。另 8 浏览器等模块 43 passed / 1 failed（archive 无 Git metadata）；补同源 Git bundle、不改源码后该 metadata 失败 1 passed / 2.84s。去重数采用用户最新编辑，不直接相加；旧源码仍有 1 个实际布局失败，不是全仓库/新 UI/性能/修复后最终版本验收。 |
+| 最新导航/布局定向复跑（实施代理报告） | **9 passed，22.84s** | 包含[真实生成 diff/live 的 6 个布局用例](<../../../tests/test_check_workspace_layout.py#L11-L124>)：1440/824/390px 原生 pointer 打开导航、证据、章节/变更/批注控件，无 force/event-dispatch，333 阅读位置恢复、280px 再布局；diff 跳转后的 summary 顶部在实际 toolbar 底部之下且视口可见、可真实点击。9 是本次相关联跑总数，不等于新布局模块独有 9 例；该结果来自当前修复工作树、不自动归属于旧检查点，最终全仓库仍待收集。 |
+| 最新固定源码的完整写作选择 / 全仓库复跑 | **待收集** | 新实现专项及旧版本 macOS 选择通过不能替代最新界面/性能修复后的最终复跑；也不能抹去下述已观察到的 M0 失败。 |
 
 pytest 数量为参数化展开后的用例数，不是测试函数数。不同选择存在重叠，不将上表各行通过数相加为唯一用例数；历史写作选择与后续专项也不是同一冻结源码的最终验收。父代理全仓库结果单列如下，不将其已通过的旧用例挪用为本台账未测场景的证据。
 
 ### 已观察到的 M0 回归：不能视为已通过
 
-父代理报告在上一生产基线、最新修复前运行全仓库测试：**14 failed，1098 passed，19 skipped，约 1049s**。已报告的失败分类为 12 个导航覆盖层/URL history/滚动功能回归，1 个 reading resize 失败（是否同根因待验证），以及 1 个 translation port 测试失败（基线归因尚不能作为豁免理由）。这不是全绿，也不能把 14 项笼统写成“已知基线问题”。
+父代理报告在 `44085641b20d99b86d56fcd0a9f6a0ccfb5a660d` 生产基线、最新修复前运行全仓库测试：**14 failed，1098 passed，19 skipped，约 1049s**。当时分类为 12 个导航覆盖层/URL history/滚动功能回归，1 个 reading resize 失败，以及 1 个 translation port 测试失败。这不是全绿，也不能把 14 项笼统写成“已知基线问题”。其后父代理在[检查点已知状态](<checkpoint.md#L50-L57>)记录 13 个功能失败修复的 59 项专项、另 5 项导航/阅读恢复测试通过；这些是不同时间/选择的结果，不改写最初全套结果。
 
-当前正在修复静态导航、初始滚动及 URL history 路径；在固定新源码后，需重跑对应失败用例及完整选择，并保留剩余失败/跳过原因。**修复进行中不等于已验证修复；专项新功能通过不等于 M0 无回归。** 最新固定提交、全套输出及这些失败的最终状态仍待父代理收集。
+translation port 问题单独归因：父代理报告原基线定向复跑 2 次均失败，夹具修正后 8/8 通过；[实际断言](<../../../tests/test_translation.py#L898-L920>)仍要求 CLI 1.5s 内退出、共享阅读服务 HTTP 200，只在停止 entry 后重新绑定旧端口遇到 `EADDRINUSE` 时重试，deadline 10s，其他错误立即抛出。因此不将全部功能回归归为该清理竞态，也不把局部通过当作最终全套通过。
+
+后续实际 `33135ce13b8fc4776320f0525c7477ece1375cef` diff 捕获仍发现侧栏遮挡导航；[After 原始记录](<evidence/after/measurements.json#L1-L4>)明确 `capture_complete: false`，部分/混合视觉证据不是最终配对验收。`7834f0598f4cc12bcbbfde6d1968d7d43e6227d5` 已写入导航预留高度修复，但当时新布局选择 **2 passed / 3 failed / 3 setup error**：3 个失败涉及 diff 批注关闭夹具选择器、3 个 setup error 涉及 live 临时输出目录未创建；不能把这 6 个结果全部当作已证明的生产回归。另有 source jump 目标被工具栏覆盖的实际缺陷，后续也已补针对性断言。
+
+父代理最新报告夹具/布局修复后 **9 passed，22.84s**，[实际布局断言](<../../../tests/test_check_workspace_layout.py#L51-L124>)覆盖真实发布页面导航、遮挡与跳转目标可点；该最新定向结果取代“这轮布局仍未通过”的旧状态，但没有取代原全套失败、旧固定源码 macOS 遮挡失败或尚未完成的最终配对截图。扩展选择已得 64 passed / 1 个 AC-22 夹具假设失败，其后显式原生键盘滚动修正的 AC-22/兼容复跑 **5 passed，9.29s，0 skipped**，该失败已定向销项。功能 UI gate 已有上述定向通过；最终源码提交固定、全仓库输出及配对截图仍单独待完成，不额外阻止 AC-22 技术状态升级。**修复进行中不等于已验证修复；专项新功能通过不等于 M0 无回归。** 最新最终冻结提交、全套输出与这些路径的最终状态仍待父代理收集。
 
 ## AC 逐项证据
 
@@ -58,14 +67,14 @@ pytest 数量为参数化展开后的用例数，不是测试函数数。不同�
 | AC-16 论文提示词注入无工具权限 | 自动化支撑 · A/B | [注入文本测试](<../../../tests/test_check_semantic.py#L177-L182>)把执行指令当普通证据；[假 provider 请求体](<../../../tests/test_check_semantic.py#L251-L270>)无 tools/functions，凭据不出现在执行结果；[浏览器测试](<../../../tests/test_check_workspace_browser.py#L92-L99>)包含恶意片段却未执行 window.pwned，[JS 合约](<../../../tests/test_check_workspace.py#L68-L74>)无 innerHTML/eval。 | 这里验证能力隔离和请求形状；不是外部提供商提示词注入红队评测，也不声称文本提示本身能保证模型服从。 |
 | AC-17 两窗口/手改 JSON 冲突 | 自动化支撑 · A/B | [同 revision 手改](<../../../tests/test_check_registry.py#L79-L87>)依 content hash 拒绝覆盖；[跨进程竞争](<../../../tests/test_check_registry.py#L110-L128>)恰一成功一冲突、保留赢家；[浏览器冲突](<../../../tests/test_check_knowledge_browser.py#L111-L119>)保留未保存表单、只 POST 一次不自动重试。 | 进程测试是真实锁竞争；GUI 用固定 409 响应，不冒称两真实浏览器窗口的完整竞态录屏。 |
 | AC-18 多入口共享名称但隔离定义、只读安全 | 自动化支撑 · A | 新增[同名双定义异步专项](<../../../tests/test_check_acceptance_edges.py#L126-L176>)在同根共享 registry 中注册一个 Shared Filter 概念、两份意义不同的 confirmed definition 与各自 entry/body scope；分别以 main 或 supplement 为违规入口运行，两份实际 knowledge reports 各只计 1 个正式使用、coverage 完整，只有违规入口出现顺序 finding，证据仅来自其本入口使用/定义文件，另一份无串入 finding，源文件不变。[只读存储](<../../../tests/test_check_registry.py#L131-L140>)另实际 chmod 验证外部写入与源文件不变；[共享根服务测试](<../../../tests/test_check_service.py#L245-L331>)覆盖各入口配置验证。 | 新专项是实际 coordinator/规则/知识/队列，不是仅校验 paper_id 或表键；仍非两个真实浏览器窗口或真实论文作者验收。 |
-| AC-19 静态/历史/旧报告可读、不写入/不调用 | 自动化支撑 · A/B | [旧报告 fixture](<../../../tests/test_check_compatibility_edges.py#L73-L124>)离线归档冻结 `fe82620af8bbbb028809d59ceeaaad7085427880` 的真实包，用独立子进程生成原版无 checks/workspace 的报告；[浏览器两种客户端](<../../../tests/test_check_compatibility_edges.py#L127-L192>)分别验证原资产和注入当前资产仍可阅读，API 真正返回 404、检查按钮禁用、知识/语义无写表单，无 POST/AI 请求且报告文件 hash 不变；[历史 findings](<../../../tests/test_check_service.py#L434-L456>)拒绝 resolved/stale/unknown 的作者操作。 | 该固定历史版本可重现；没有穷举每一种历史格式。若本地缺冻结 Git object，该专项明确 skip，不联网补齐，也不得把 skip 宣称为已通过；本轮代理报告是 3 passed、非 skip。静态旧导航的 M0 行为仍以最终回归结果为准。 |
+| AC-19 静态/历史/旧报告可读、不写入/不调用 | 自动化支撑 · A/B | [旧报告 fixture](<../../../tests/test_check_compatibility_edges.py#L73-L124>)离线归档冻结 `fe82620af8bbbb028809d59ceeaaad7085427880` 的真实包，用独立子进程生成原版无 checks/workspace 的报告；[浏览器两种客户端](<../../../tests/test_check_compatibility_edges.py#L127-L192>)分别验证原资产和注入当前资产仍可阅读，API 真正返回 404、检查按钮禁用、知识/语义无写表单，无 POST/AI 请求且报告文件 hash 不变；[历史 findings](<../../../tests/test_check_service.py#L434-L456>)拒绝 resolved/stale/unknown 的作者操作。 | 该固定历史版本可重现；没有穷举每一种历史格式。若本地缺冻结 Git object，该专项明确 skip，不联网补齐，也不得把 skip 宣称为已通过；早期专项是 3 passed、非 skip；最新 AC-22/兼容合并复跑为 5 passed / 0 skipped，包含这里的两个旧报告参数。旧 macOS 固定源码的遮挡失败保留在历史记录，新修复工作树的相同 current-client 参数已正常点击通过。 |
 | AC-20 无 Git/无基线/未跟踪依赖 | 自动化支撑 · A | [当前规则测试](<../../../tests/test_check_rules.py#L23-L36>)在无 Git 临时工程中检查可运行、首轮 delta not_comparable；[依赖新出现](<../../../tests/test_check_snapshot.py#L184-L191>)未存在 include 新建后改变 content_id 并纳入 files；[服务失效](<../../../tests/test_check_service.py#L101-L109>)依赖出现使 current stale。 | 未将“没有基线”解释为全文全部新增。 |
 | AC-21 确定性与规则/知识变化区别 | 自动化支撑 · A | [确定性规则](<../../../tests/test_check_rules.py#L23-L36>)完全相同报告；[配置变化](<../../../tests/test_check_rules.py#L78-L87>)not_comparable 并记录 configuration_hash_changed；[知识变化](<../../../tests/test_check_rules.py#L58-L75>)不改文件却能触发规则命中，明确 knowledge_hash_changed，不作为正文修复；[live/diff 同身份](<../../../tests/test_check_snapshot.py#L95-L112>)排除无关渲染/编译配置。 | 不以跨软件版本的字节完全一致代替版本指纹比较；未测真实模型输出确定性。 |
-| AC-22 阅读位置/抽屉/窄屏/键盘/非颜色 | **部分支撑** · B/O | [异步刷新后 Escape](<../../../tests/test_check_workspace_browser.py#L69-L99>)关闭抽屉并恢复到新列表行焦点，原文/冻结 JSON 不变；[键盘合约](<../../../tests/test_check_workspace.py#L68-L79>)包含 Escape/方向键/阅读位置代码路径；[500 条测试](<../../../tests/test_check_workspace_pagination.py#L123-L183>)翻页/筛选准确且切面板不换原文 DOM、不重解析报告、不请求 API；窄屏/滚动/截图实际观测见[界面验收](<acceptance.md>)。 | 静态源码断言不是键盘可用性证明；全链路辅助技术、跨浏览器、不同真实论文阅读位置恢复尚未人工验收。截图不能代替屏幕阅读器/完整键盘导航测试。 |
+| AC-22 阅读位置/抽屉/窄屏/键盘/非颜色 | **自动化支撑** · B/O | [实际发布报告、双视口原生交互](<../../../tests/test_check_workspace_accessibility.py#L46-L194>)：Tab 到真实导航，Home/End/方向键切面板并断言唯一可见面板；阅读位置稳定于 scrollY=333 后切换再恢复；Tab 遍历 finding、Enter/Escape 开关抽屉，关闭两次均返回同一个仍 connected 的 ElementHandle；两个 exact quote 完整可见且不截断，390px 双证据上下堆叠，6 个状态字段均为显式文本，源文件/报告 hash 不变。[无溢出](<../../../tests/test_check_workspace_accessibility.py#L150-L152>)与[显式原生滚动](<../../../tests/test_check_workspace_accessibility.py#L167-L175>)均保留并通过；增强/兼容选择 5 passed / 9.29s / 0 skipped，实际导航/布局相关选择另 9 passed / 22.84s。 | 技术断言限于 Linux Chromium 合成发布报告，不泛化到所有设备。按[原规格键盘/窄屏要求](<spec.md#L104-L110>)与[验收条款](<spec.md#L454>)已具自动化支撑；最终配对截图/全仓库复跑仍是独立交付事项，不新增为该 AC 的功能前置条件，也不额外要求完整 WCAG、人类 AT/屏幕阅读器审计。 |
 | AC-23 降级解析消失只能 unknown/stale | 自动化支撑 · A | [解析不完整后的比较](<../../../tests/test_check_rules.py#L78-L87>)原问题消失但 missing include 后 lifecycle=unknown，而非 resolved；[范围锚点消失](<../../../tests/test_check_knowledge_rules.py#L224-L235>)coverage incomplete，记录 scope_anchor_unavailable / stale_concept_knowledge；[无效角色](<../../../tests/test_check_knowledge_rules.py#L117-L129>)不冒充事实。 | 不完整不等于“已修好”；UI 的“没有展示 finding”不能独立作为 resolved 证据。 |
 | AC-24 审阅/转批注不是解决 | 自动化支撑 · A/D | [作者决定](<../../../tests/test_check_service.py#L383-L431>)不改 finding 的 origin/lifecycle；新增[真实转换持久化](<../../../tests/test_check_annotation.py#L50-L94>)在重载/重启/知识重检后复用一个批注、保留 current/unreviewed、源文件不变，只有实际修正文后完整重检才 resolved；[伪造/过期拒绝](<../../../tests/test_check_annotation.py#L97-L110>)不创建批注；[重复 include 锚定](<../../../tests/test_check_annotation.py#L132-L152>)保留实例；[浏览器转换](<../../../tests/test_check_annotation.py#L155-L195>)经真实 HTTP worker 与测试 dispatch 桥，两次显式转换只生成一个线程，worker 覆盖浏览器伪造输出目录，finding 仍 current。 | D 层替换了 entry RPC，不能称为独立真实 entry proxy 的全链路；已有 C 层运行路径另行验证。转批注不等于修复或作者接受语义判断，不把 reviewed/waived/converted 混同 resolved。 |
 
-汇总：**24 行均有已检查的相关证据，其中 22 行记为自动化支撑、2 行记为部分支撑**（AC-14/22）。AC-03/09/19/24 已补入通过的专项及直接断言；但完整新源码尚未冻结复跑，M0 全套存在已观察到、正在修复的功能失败。**这不是“24/24 已验收”，也不是“全仓库无回归”**；真实模型/论文/作者判断、完整窄屏键盘/辅助技术及最终兼容回归仍须分别验收。
+汇总：**24 行均有已检查的相关证据，其中 23 行记为自动化支撑、1 行记为部分支撑**（AC-14）。AC-22 已因原生键盘、双视口、完整引文/无溢出及实际导航定向复跑通过升级；配对截图与全仓库回归仍独立待完成。**这不是“24/24 已验收”，也不是“全仓库无回归”**。AC-14 的真实模型/作者质量结果及 [M4 少量真实调用门槛](<plan.md#L266-L272>)尚未完成；不因此阻塞可行实施、Linux/macOS 回归及性能优化，也不为 AC-22 另造 WCAG/人类辅助技术前置条件。
 
 ## 性能与规模：已经测到什么
 
@@ -78,13 +87,24 @@ pytest 数量为参数化展开后的用例数，不是测试函数数。不同�
 | 已保存修改后同步 pipeline | 10 次，median 0.8965s，nearest-rank p95 1.3156s | 样本内部同步耗时低于 2s；**不能据此宣称端到端 save→queue→页面结果 p95 达标**。10 次仅是小样本。 |
 | 500 条 UI 规模 | 10 页 × 50，无重复/漏项；组合筛选 63 条、末页 13；confirmed 筛选 100 条 | [分页断言](<../../../tests/test_check_workspace_pagination.py#L123-L183>)与[观测数据](<evidence/pagination-500.json>)证明合成冻结列表的分页/筛选和切换面板不重复解析/请求；这是 B 层，不是 500 个真实独立语义问题。 |
 | 实际浏览器服务路径 | [真实 entry proxy 回归](<../../../tests/test_check_entry_proxy.py#L12-L57>)发送冻结 content/page headers，缺失 content header 得 409 且未替换 current run | C 层验证具体安全转发和任务完成，不是保存热路径吞吐或 p95 基准。 |
+| 实际保存链路诊断（O，非浏览器） | 同一参考负载，**N=1，77.2078s** 保存→权威 current report 导出验证；预览首次匹配 73.8085s、首次观察 completed 77.0601s | [原始未完成记录](<evidence/linux-saved-performance.json#L1-L7>)与[实际样本](<evidence/linux-saved-performance.json#L289-L348>)证明这一次明显未达到 2s 目标；请求 10 次但只完成 1 次，第二次被中断，**该首轮记录无 10 次结果或 p95**；后续完整重测另列下行。 |
+| 优化后完整真实保存重测（O，非浏览器） | **10 次顺序保存均完成且 current 验证匹配；median 10.211543s，nearest-rank p95 10.795668s，range 9.943788–10.795668s** | [原始 complete=true](<evidence/linux-saved-performance-optimized.json#L1-L4>)、[最终统计与清理](<evidence/linux-saved-performance-optimized.json#L1206-L1216>)：**仍未达到 ≤2s 目标**。保留默认 800ms debounce 及完整保存边界；[observer sleep 为 0.5s](<evidence/linux-saved-performance-optimized.json#L136-L142>)，不是首轮的 0.1s，也不从实测值中减掉以制造达标。 |
+| 无 HTTP observer 的 cProfile 构建诊断（O） | instrumented full build/publication 131.349s；render_preview cumulative 105.359s；_inline_html 25,000 次/97.889s；_parse_dom 10,003 次/79.856s；TeX 初始化 10,003 次/39.351s | [profile 原始记录](<evidence/linux-saved-build-profile.json#L130-L229>)定位反复解析/初始化成本；这些是嵌套 cumulative 时间，不能相加，且 profiler 增加开销。这不是未插桩保存延迟，也不是修复后加速证明。 |
+
+实际保存诊断的[复现与计时边界](<evidence/saved-check-latency.md#L14-L46>)包括原生文件监听、完整预览重建/发布、**默认 800ms debounce**、HTTP notify、coordinator 队列/检查、状态轮询与报告导出验证；不排除 render/debounce/local HTTP。排除 TeX 编译与外部模型/网络调用，且没有浏览器 paint 测量。preview/运行/完成时刻是首次观测上界，不是内部阶段 CPU 时间；77.0601s 是“保存起算至观察 completed”，不是检查核心单独耗时。样本有源文件首尾 hash 边界且未发现期间变化，但不等于最新最终提交已获性能验收。
+
+优化后的 10 次真实顺序保存已经完成；[记录边界](<evidence/linux-saved-performance-optimized.json#L1113-L1121>)仍包含文件监听、完整预览发布、默认防抖、HTTP notify、排队/执行、状态与导出验证。10 个样本均为 authoritative match、completed、非 stale；[首尾源路径变化为空](<evidence/linux-saved-performance-optimized.json#L1338>)，entry 正常退出、worker 退出及隔离 endpoint 移除均有证据。运行时声明无本地 pytest/browser/profile 并发，但共享 2 CPU 主机不是专用空闲硬件；observer 每轮 sleep 0.5s 加实际 HTTP 工作，时刻仍为观测上界。
+
+**这次完整重测 p95 10.795668s 仍失败**，不是达标交付。首轮 N=1 的 77.2078s 原证据继续保留，与本轮不同 observer 周期/源码的结果不混成同一分布。父代理仍在优化，后续源码改变后须再固定边界并重测；旧同步核心 p95 和插桩 profile 不能替代实际保存目标。
 
 ## 尚未完成的验收与精确补测项
 
 1. **真实论文与作者判断**：未获得/执行私有真实论文人工验收；没有误报率、漏报率、作者确认率或审查耗时的可信结果。合成 fixture 与截图不得充当真实论文认可。
-2. **实际 provider/model**：假 transport 验证了显式授权、预算预检、重试上限、候选状态和过期结果，但没有真实模型语义质量、实际计费/限流行为；[固定案例协议](<semantic-evaluation.md>)仍待授权执行。引文有效率不等于语义判断正确率。
-3. **macOS**：本轮 Linux；macOS CI/本地兼容执行仍待完成，不能用跨平台代码设计代替结果。
-4. **保存端到端延迟**：需在固定机器/论文负载记录实际保存→debounce→入队→执行→当前报告→浏览器可见结果的多次样本及 p95。现有同步基准与一次 C 层检查完成不补足该项。
-5. **剩余 AC 边界与 M0 回归**：AC-14 的真实模型推断/作者质量判断，AC-22 的完整窄屏阅读位置、键盘及辅助技术验收仍未完成。AC-03/09/11/18/19/24 的具体自动化缺口已有上表专项断言，不再笼统列为未测；但旧导航/URL history/滚动/reading resize 等 M0 失败必须在修复后的固定新提交上重跑，translation port 失败也须明确最终结果和归因，不能仅凭相邻新功能通过或“疑似基线”销项。
+2. **实际 provider/model / M4**：假 transport 验证了显式授权、预算预检、重试上限、候选状态和过期结果，但没有真实模型语义质量、实际计费/限流行为；[固定案例协议](<semantic-evaluation.md>)仍待授权执行。[原计划 M4 门槛](<plan.md#L272>)明确要求显式启用后少量真实调用；未执行前不得宣称真实接口或整个 M4 通过。AC-14 仍部分支撑，引文有效率不等于语义判断正确率。
+3. **macOS**：用户已授权并验证本机 Codex 隔离目录执行可用，无需 SSH；上表 HUMAN-REPORTED 初步结果的环境为 macOS 27.2 / arm64、Python 3.11.14、Playwright 1.64.1 / Chromium 156。旧 `33135ce` 的选择性通过不覆盖最新导航/性能修复，不是最终全仓库结果。父代理报告 [macOS CI run](<https://github.com/jinghonh/LaTeX-Review/actions/runs/41969163257>)已启动，结论仍待收集；最终修复冻结后须复验，不能再把“macOS 无执行资源”当作暂停实施理由。
+4. **实际保存延迟**：首轮 **77.2078s / N=1** 未完成记录保留；优化后 **10 次完整顺序保存 p95 10.795668s，仍未达到 ≤2s**。不能再写成“没有 10 次样本”，也不能写成已达标。render、默认 800ms debounce、HTTP、队列与当前报告验证保留在边界内，observer 0.5s 另有明确记录，浏览器可见/paint 并未测量。继续优化后须新边界复测，核心同步基准不能替代保存目标。
+5. **剩余 AC 边界与 M0 回归**：AC-14 的真实模型推断/作者质量结果独立待资源；AC-22 增强功能断言与实际导航定向选择均通过，已升级自动化支撑，不新增人类 AT/WCAG 前置条件。AC-03/09/11/18/19/24 的具体自动化缺口也已有上表专项断言。最终新源码固定、配对截图及全仓库仍为独立待完成交付事项；translation port 已有夹具归因与定向通过，UI 功能 gate 也有通过结果，但这些不等于最终全仓库无回归。
+
+私有真实论文、付费模型配置/预算及真实作者质量评价只影响对应资源性验收项，**不阻塞继续可行实现、性能优化、Linux/macOS 测试或最终界面复验**。
 
 本台账没有请求新硬件、真实凭据或外部模型调用，也没有替换独立维护的[界面验收记录](<acceptance.md>)。
