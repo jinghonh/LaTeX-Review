@@ -275,7 +275,10 @@
       });
       arrangeInlineChanges();
       const toolbar = document.querySelector('.report-controls');
-      detail.style.scrollMarginTop = (toolbar && getComputedStyle(toolbar).position === 'sticky' ? toolbar.offsetHeight + 16 : 16) + 'px';
+      // Include the actual sticky inset: the workspace reserves a measured strip
+      // above the legacy toolbar, including when navigation wraps on narrow screens.
+      const toolbarStyle = toolbar && getComputedStyle(toolbar);
+      detail.style.scrollMarginTop = (toolbarStyle?.position === 'sticky' ? toolbar.offsetHeight + Math.max(16, parseFloat(toolbarStyle.top) || 0) : 16) + 'px';
       if (scroll) detail.scrollIntoView({block: 'start', behavior: 'auto'});
       else {
         const summary = detail.querySelector('summary');

@@ -28,6 +28,7 @@ def publication(request, tmp_path_factory):
             old, new = parse_project(pair.old.expand()), parse_project(pair.new.expand())
             result = write_report(old, new, compare_projects(old, new), root / 'report', pdf_converter='', single_file=True)
             return request.param, result.html
+        (root / 'live').mkdir()
         build(pair.new, root / 'live')
         return request.param, root / 'live' / 'report.html'
 
@@ -35,6 +36,7 @@ def publication(request, tmp_path_factory):
 def settle(page):
     # Let the existing character-position reader finish its own layout callbacks.
     page.evaluate('() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))')
+    page.wait_for_function('() => !window.reviewReadingPosition?.isResizing()')
 
 
 def reserved(page):
@@ -83,7 +85,7 @@ def test_generated_reader_navigation_and_overlay_controls_are_reachable(publicat
         assert page.locator('#annotation-overview').bounding_box()['y'] >= height
         page.get_by_role('tab', name='概念与符号', exact=True).click()
         page.get_by_role('tab', name='阅读与变更', exact=True).click()
-        page.locator('#annotation-overview > summary').click()
+        page.locator('#annotation-overview').get_by_role('button', name='关闭', exact=True).click()
         settle(page)
         page.evaluate('scrollTo(0, 333)')
         settle(page)
@@ -99,6 +101,15 @@ def test_generated_reader_navigation_and_overlay_controls_are_reachable(publicat
         assert page.locator('#workspace-tab-coverage').get_attribute('aria-selected') == 'true'
         page.keyboard.press('Home')
         assert page.locator('#workspace-tab-reading').get_attribute('aria-selected') == 'true'
+        if mode == 'diff':
+            page.locator('#next-change').click()
+            settle(page)
+            summary = page.locator('.inline-change[open] > summary')
+            summary_box = summary.bounding_box()
+            toolbar_box = page.locator('.report-controls').bounding_box()
+            assert summary_box['y'] >= toolbar_box['y'] + toolbar_box['height']
+            assert summary_box['y'] + summary_box['height'] < page.evaluate('innerHeight')
+            summary.click()
         # ResizeObserver must recompute wrapping, not retain a desktop magic height.
         page.set_viewport_size({'width': 280, 'height': 1000})
         settle(page)

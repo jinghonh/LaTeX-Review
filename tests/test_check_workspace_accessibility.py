@@ -165,6 +165,13 @@ def test_published_keyboard_focus_scroll_and_complete_evidence(published_accessi
             assert fully_visible, f'evidence {index} must be completely reachable by keyboard scrolling'
             assert quotes.nth(index).text_content() == finding['evidence'][index]['quote']
         if viewport['width'] == 390:
+            # Quote placement may allow both fragments to fit while the footer
+            # still overflows. Test native keyboard scrolling explicitly instead
+            # of assuming that reaching the second quote required a PageDown.
+            page.keyboard.press('Home')
+            page.wait_for_function('document.getElementById("workspace-evidence").scrollTop === 0')
+            page.keyboard.press('PageDown')
+            page.wait_for_function('document.getElementById("workspace-evidence").scrollTop > 0')
             assert drawer.evaluate('node => node.scrollTop > 0')
         page.keyboard.press('Home')
         page.keyboard.press('Tab')
