@@ -37,18 +37,19 @@ def sentence_report(tmp_path):
 
 
 @pytest.fixture
-def browser_page():
+def browser_page(request):
     api = pytest.importorskip('playwright.sync_api')
-    with api.sync_playwright() as playwright:
-        try:
-            browser = playwright.chromium.launch(executable_path=os.environ.get("LATEX_REVIEW_BROWSER"))
-        except api.Error as exc:
-            pytest.skip(f'浏览器运行环境不可用：{exc}')
-        page = browser.new_page(viewport={'width': 1280, 'height': 900})
+    try:
+        browser = request.getfixturevalue('isolated_browser')
+    except api.Error as exc:
+        if os.environ.get('LATEX_REVIEW_REQUIRE_BROWSER') == '1':
+            raise
+        pytest.skip(f'浏览器运行环境不可用：{exc}')
+    with browser.new_context(viewport={'width': 1280, 'height': 900}) as context:
+        page = context.new_page()
         # These interactions must also work when the optional math CDN is unavailable.
         page.route('**/*', lambda route: route.abort() if route.request.url.startswith('https://') else route.continue_())
         yield page
-        browser.close()
 
 
 def test_inline_expansion_keeps_reading_position(reading_report, browser_page):
