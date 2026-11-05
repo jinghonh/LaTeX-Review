@@ -107,14 +107,14 @@
       const exportButton = button('导出请求 JSON', () => action(async () => download('semantic-request.json', await api(`semantic/tasks/${encodeURIComponent(task.request_id)}/export`))));
       exportButton.disabled = busy || !task.preview;
       const invoke = button('手动调用已配置模型', () => {
-        if (!window.confirm(`将发送以上原文到显式配置模型 ${task.model}。预算：${JSON.stringify(task.budget)}。确认本次调用？`)) return;
+        if (!window.confirm(`将发送以上原文到显式配置模型 ${task.model}（${task.provider || 'openai-compatible'}，thinking=${task.thinking || 'default'}）。预算：${JSON.stringify(task.budget)}。确认本次调用？`)) return;
         action(async () => { task = await api(`semantic/tasks/${encodeURIComponent(task.request_id)}/invoke`, {}); schedule(); });
       });
       invoke.disabled = busy || pending() || !task.preview || !task.model_configured || task.called;
       const cancel = button('取消任务', () => action(async () => { task = await api(`semantic/tasks/${encodeURIComponent(task.request_id)}/cancel`, {}); schedule(); }));
       cancel.disabled = busy || !pending();
       actions.append(exportButton, invoke, cancel);
-      host.append(actions, el('p', task.model_configured ? `配置模型：${task.model}；每任务预算 ${JSON.stringify(task.budget)}；不会在保存时自动调用。` : '未显式配置模型：仍可导出请求，使用固定响应或外部审阅后导入；不尝试发现任何凭据。'));
+      host.append(actions, el('p', task.model_configured ? `配置模型：${task.model}；提供商：${task.provider || 'openai-compatible'}；思考模式：${task.thinking || 'default'}；每任务预算 ${JSON.stringify(task.budget)}；不会在保存时自动调用。` : '未显式配置模型：仍可导出请求，使用固定响应或外部审阅后导入；不尝试发现任何凭据。'));
       const importForm = el('form'), field = el('textarea', undefined, {'aria-label': '模型响应 JSON', rows: '8'});
       const file = el('input', undefined, {type: 'file', accept: '.json,application/json', 'aria-label': '选择响应 JSON 文件'});
       file.addEventListener('change', async () => {

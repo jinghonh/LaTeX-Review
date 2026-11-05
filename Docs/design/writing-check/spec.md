@@ -393,7 +393,8 @@ path = ".latex-review-knowledge.json"
 
 [semantic]
 enabled = false
-provider = "openai-compatible"
+provider = "openai-compatible" # or "deepseek"
+thinking = "default" # default, enabled or disabled; explicit modes require deepseek
 base_url = "https://your-provider.example/v1"
 model = "your-model"
 api_key_env = "LATEX_REVIEW_LLM_KEY"
@@ -404,7 +405,7 @@ concurrency = 2
 timeout = 60
 ```
 
-预算是每次运行上限，不是已测成本。只有显式启用语义调用时才校验所需连接字段。只读项目强制采用外部知识位置，即使配置要求 project 也拒绝在源码根写入并说明原因。现有 `cli._config` 会拒绝未知顶层键，必须与 `project_profile.validate`、全局配置校验同步扩展；不能只实现 UI 设置。
+预算是每次运行上限，不是已测成本。`deepseek` provider 的显式 `thinking` 模式会映射为 `thinking.type`；通用 `openai-compatible` provider 不发送该私有字段。任务状态显示生效的 provider、thinking 模式与预算；每个响应保留原始 `finish_reason` 和可用 token 用量，缺失值记为 `null`/`unknown`，截断或拒绝不会自动追加调用。只有显式启用语义调用时才校验所需连接字段。只读项目强制采用外部知识位置，即使配置要求 project 也拒绝在源码根写入并说明原因。现有 `cli._config` 会拒绝未知顶层键，必须与 `project_profile.validate`、全局配置校验同步扩展；不能只实现 UI 设置。
 
 ## 10. 修改、导出与兼容（COMPAT-01）
 

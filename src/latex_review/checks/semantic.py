@@ -43,6 +43,18 @@ class SemanticError(ValueError):
         self.code, self.path = code, path
 
 
+class ProviderCompletionError(SemanticError):
+    """A provider returned a completion that cannot be imported as a result.
+
+    Keep the provider's finish reason and usage attached to the error so bounded
+    failures are auditable even when no candidate JSON was produced.
+    """
+    def __init__(self, code, message, *, finish_reason=None, usage=None):
+        super().__init__(code, message)
+        self.finish_reason = finish_reason
+        self.provider_usage = usage
+
+
 def _json(value):
     return json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":"), allow_nan=False)
 
@@ -303,8 +315,14 @@ def import_response(known_request, response, current_input):
 
 @dataclass(frozen=True)
 class CallerConfig:
-    """Explicit opt-in only. Credentials are read solely from api_key_env."""
+    """Explicit opt-in only. Credentials are read solely from api_key_env.
+
+    ``thinking`` is sent only for the explicit DeepSeek adapter. Generic
+    OpenAI-compatible endpoints receive the portable request shape.
+    """
     enabled: bool = False
+    provider: str = "openai-compatible"
+    thinking: str = "default"
     base_url: str = ""
     model: str = ""
     api_key_env: str = ""
@@ -320,6 +338,12 @@ class CallerConfig:
         from urllib.parse import urlsplit
         if self.enabled is not True:
             raise SemanticError("disabled", "semantic calling requires explicit enabled=true")
+        if self.provider not in {"openai-compatible", "deepseek"}:
+            raise SemanticError("configuration", "unsupported semantic provider")
+        if self.thinking not in {"default", "enabled", "disabled"}:
+            raise SemanticError("configuration", "thinking must be default, enabled or disabled")
+        if self.thinking != "default" and self.provider != "deepseek":
+            raise SemanticError("configuration", "explicit thinking mode requires the DeepSeek provider")
         url = urlsplit(self.base_url)
         if (url.scheme not in {"https", "http"} or not url.hostname or url.username or url.password
                 or url.query or url.fragment or (url.scheme == "http" and url.hostname not in {"127.0.0.1", "localhost", "::1"})):
@@ -336,11 +360,27 @@ class CallerConfig:
         return self
 
 
+def _token_count(value):
+    return value if type(value) is int and value >= 0 else None
+
+
+def _usage_record(usage, finish_reason):
+    """Return a safe, explicit record; absent provider counts remain unknown."""
+    usage = usage if isinstance(usage, dict) else {}
+    counts = {name: _token_count(usage.get(name))
+              for name in ("prompt_tokens", "completion_tokens", "total_tokens")}
+    reported = sum(value is not None for value in counts.values())
+    counts.update({"finish_reason": finish_reason,
+                   "usage_status": "known" if reported == 3 else "partial" if reported else "unknown"})
+    return counts
+
+
 def openai_transport(endpoint, api_key, body, timeout):
     """One isolated completion, no redirects, proxy inheritance, tools or browsing.
 
     The only permitted network destination is the explicitly configured endpoint.
     The adapter never interprets paper text as instructions or executable content.
+    Completion metadata is attached to failures before they leave this boundary.
     """
     from urllib.request import Request, build_opener, HTTPRedirectHandler, ProxyHandler
     class NoRedirect(HTTPRedirectHandler):
@@ -351,22 +391,32 @@ def openai_transport(endpoint, api_key, body, timeout):
     with build_opener(ProxyHandler({}), NoRedirect()).open(request, timeout=timeout) as response:
         raw = response.read(MAX_RESPONSE_BYTES * 2 + 1)
     payload = _load(raw, MAX_RESPONSE_BYTES * 2)
+    usage = payload.get("usage") if isinstance(payload, dict) else None
+    finish_reason = None
     try:
-        choice = payload["choices"][0]
-        if choice.get("finish_reason") != "stop":
-            raise SemanticError("provider_truncated", "provider did not finish normally")
+        choices = payload["choices"]
+        choice = choices[0]
+        finish_reason = choice.get("finish_reason")
+        if finish_reason != "stop":
+            code = "provider_truncated" if finish_reason in {"length", "max_tokens"} else "provider_completion"
+            raise ProviderCompletionError(code, "provider did not finish normally",
+                                          finish_reason=finish_reason, usage=usage)
         message = choice["message"]
         if message.get("tool_calls") or message.get("function_call"):
-            raise SemanticError("provider_tools", "tool calls are not permitted")
+            raise ProviderCompletionError("provider_tools", "tool calls are not permitted",
+                                          finish_reason=finish_reason, usage=usage)
         if message.get("refusal"):
-            raise SemanticError("provider_refusal", "provider refused semantic task")
+            raise ProviderCompletionError("provider_refusal", "provider refused semantic task",
+                                          finish_reason=finish_reason, usage=usage)
         content = message["content"]
         if not isinstance(content, str):
             raise TypeError("content must be text")
-        usage = payload.get("usage", {})
-        return content, usage
+        return content, usage if isinstance(usage, dict) else {}
+    except ProviderCompletionError:
+        raise
     except (KeyError, IndexError, TypeError) as exc:
-        raise SemanticError("provider_response", "invalid provider completion envelope") from exc
+        raise ProviderCompletionError("provider_response", "invalid provider completion envelope",
+                                      finish_reason=finish_reason, usage=usage) from exc
 
 
 @dataclass(frozen=True)
@@ -410,7 +460,8 @@ class SemanticCaller:
         # Exclude random request_id; include all data, model, connection and contracts.
         payload.pop("request_id")
         return identity_hash({"request": payload, "response_schema": _schema("response"),
-                              "model": self.config.model, "endpoint": self.config.base_url})
+                              "model": self.config.model, "endpoint": self.config.base_url,
+                              "provider": self.config.provider, "thinking": self.config.thinking})
 
     def run(self, request, current_input, *, cancel=None):
         import os
@@ -463,6 +514,8 @@ class SemanticCaller:
                 output_limit = max(1, remaining_output // max(1, self.config.max_requests - requests))
                 body = {"model": self.config.model, "messages": messages, "max_tokens": output_limit,
                         "response_format": {"type": "json_object"}, "stream": False}
+                if self.config.provider == "deepseek" and self.config.thinking != "default":
+                    body["thinking"] = {"type": self.config.thinking}
                 requests += 1
                 input_reserved += estimate
                 output_reserved += output_limit
@@ -491,16 +544,25 @@ class SemanticCaller:
                     finally:
                         abandoned.set()
                         future.cancel()
-                    # Discard tool/refusal/truncation in transport; never trust model usage
-                    # to enlarge reserved budgets. Usage may be persisted by integration.
+                    # Preserve provider accounting even when its response cannot
+                    # become a candidate. Unknown or partial fields stay explicit.
+                    record = _usage_record(usage, "stop")
+                    observed_usage.append(record)
+                    if isinstance(usage, dict) and any(
+                            name in usage and _token_count(usage.get(name)) is None
+                            for name in ("prompt_tokens", "completion_tokens", "total_tokens")):
+                        raise SemanticError("provider_response", "invalid provider token usage")
+                    if ((record["prompt_tokens"] is not None and record["prompt_tokens"] > estimate)
+                            or (record["completion_tokens"] is not None and record["completion_tokens"] > output_limit)):
+                        raise SemanticError("provider_budget", "provider reports usage exceeding reserved bound")
                     if not isinstance(usage, dict):
                         raise SemanticError("provider_response", "invalid provider usage")
-                    measured = {k: usage[k] for k in ("prompt_tokens", "completion_tokens", "total_tokens") if k in usage}
-                    if any(type(v) is not int or v < 0 for v in measured.values()):
-                        raise SemanticError("provider_response", "invalid provider token usage")
-                    observed_usage.append(measured)
-                    if measured.get("prompt_tokens", 0) > estimate or measured.get("completion_tokens", 0) > output_limit:
-                        raise SemanticError("provider_budget", "provider reports usage exceeding reserved bound")
+                except ProviderCompletionError as exc:
+                    record = _usage_record(exc.provider_usage, exc.finish_reason)
+                    observed_usage.append(record)
+                    return done("failed", error=_error(exc.code, str(exc),
+                                                         finish_reason=exc.finish_reason,
+                                                         usage=record))
                 except Exception as exc:
                     if cancel.is_set():
                         return done("cancelled")
