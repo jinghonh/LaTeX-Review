@@ -9,7 +9,7 @@
 
 ## 完整配对结果
 
-墙钟包含完整 pytest、原有五项 CLI smoke 与进程审计；不含安装依赖/浏览器。pytest 自身计时及每例 setup/call/teardown 另存。浏览器均为 Playwright 1.64.1、Chromium 156.0.8078.4（revision 1248），Python 3.11.17。
+墙钟包含完整 pytest、原有五项 CLI smoke 与进程审计；不含安装依赖/浏览器。pytest 自身计时及每例 setup/call/teardown 另存。浏览器均为 Playwright 1.64.1、Chromium 156.0.8078.4（revision 1248）；两组 Linux 使用 Python 3.11.17，macOS 配对使用 Python 3.11.9。
 
 | 同机配对环境 | Before 结果 | After 结果 | Before 整体墙钟 | After 整体墙钟 | 有效降幅 |
 | --- | --- | --- | ---: | ---: | ---: |
@@ -47,10 +47,10 @@
 
 [成对工作流 attempt 1](https://github.com/jinghonh/LaTeX-Review/actions/runs/42009625331/attempts/1) 的原始 baseline 在 `test_resize_burst_retains_character_and_control_focus[native-burst]` 失败：原 150ms 窗口后同一字符误差 **769px**，原阈值 **<3px**。这是未优化版本的实际失败；没有据此断言它是 flake、浏览器不可用或新 fixture 所致，也没有改产品脚本、观察窗口或阈值。完整失败 stdout、JUnit、phase JSON 和 after 通过均保留在首轮原始包中；后续完整复验记录单列在 PR，不抹去此失败。
 
-固定 After 的原 macOS 功能入口另外执行两次，均 1588 passed / 24 skipped、五项 CLI smoke 成功、functional-only 明确未运行性能基准：
+原 macOS 功能入口另外执行两次，均 1588 passed / 24 skipped、五项 CLI smoke 成功、functional-only 明确未运行性能基准。两次 checkout 来源分别为：
 
-- [push 42009625173](https://github.com/jinghonh/LaTeX-Review/actions/runs/42009625173)：pytest **601.64s**。
-- [PR 42009750605](https://github.com/jinghonh/LaTeX-Review/actions/runs/42009750605)：pytest **711.81s**。
+- [push 42009625173](https://github.com/jinghonh/LaTeX-Review/actions/runs/42009625173)：精确 After `42af9d9`，pytest **601.64s**。
+- [PR 42009750605](https://github.com/jinghonh/LaTeX-Review/actions/runs/42009750605)：合并验证 checkout `4db58b4db94262a560f8790989e4e33ef5393ff7`，将 `42af9d9` 与 base `93c2503fa74cc26ccb289c6ac1e3d44677360da2` 合并；pytest **711.81s**。base 的新增改动只有独立 UI 探针的临时路径 canonicalize 与相关文档，这次执行提供其兼容性验证，不冒称精确 `42af9d9` checkout。
 
 这是两个不同 runner，110s 差异说明不能拿跨主机的最快结果作为收益。它们证明功能执行通过，不覆盖首轮 baseline 失败，也不能代替一组有效同机配对。
 
