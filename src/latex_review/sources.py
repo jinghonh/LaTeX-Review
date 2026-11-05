@@ -96,6 +96,15 @@ _LINE_END = re.compile(r"[\r\n]")
 _IF_FILE_EXISTS = re.compile(r"\\IfFileExists(?![A-Za-z@])")
 _CONTROL_WORD = re.compile(r"\\[A-Za-z@]+")
 _BARE_INPUT = re.compile(r"[^\s%{}]+")
+_EXTERNAL_AUX_MAX_BYTES = 4 * 1024 * 1024
+_EXTERNAL_AUX_MAX_FILES = 128
+_EXTERNAL_AUX_MESSAGES = {
+    "unreadable_external_aux": "无法读取 externaldocument 辅助文件",
+    "oversized_external_aux": "externaldocument 辅助文件超过大小限制",
+    "external_aux_outside_root": "externaldocument 辅助文件越出项目根目录",
+    "external_aux_nesting_limit": "externaldocument 辅助文件嵌套数量超过限制",
+    "malformed_external_aux": "externaldocument 辅助文件格式无法解析",
+}
 
 
 def _git(where: Path, *args: str, check: bool = True) -> subprocess.CompletedProcess[bytes]:
@@ -593,15 +602,18 @@ def expand_project(source: ProjectSource) -> ExpandedProject:
                 in_root_candidate = True
                 if target.is_file():
                     try:
-                        if not target.stat().st_mode & (stat.S_IRUSR | stat.S_IRGRP | stat.S_IROTH):
+                        resolved_target = target.resolve()
+                        if not _within(source.root, resolved_target):
+                            return None, "dependency_outside_root"
+                        if not resolved_target.stat().st_mode & (stat.S_IRUSR | stat.S_IRGRP | stat.S_IROTH):
                             return None, "unreadable_dependency"
                         if extensions == (".tex",):
-                            target.read_bytes().decode("utf-8")
+                            resolved_target.read_bytes().decode("utf-8")
                         else:
-                            target.read_bytes()
+                            resolved_target.read_bytes()
                     except (OSError, UnicodeError):
                         return None, "unreadable_dependency"
-                    return target.resolve().relative_to(source.root).as_posix(), None
+                    return resolved_target.relative_to(source.root).as_posix(), None
         if source.worktree_origin is not None:
             for base in bases:
                 for suffix in (("",) if option.suffix else extensions):
@@ -620,8 +632,14 @@ def expand_project(source: ProjectSource) -> ExpandedProject:
             unreliable = True
         resolved, problem = candidate_file(file, argument, (".aux",))
         if problem:
-            issue("missing_external_aux" if problem == "missing_dependency" else problem,
-                  f"无法读取 externaldocument 辅助文件 {argument}；包含链：{' → '.join(chain)}",
+            code = {
+                "missing_dependency": "missing_external_aux",
+                "unreadable_dependency": "unreadable_external_aux",
+                "dependency_outside_root": "external_aux_outside_root",
+                "ignored_dependency": "unavailable_external_aux",
+                "uncertain_dependency": "uncertain_external_aux",
+            }.get(problem, problem)
+            issue(code, f"无法读取 externaldocument 辅助文件 {argument}；包含链：{' → '.join(chain)}",
                   file, start, end, chain)
             uncertain_external_prefixes.append(prefix)
             return
@@ -630,31 +648,39 @@ def expand_project(source: ProjectSource) -> ExpandedProject:
         nested_files: set[str] = set()
         labels: dict[str, str] = {}
         visited: set[Path] = set()
-        aux_error = False
+        aux_errors: set[str] = set()
 
         def read_aux(relative: str, parent: Path) -> None:
-            nonlocal aux_error
             path = (parent / relative).resolve()
             root = source.root.resolve()
-            if not _within(root, path) or path.suffix != ".aux" or not path.is_file():
-                aux_error = True
+            if not _within(root, path):
+                aux_errors.add("external_aux_outside_root")
                 return
-            if path in visited or len(visited) >= 128:
+            if path.suffix != ".aux":
+                aux_errors.add("malformed_external_aux")
+                return
+            if path in visited:
+                return
+            if len(visited) >= _EXTERNAL_AUX_MAX_FILES:
+                aux_errors.add("external_aux_nesting_limit")
                 return
             visited.add(path)
             try:
-                if path.stat().st_size > 4 * 1024 * 1024:
-                    raise OSError("辅助文件过大")
+                if not path.is_file():
+                    raise OSError("辅助文件不存在")
+                if path.stat().st_size > _EXTERNAL_AUX_MAX_BYTES:
+                    aux_errors.add("oversized_external_aux")
+                    return
                 text = path.read_bytes().decode("utf-8")
             except (OSError, UnicodeError):
-                aux_error = True
+                aux_errors.add("unreadable_external_aux")
                 return
             relative_name = path.relative_to(root).as_posix()
             files[relative_name] = text
             nested_files.add(relative_name)
             found, references = _aux_labels(text)
             if any(value == "malformed_external_aux" for value in references):
-                aux_error = True
+                aux_errors.add("malformed_external_aux")
             labels.update(found)
             for nested in references:
                 if nested != "malformed_external_aux":
@@ -679,9 +705,9 @@ def expand_project(source: ProjectSource) -> ExpandedProject:
                 issue("unreadable_external_source", f"无法读取 externaldocument 对应源码 {argument}",
                       file, start, end, chain)
                 unreliable = True
-        if aux_error:
-            issue("malformed_external_aux", f"无法可靠解析 externaldocument 辅助文件 {argument}",
-                  file, start, end, chain)
+        for error in sorted(aux_errors):
+            message = _EXTERNAL_AUX_MESSAGES.get(error, "无法可靠处理 externaldocument 辅助文件")
+            issue(error, f"{message} {argument}", file, start, end, chain)
             unreliable = True
         if unreliable:
             uncertain_external_prefixes.append(prefix)

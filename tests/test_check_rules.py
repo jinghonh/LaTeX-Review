@@ -284,3 +284,56 @@ def test_stale_external_aux_suppresses_absence_claim(tmp_path):
     assert report['status'] == 'partial' and report['findings'] == []
     assert any(b['code'] == 'stale_external_aux'
                for c in report['coverage'] for b in c['blind_spots'])
+
+
+def _external_coverage_codes(report):
+    return {spot['code'] for row in report['coverage'] for spot in row['blind_spots']}
+
+
+def test_external_aux_read_errors_are_explicit_partial_coverage(tmp_path, monkeypatch):
+    _external_fixture(tmp_path)
+    from pathlib import Path
+    original_read_bytes = Path.read_bytes
+
+    def fail_aux_read(path):
+        if path.name == 'supplement.aux':
+            raise OSError('synthetic unreadable aux')
+        return original_read_bytes(path)
+
+    monkeypatch.setattr(Path, 'read_bytes', fail_aux_read)
+    report = evaluate_current(build_check_document(capture_snapshot(tmp_path / 'main.tex')))
+    assert report['status'] == 'partial'
+    assert 'unreadable_external_aux' in _external_coverage_codes(report)
+
+
+def test_oversized_external_aux_is_explicit_partial_coverage(tmp_path):
+    _external_fixture(tmp_path)
+    (tmp_path / 'supplement.aux').write_bytes(b'x' * (4 * 1024 * 1024 + 1))
+    report = evaluate_current(build_check_document(capture_snapshot(tmp_path / 'main.tex')))
+    assert report['status'] == 'partial'
+    assert 'oversized_external_aux' in _external_coverage_codes(report)
+
+
+def test_external_aux_symlink_outside_root_is_explicit_partial_coverage(tmp_path):
+    _external_fixture(tmp_path)
+    outside = tmp_path.parent / 'outside-external.aux'
+    outside.write_text(r'\relax\newlabel{sec:external}{{S1}{1}{}{}{}}' + '\n')
+    (tmp_path / 'supplement.aux').unlink()
+    (tmp_path / 'supplement.aux').symlink_to(outside)
+    report = evaluate_current(build_check_document(capture_snapshot(tmp_path / 'main.tex')))
+    assert report['status'] == 'partial'
+    assert 'external_aux_outside_root' in _external_coverage_codes(report)
+
+
+def test_129_nested_external_aux_files_hit_explicit_limit(tmp_path):
+    _external_fixture(tmp_path)
+    for index in range(129):
+        next_file = f'nested{index + 1}.aux'
+        content = rf'\@input{{{next_file}}}\n' if index < 128 else r'\relax\n'
+        (tmp_path / f'nested{index}.aux').write_text(content)
+    (tmp_path / 'supplement.aux').write_text(
+        r'\newlabel{sec:external}{{S1}{1}{}{}{}}\@input{nested0.aux}' + '\n')
+    report = evaluate_current(build_check_document(capture_snapshot(tmp_path / 'main.tex')))
+    coverage = next(row for row in report['coverage'] if row['rule_id'] == 'unresolved_reference')
+    assert report['status'] == 'partial' and not coverage['complete']
+    assert 'external_aux_nesting_limit' in _external_coverage_codes(report)

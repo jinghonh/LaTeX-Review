@@ -76,7 +76,10 @@ def evaluate_current(document, knowledge=None, rule_set=None, *, configuration=N
                      "reasons": ["requires_two_versions"], "blind_spots": []})
     findings = []
     external_incomplete_codes = {"missing_external_aux", "stale_external_aux", "malformed_external_aux",
-                                 "uncertain_external_reference", "unreadable_external_source"}
+                                 "uncertain_external_reference", "unreadable_external_source",
+                                 "unreadable_external_aux", "oversized_external_aux",
+                                 "external_aux_outside_root", "external_aux_nesting_limit",
+                                 "unavailable_external_aux", "uncertain_external_aux"}
     external_only_incomplete = (bool(scan.get("external_uncertain_prefixes")) and
                                 any(b["code"] in external_incomplete_codes for b in blind_spots) and
                                 all(b["code"] in external_incomplete_codes for b in blind_spots))
