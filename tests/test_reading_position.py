@@ -69,6 +69,46 @@ ERROR = '''(side) => {
 }'''
 
 
+# Evaluated only after the original error sample fails, in a separate browser RPC.
+# This describes later state, not an atomic snapshot of the failing measurement.
+FAILURE_CONTEXT = '''(side) => {
+  const p = document.querySelector('.preview-side[data-side="' + side + '"]');
+  const r = p.getBoundingClientRect(), bar = document.querySelector('.report-controls');
+  const overflowY = getComputedStyle(p).overflowY;
+  const independent = /auto|scroll/.test(overflowY) && p.scrollHeight > p.clientHeight;
+  const top = independent ? Math.max(0, r.top + p.clientTop) : (bar && getComputedStyle(bar).position === 'sticky' ? Math.max(0, bar.getBoundingClientRect().bottom) : 0);
+  const bottom = independent ? Math.min(innerHeight, r.bottom) : innerHeight;
+  const anchor = testAnchors[side], position = window.reviewReadingPosition;
+  const rect = value => ({top: value.top, bottom: value.bottom, left: value.left,
+    right: value.right, width: value.width, height: value.height});
+  let isResizing = null;
+  try { if (typeof position?.isResizing === 'function') isResizing = position.isResizing(); }
+  catch (error) { isResizing = {error: String(error)}; }
+  return {sampledAt: performance.now(), readyState: document.readyState,
+    viewport: {width: innerWidth, height: innerHeight},
+    publishedReadingPosition: {present: !!position, type: typeof position,
+      keys: position ? Object.keys(position) : [], isResizing},
+    currentScroller: independent ? 'paper' : 'window', overflowY,
+    windowY: scrollY, paperScrollTop: p.scrollTop,
+    paperClientWidth: p.clientWidth, paperClientHeight: p.clientHeight,
+    paperScrollHeight: p.scrollHeight, paperRect: rect(r),
+    rangeRect: rect(anchor.range.getBoundingClientRect()),
+    rangeConnected: anchor.range.startContainer.isConnected,
+    savedCharacter: anchor.range.toString(), rangeStartOffset: anchor.range.startOffset,
+    expectedRatio: anchor.ratio, viewTop: top, viewBottom: bottom,
+    expectedTop: top + anchor.ratio * (bottom - top)};
+}'''
+
+
+def assert_position_preserved(page, mode, side, action):
+    error = page.evaluate(ERROR, side)
+    assert error < 3, {
+        'mode': mode, 'side': side, 'action': action, 'original_error_px': error,
+        'context_timing': 'separate evaluation AFTER the original failed error sample',
+        'after_error_context': page.evaluate(FAILURE_CONTEXT, side),
+    }
+
+
 def test_window_and_sidebar_resize_preserve_character(long_preview, browser_page):
     mode, path = long_preview
     page = browser_page
@@ -82,19 +122,19 @@ def test_window_and_sidebar_resize_preserve_character(long_preview, browser_page
     for width, height in ((1040, 780), (760, 900), (1280, 900)):
         page.set_viewport_size({'width': width, 'height': height})
         page.wait_for_timeout(150)
-        assert page.evaluate(ERROR, 'new') < 3
+        assert_position_preserved(page, mode, 'new', ('viewport', width, height))
         # Keep the same reading character through the next resize.
     if mode != 'standalone':
         if page.locator('#sections-side').is_visible():
             page.locator('#close-sections').click()
             page.wait_for_timeout(150)
-            assert page.evaluate(ERROR, 'new') < 3
+            assert_position_preserved(page, mode, 'new', 'close initially visible sections')
         page.locator('#toggle-sections').click()
         page.wait_for_timeout(150)
-        assert page.evaluate(ERROR, 'new') < 3
+        assert_position_preserved(page, mode, 'new', 'toggle sections')
         page.locator('#close-sections').click()
         page.wait_for_timeout(150)
-        assert page.evaluate(ERROR, 'new') < 3
+        assert_position_preserved(page, mode, 'new', 'close sections')
     assert not errors
 
 
@@ -115,4 +155,4 @@ def test_compare_panels_keep_independent_positions(long_preview, browser_page):
     page.set_viewport_size({'width': 1500, 'height': 900})
     page.wait_for_timeout(150)
     for side in ('old', 'new'):
-        assert page.evaluate(ERROR, side) < 3
+        assert_position_preserved(page, mode, side, ('compare viewport', 1500, 900))

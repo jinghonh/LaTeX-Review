@@ -114,6 +114,13 @@ def _e(value: object) -> str:
     return escape(str(value), quote=True)
 
 
+def _normalized_whitespace(value) -> str:
+    """Normalize comparison text only; emitted markup remains untouched."""
+    if type(value) is str:
+        return ' '.join(value.split())
+    return re.sub(r'\s+', ' ', value).strip()
+
+
 def _anchor(side: str, node_id: str) -> str:
     return f"{side}-{node_id}"
 
@@ -643,7 +650,7 @@ def _body(node: ParsedNode, project: ParsedProject, side: str, by_id: dict[str, 
             canonical = _inline_html(raw, project, side, children, diagnostics, node.review.source, node.expanded_start)
             # Sentence fragments can change plasTeX context or inline-node matching.
             # Keep the canonical rendering when marking sentences would change it.
-            if re.sub(r'\s+', ' ', ''.join(original_pieces)).strip() != re.sub(r'\s+', ' ', canonical).strip():
+            if _normalized_whitespace(''.join(original_pieces)) != _normalized_whitespace(canonical):
                 return f'<p>{canonical}</p>'
             return f'<p>{"".join(pieces)}</p>'
         return f'<p>{_inline_html(node.review.raw_latex, project, side, children, diagnostics, node.review.source, node.expanded_start)}</p>'
@@ -704,7 +711,7 @@ def _body(node: ParsedNode, project: ParsedProject, side: str, by_id: dict[str, 
                 suffix = _e(_without_comments(caption[0][cursor:])[0])
                 pieces.append(suffix)
                 original_pieces.append(suffix)
-                if re.sub(r'\s+', ' ', ''.join(original_pieces)).strip() == re.sub(r'\s+', ' ', caption_html).strip():
+                if _normalized_whitespace(''.join(original_pieces)) == _normalized_whitespace(caption_html):
                     caption_html = "".join(pieces)
         return assets + missing + (f'<figcaption>{_number_prefix(node, project, "Figure ")}{caption_html}</figcaption>' if caption else "") + _embedded_fallbacks(children, side)
     if kind == "table":

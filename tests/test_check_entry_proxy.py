@@ -14,7 +14,10 @@ def test_browser_run_preserves_frozen_content_header_through_real_entry_proxy(tm
     root.mkdir()
     entry = root / 'main.tex'
     entry.write_text(r'\documentclass{article}\begin{document}Current paper \ref{missing}.\end{document}')
-    recipe = prepare_request(entry, root=root, output=tmp_path / 'preview')
+    # This exercises manual proxy/header binding, not competing automatic runs.
+    config = tmp_path / 'checks.toml'
+    config.write_text('[checks]\non_save=false\n')
+    recipe = prepare_request(entry, root=root, output=tmp_path / 'preview', config=config)
     result = local_client.ensure(recipe, timeout=40)
     sidecar = json.loads((Path(recipe['output']) / 'checks-page.json').read_text())
     errors = []

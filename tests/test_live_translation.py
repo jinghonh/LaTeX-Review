@@ -13,6 +13,59 @@ from latex_review.sources import ProjectSource
 from test_translation import provider, _wait
 
 
+def _live_revision_is(output, revision):
+    # Staged directory promotion can temporarily remove the path; the worker
+    # writes live-status only after installing the complete new report.
+    try:
+        status = (output / 'live-status.json').read_text()
+    except FileNotFoundError:
+        return False
+    return json.loads(status)['revision'] == revision
+
+
+def test_live_revision_poll_tolerates_directory_promotion_gap(tmp_path, monkeypatch):
+    from pathlib import Path
+    from latex_review.live import _write
+    from latex_review.report_directory import report_directory
+
+    output = tmp_path / 'live'
+    output.mkdir()
+    _write(output / 'live-status.json', json.dumps({'revision': 1}))
+    (output / 'report.html').write_text('old report')
+    (output / 'translation-units.json').write_text('["old units"]')
+    assert not _live_revision_is(output, 2)
+    replace_path = os.replace
+    observed_gap = []
+
+    def replace_with_poll(source, destination):
+        replace_path(source, destination)
+        if Path(source) == output:
+            # Run the original poll deterministically between the real renames.
+            with pytest.raises(FileNotFoundError):
+                json.loads((output / 'live-status.json').read_text())['revision'] == 2
+            observed_gap.append(_live_revision_is(output, 2))
+            assert (Path(destination) / 'report.html').read_text() == 'old report'
+            assert json.loads((Path(destination) / 'translation-units.json').read_text()) == ['old units']
+
+    monkeypatch.setattr('latex_review.report_directory.os.replace', replace_with_poll)
+    with report_directory(output) as candidate:
+        (candidate.directory / 'report.html').write_text('new report')
+        (candidate.directory / 'translation-units.json').write_text('["new units"]')
+    assert observed_gap == [False]
+    assert (output / 'report.html').read_text() == 'new report'
+    assert json.loads((output / 'translation-units.json').read_text()) == ['new units']
+    assert not _live_revision_is(output, 2)  # Worker has not written status yet.
+    _write(output / 'live-status.json', json.dumps({'revision': 2}))
+    assert _live_revision_is(output, 2)
+
+
+@pytest.mark.parametrize(('status', 'error'), [('not json', json.JSONDecodeError), ('{}', KeyError)])
+def test_live_revision_poll_does_not_hide_invalid_status(tmp_path, status, error):
+    (tmp_path / 'live-status.json').write_text(status)
+    with pytest.raises(error):
+        _live_revision_is(tmp_path, 2)
+
+
 def paper(tmp_path):
     root = tmp_path / 'paper'
     root.mkdir()
@@ -221,7 +274,7 @@ def test_live_command_refreshes_translation_manifest(tmp_path, provider):
                 pass
             _wait(lambda: len(status()['results']) == 6)
             entry.write_text(entry.read_text().replace('Editable content.', 'Updated content.'))
-            _wait(lambda: json.loads((output / 'live-status.json').read_text())['revision'] == 2)
+            _wait(lambda: _live_revision_is(output, 2))
             assert len(status()['results']) == 5
             assert len(calls) == 6
             assert 'Updated content.' in (output / 'report.html').read_text()
