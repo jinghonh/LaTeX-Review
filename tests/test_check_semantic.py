@@ -456,6 +456,20 @@ def test_truncated_completion_without_usage_is_explicitly_unknown(host, caller_f
     assert run.error['usage']['usage_status'] == 'unknown'
 
 
+def test_refusal_completion_retains_reason_and_usage(host, caller_factory):
+    _, current, request = host
+    caller = caller_factory(lambda *args: (_ for _ in ()).throw(
+        ProviderCompletionError('provider_refusal', 'provider refused semantic task', finish_reason='stop',
+                                usage={'prompt_tokens': 13, 'completion_tokens': 0, 'total_tokens': 13})),
+        retries=2)
+    run = caller.run(request, lambda: current)
+    assert run.status == 'failed' and run.requests == 1
+    assert run.error['code'] == 'provider_refusal'
+    assert run.error['finish_reason'] == 'stop'
+    assert run.error['usage']['usage_status'] == 'known'
+    assert run.usage[0]['total_tokens'] == 13
+
+
 def test_truncated_completion_retains_finish_reason_usage_and_does_not_retry(host, caller_factory):
     from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
     from threading import Thread
