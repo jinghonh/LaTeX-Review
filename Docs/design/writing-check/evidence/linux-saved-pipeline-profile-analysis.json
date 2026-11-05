@@ -1,0 +1,1904 @@
+{
+  "diagnostic_only": true,
+  "description": "Actual unchanged-package native watcher saves with external observational wrappers. cProfile perturbs timings: not saved-hot acceptance, not a comparison p95, not isolated causal speedup evidence. thread_cpu_seconds measures the executing thread; nested stage totals overlap. cProfile cumulative function timings are wall-clock, not CPU.",
+  "git_head_observed": "87f740489ae31a8b998f240ff8308615be0c306d",
+  "instrumentation_sha256": "067d230989bdf6cc9937f419eef5a4bf8c2fc06b2f98f4ab6628fefb2a20d657",
+  "instrumentation": "sitecustomize.py inside accompanying archive; imported through private PYTHONPATH before app imports with isolated state/cache environment.",
+  "kinds": {
+    "comment": {
+      "source_aggregate_sha256": "32dfe568ac8ed4db7a826fd6809d6f258a477e984267d98d7711138054fcfc51",
+      "source_paths_changed_during_measurement": [],
+      "cleanup": {
+        "owned_entry_exit_code": 0,
+        "owned_entry_exited": true,
+        "owned_worker_exited": true,
+        "isolated_endpoint_removed": true
+      },
+      "authoritative_samples": 2,
+      "instrumented_elapsed_not_acceptance_seconds": [
+        14.212465117219836,
+        9.405714272055775
+      ],
+      "package_files_observed": [
+        "/home/ubuntu/.dsh/state/superagent/work/writing-check-delivery-6277b05259b6/src/latex_review/live.py"
+      ],
+      "builds": [
+        {
+          "event": "call",
+          "pid": 1140150,
+          "thread": 128207816685376,
+          "actor": "local_worker.py",
+          "at": 1989341.256286267,
+          "stage": "live.build",
+          "depth": 0,
+          "wall_seconds": 10.707829378079623,
+          "thread_cpu_seconds": 9.961417789,
+          "profile": "1140150-0-live_build.prof",
+          "error": null,
+          "revision": 1,
+          "requested_revision": 1,
+          "phase": "initial throwaway preparation",
+          "html_memo": [
+            {
+              "event": "html_memo",
+              "pid": 1140150,
+              "thread": 128207816685376,
+              "actor": "local_worker.py",
+              "at": 1989338.629813264,
+              "revision": 1,
+              "html_characters": 3900878,
+              "nodes": 5000,
+              "units": 5000,
+              "extraction_calls": 1,
+              "actual_cache_hit": false
+            }
+          ],
+          "sentence_memo": [
+            {
+              "event": "sentence_memo",
+              "pid": 1140150,
+              "thread": 128207816685376,
+              "actor": "local_worker.py",
+              "at": 1989341.257368997,
+              "revision": 1,
+              "hits": 5000,
+              "misses": 5000,
+              "retained_entries": 5000,
+              "max_entries": 8192
+            }
+          ],
+          "top_cumulative_wall": [
+            {
+              "file": "/home/ubuntu/.dsh/state/superagent/work/writing-check-delivery-6277b05259b6/src/latex_review/live.py",
+              "line": 51,
+              "function": "build",
+              "calls": 1,
+              "self_wall_seconds": 0.001777902,
+              "cumulative_wall_seconds": 10.683211093
+            },
+            {
+              "file": "/home/ubuntu/.dsh/state/superagent/work/writing-check-delivery-6277b05259b6/src/latex_review/annotations/content.py",
+              "line": 239,
+              "function": "build_content",
+              "calls": 1,
+              "self_wall_seconds": 0.029325017000000002,
+              "cumulative_wall_seconds": 5.78129527
+            },
+            {
+              "file": "/tmp/writing-check-pipeline-profile.EA2Ib9/sitecustomize.py",
+              "line": 75,
+              "function": "observed_html_units",
+              "calls": 1,
+              "self_wall_seconds": 0.000681698,
+              "cumulative_wall_seconds": 3.8229135070000004
+            },
+            {
+              "file": "/home/ubuntu/.dsh/state/superagent/work/writing-check-delivery-6277b05259b6/src/latex_review/annotations/content.py",
+              "line": 214,
+              "function": "_html_units",
+              "calls": 1,
+              "self_wall_seconds": 0.000705021,
+              "cumulative_wall_seconds": 3.821795577
+            },
+            {
+              "file": "/tmp/writing-check-pipeline-profile.EA2Ib9/sitecustomize.py",
+              "line": 68,
+              "function": "observed_extract",
+              "calls": 1,
+              "self_wall_seconds": 0.0011220820000000002,
+              "cumulative_wall_seconds": 3.7884548000000002
+            },
+            {
+              "file": "/home/ubuntu/.dsh/state/superagent/work/writing-check-delivery-6277b05259b6/src/latex_review/annotations/content.py",
+              "line": 65,
+              "function": "_extract_html_units",
+              "calls": 1,
+              "self_wall_seconds": 0.19401109100000002,
+              "cumulative_wall_seconds": 3.7873278810000004
+            },
+            {
+              "file": "/home/ubuntu/.dsh/state/superagent/work/writing-check-delivery-6277b05259b6/src/latex_review/translation.py",
+              "line": 223,
+              "function": "build_current_units",
+              "calls": 1,
+              "self_wall_seconds": 0.038736374000000004,
+              "cumulative_wall_seconds": 1.873563152
+            },
+            {
+              "file": "/home/ubuntu/.dsh/state/superagent/work/writing-check-delivery-6277b05259b6/src/latex_review/translation.py",
+              "line": 156,
+              "function": "_build_unit",
+              "calls": 5000,
+              "self_wall_seconds": 0.24370454300000002,
+              "cumulative_wall_seconds": 1.7943403910000002
+            },
+            {
+              "file": "/home/ubuntu/.local/share/uv/python/cpython-3.11.17-linux-x86_64-gnu/lib/python3.11/html/parser.py",
+              "line": 145,
+              "function": "feed",
+              "calls": 1,
+              "self_wall_seconds": 1.8943e-05,
+              "cumulative_wall_seconds": 1.5922438620000001
+            },
+            {
+              "file": "/home/ubuntu/.local/share/uv/python/cpython-3.11.17-linux-x86_64-gnu/lib/python3.11/html/parser.py",
+              "line": 222,
+              "function": "goahead",
+              "calls": 1,
+              "self_wall_seconds": 0.24898974100000001,
+              "cumulative_wall_seconds": 1.592223892
+            },
+            {
+              "file": "/home/ubuntu/.dsh/state/superagent/work/writing-check-delivery-6277b05259b6/src/latex_review/sources.py",
+              "line": 83,
+              "function": "origin_ranges",
+              "calls": 15000,
+              "self_wall_seconds": 0.016987917,
+              "cumulative_wall_seconds": 1.4809525490000002
+            },
+            {
+              "file": "/home/ubuntu/.dsh/state/superagent/work/writing-check-delivery-6277b05259b6/src/latex_review/source_map.py",
+              "line": 69,
+              "function": "map_range",
+              "calls": 15000,
+              "self_wall_seconds": 0.8064447260000001,
+              "cumulative_wall_seconds": 1.4639646320000002
+            },
+            {
+              "file": "/home/ubuntu/.dsh/state/superagent/work/writing-check-delivery-6277b05259b6/src/latex_review/annotation_sources.py",
+              "line": 88,
+              "function": "enrich_content",
+              "calls": 1,
+              "self_wall_seconds": 0.053637250000000004,
+              "cumulative_wall_seconds": 1.283445618
+            },
+            {
+              "file": "/tmp/writing-check-pipeline-profile.EA2Ib9/sitecustomize.py",
+              "line": 30,
+              "function": "wrapped",
+              "calls": 5,
+              "self_wall_seconds": 0.000124377,
+              "cumulative_wall_seconds": 1.185765101
+            },
+            {
+              "file": "/home/ubuntu/.dsh/state/superagent/work/writing-check-delivery-6277b05259b6/src/latex_review/checks/snapshot.py",
+              "line": 93,
+              "function": "capture_snapshot",
+              "calls": 1,
+              "self_wall_seconds": 0.000129904,
+              "cumulative_wall_seconds": 1.185492637
+            },
+            {
+              "file": "/home/ubuntu/.dsh/state/superagent/work/writing-check-delivery-6277b05259b6/src/latex_review/checks/snapshot.py",
+              "line": 110,
+              "function": "_capture",
+              "calls": 1,
+              "self_wall_seconds": 0.002036346,
+              "cumulative_wall_seconds": 1.185362733
+            },
+            {
+              "file": "/home/ubuntu/.dsh/state/superagent/work/writing-check-delivery-6277b05259b6/src/latex_review/annotation_sources.py",
+              "line": 23,
+              "function": "_continuous",
+              "calls": 10000,
+              "self_wall_seconds": 0.021198688,
+              "cumulative_wall_seconds": 1.167204088
+            },
+            {
+              "file": "/home/ubuntu/.dsh/state/superagent/work/writing-check-delivery-6277b05259b6/src/latex_review/preview.py",
+              "line": 793,
+              "function": "render_preview",
+              "calls": 1,
+              "self_wall_seconds": 0.009902195,
+              "cumulative_wall_seconds": 1.089995611
+            },
+            {
+              "file": "/home/ubuntu/.dsh/state/superagent/work/writing-check-delivery-6277b05259b6/src/latex_review/text_diff.py",
+              "line": 68,
+              "function": "split_sentences",
+              "calls": 10000,
+              "self_wall_seconds": 0.023580784,
+              "cumulative_wall_seconds": 1.050120006
+            },
+            {
+              "file": "/home/ubuntu/.dsh/state/superagent/work/writing-check-delivery-6277b05259b6/src/latex_review/structure.py",
+              "line": 625,
+              "function": "parse_project",
+              "calls": 1,
+              "self_wall_seconds": 0.0029224000000000003,
+              "cumulative_wall_seconds": 1.038870682
+            },
+            {
+              "file": "~",
+              "line": 0,
+              "function": "<method 'join' of 'str' objects>",
+              "calls": 86019,
+              "self_wall_seconds": 0.09698213900000001,
+              "cumulative_wall_seconds": 1.034877164
+            },
+            {
+              "file": "/home/ubuntu/.dsh/state/superagent/work/writing-check-delivery-6277b05259b6/src/latex_review/text_diff.py",
+              "line": 63,
+              "function": "_memoized_sentences",
+              "calls": 5000,
+              "self_wall_seconds": 0.00498918,
+              "cumulative_wall_seconds": 1.0223761500000002
+            },
+            {
+              "file": "/home/ubuntu/.dsh/state/superagent/work/writing-check-delivery-6277b05259b6/src/latex_review/text_diff.py",
+              "line": 76,
+              "function": "_split_sentences",
+              "calls": 5000,
+              "self_wall_seconds": 0.26695982100000004,
+              "cumulative_wall_seconds": 1.01738697
+            },
+            {
+              "file": "/home/ubuntu/.dsh/state/superagent/work/writing-check-delivery-6277b05259b6/src/latex_review/preview.py",
+              "line": 770,
+              "function": "_side",
+              "calls": 1,
+              "self_wall_seconds": 0.003545607,
+              "cumulative_wall_seconds": 0.9628247430000001
+            },
+            {
+              "file": "/home/ubuntu/.dsh/state/superagent/work/writing-check-delivery-6277b05259b6/src/latex_review/preview.py",
+              "line": 776,
+              "function": "<genexpr>",
+              "calls": 5001,
+              "self_wall_seconds": 0.004639750000000001,
+              "cumulative_wall_seconds": 0.954548037
+            }
+          ],
+          "selected_profile_calls": {
+            "_extract_html_units": 1,
+            "_html_units": 1,
+            "_split_sentences": 5000,
+            "split_sentences": 10000,
+            "validate_content": 1,
+            "enrich_content": 1
+          }
+        },
+        {
+          "event": "call",
+          "pid": 1140786,
+          "thread": 128149908531008,
+          "actor": "local_worker.py",
+          "at": 1989358.201352296,
+          "stage": "live.build",
+          "depth": 0,
+          "wall_seconds": 10.29672189312987,
+          "thread_cpu_seconds": 9.557226654,
+          "profile": "1140786-10-live_build.prof",
+          "error": null,
+          "revision": 2,
+          "requested_revision": 2,
+          "phase": "actual saved edit 1",
+          "html_memo": [
+            {
+              "event": "html_memo",
+              "pid": 1140786,
+              "thread": 128149908531008,
+              "actor": "local_worker.py",
+              "at": 1989356.266075394,
+              "revision": 2,
+              "html_characters": 3900878,
+              "nodes": 5000,
+              "units": 5000,
+              "extraction_calls": 1,
+              "actual_cache_hit": false
+            }
+          ],
+          "sentence_memo": [
+            {
+              "event": "sentence_memo",
+              "pid": 1140786,
+              "thread": 128149908531008,
+              "actor": "local_worker.py",
+              "at": 1989358.202347268,
+              "revision": 2,
+              "hits": 5000,
+              "misses": 5000,
+              "retained_entries": 5000,
+              "max_entries": 8192
+            }
+          ],
+          "top_cumulative_wall": [
+            {
+              "file": "/home/ubuntu/.dsh/state/superagent/work/writing-check-delivery-6277b05259b6/src/latex_review/live.py",
+              "line": 51,
+              "function": "build",
+              "calls": 1,
+              "self_wall_seconds": 0.0018491190000000002,
+              "cumulative_wall_seconds": 10.280647214
+            },
+            {
+              "file": "/home/ubuntu/.dsh/state/superagent/work/writing-check-delivery-6277b05259b6/src/latex_review/annotations/content.py",
+              "line": 239,
+              "function": "build_content",
+              "calls": 1,
+              "self_wall_seconds": 0.019039161000000002,
+              "cumulative_wall_seconds": 5.638000515000001
+            },
+            {
+              "file": "/tmp/writing-check-pipeline-profile.EA2Ib9/sitecustomize.py",
+              "line": 75,
+              "function": "observed_html_units",
+              "calls": 1,
+              "self_wall_seconds": 0.0005472480000000001,
+              "cumulative_wall_seconds": 4.396985568
+            },
+            {
+              "file": "/home/ubuntu/.dsh/state/superagent/work/writing-check-delivery-6277b05259b6/src/latex_review/annotations/content.py",
+              "line": 214,
+              "function": "_html_units",
+              "calls": 1,
+              "self_wall_seconds": 0.000635261,
+              "cumulative_wall_seconds": 4.396121376
+            },
+            {
+              "file": "/tmp/writing-check-pipeline-profile.EA2Ib9/sitecustomize.py",
+              "line": 68,
+              "function": "observed_extract",
+              "calls": 1,
+              "self_wall_seconds": 0.000873976,
+              "cumulative_wall_seconds": 4.36529972
+            },
+            {
+              "file": "/home/ubuntu/.dsh/state/superagent/work/writing-check-delivery-6277b05259b6/src/latex_review/annotations/content.py",
+              "line": 65,
+              "function": "_extract_html_units",
+              "calls": 1,
+              "self_wall_seconds": 0.21480019900000002,
+              "cumulative_wall_seconds": 4.364418365000001
+            },
+            {
+              "file": "/home/ubuntu/.local/share/uv/python/cpython-3.11.17-linux-x86_64-gnu/lib/python3.11/html/parser.py",
+              "line": 145,
+              "function": "feed",
+              "calls": 1,
+              "self_wall_seconds": 2.6756000000000003e-05,
+              "cumulative_wall_seconds": 1.952998969
+            },
+            {
+              "file": "/home/ubuntu/.local/share/uv/python/cpython-3.11.17-linux-x86_64-gnu/lib/python3.11/html/parser.py",
+              "line": 222,
+              "function": "goahead",
+              "calls": 1,
+              "self_wall_seconds": 0.298837267,
+              "cumulative_wall_seconds": 1.9529706320000002
+            },
+            {
+              "file": "/home/ubuntu/.dsh/state/superagent/work/writing-check-delivery-6277b05259b6/src/latex_review/translation.py",
+              "line": 223,
+              "function": "build_current_units",
+              "calls": 1,
+              "self_wall_seconds": 0.029378282000000002,
+              "cumulative_wall_seconds": 1.669723945
+            },
+            {
+              "file": "/home/ubuntu/.dsh/state/superagent/work/writing-check-delivery-6277b05259b6/src/latex_review/translation.py",
+              "line": 156,
+              "function": "_build_unit",
+              "calls": 5000,
+              "self_wall_seconds": 0.10510298800000001,
+              "cumulative_wall_seconds": 1.60637563
+            },
+            {
+              "file": "/tmp/writing-check-pipeline-profile.EA2Ib9/sitecustomize.py",
+              "line": 30,
+              "function": "wrapped",
+              "calls": 5,
+              "self_wall_seconds": 0.00013904,
+              "cumulative_wall_seconds": 1.173093662
+            },
+            {
+              "file": "/home/ubuntu/.dsh/state/superagent/work/writing-check-delivery-6277b05259b6/src/latex_review/checks/snapshot.py",
+              "line": 93,
+              "function": "capture_snapshot",
+              "calls": 1,
+              "self_wall_seconds": 0.00013657600000000002,
+              "cumulative_wall_seconds": 1.172824611
+            },
+            {
+              "file": "/home/ubuntu/.dsh/state/superagent/work/writing-check-delivery-6277b05259b6/src/latex_review/checks/snapshot.py",
+              "line": 110,
+              "function": "_capture",
+              "calls": 1,
+              "self_wall_seconds": 0.002057384,
+              "cumulative_wall_seconds": 1.1726880350000002
+            },
+            {
+              "file": "/home/ubuntu/.dsh/state/superagent/work/writing-check-delivery-6277b05259b6/src/latex_review/sources.py",
+              "line": 83,
+              "function": "origin_ranges",
+              "calls": 15000,
+              "self_wall_seconds": 0.008714882,
+              "cumulative_wall_seconds": 1.0617310500000001
+            },
+            {
+              "file": "/home/ubuntu/.dsh/state/superagent/work/writing-check-delivery-6277b05259b6/src/latex_review/preview.py",
+              "line": 793,
+              "function": "render_preview",
+              "calls": 1,
+              "self_wall_seconds": 0.011982382000000001,
+              "cumulative_wall_seconds": 1.057588691
+            },
+            {
+              "file": "/home/ubuntu/.dsh/state/superagent/work/writing-check-delivery-6277b05259b6/src/latex_review/source_map.py",
+              "line": 69,
+              "function": "map_range",
+              "calls": 15000,
+              "self_wall_seconds": 0.571625614,
+              "cumulative_wall_seconds": 1.053016168
+            },
+            {
+              "file": "/home/ubuntu/.local/share/uv/python/cpython-3.11.17-linux-x86_64-gnu/lib/python3.11/html/parser.py",
+              "line": 435,
+              "function": "parse_starttag",
+              "calls": 30017,
+              "self_wall_seconds": 0.42610861800000005,
+              "cumulative_wall_seconds": 1.0407378230000002
+            },
+            {
+              "file": "/home/ubuntu/.dsh/state/superagent/work/writing-check-delivery-6277b05259b6/src/latex_review/structure.py",
+              "line": 625,
+              "function": "parse_project",
+              "calls": 1,
+              "self_wall_seconds": 0.004537309000000001,
+              "cumulative_wall_seconds": 1.036442982
+            },
+            {
+              "file": "~",
+              "line": 0,
+              "function": "<method 'join' of 'str' objects>",
+              "calls": 86025,
+              "self_wall_seconds": 0.14065724200000002,
+              "cumulative_wall_seconds": 1.021482589
+            },
+            {
+              "file": "/home/ubuntu/.dsh/state/superagent/work/writing-check-delivery-6277b05259b6/src/latex_review/annotations/content.py",
+              "line": 83,
+              "function": "display_only",
+              "calls": 80001,
+              "self_wall_seconds": 0.794045607,
+              "cumulative_wall_seconds": 0.9968183570000001
+            },
+            {
+              "file": "/home/ubuntu/.dsh/state/superagent/work/writing-check-delivery-6277b05259b6/src/latex_review/preview.py",
+              "line": 770,
+              "function": "_side",
+              "calls": 1,
+              "self_wall_seconds": 0.0027604070000000003,
+              "cumulative_wall_seconds": 0.906111352
+            },
+            {
+              "file": "/home/ubuntu/.dsh/state/superagent/work/writing-check-delivery-6277b05259b6/src/latex_review/text_diff.py",
+              "line": 68,
+              "function": "split_sentences",
+              "calls": 10000,
+              "self_wall_seconds": 0.023628857000000003,
+              "cumulative_wall_seconds": 0.9016161130000001
+            },
+            {
+              "file": "/home/ubuntu/.dsh/state/superagent/work/writing-check-delivery-6277b05259b6/src/latex_review/preview.py",
+              "line": 776,
+              "function": "<genexpr>",
+              "calls": 5001,
+              "self_wall_seconds": 0.004358944,
+              "cumulative_wall_seconds": 0.8986761000000001
+            },
+            {
+              "file": "/home/ubuntu/.dsh/state/superagent/work/writing-check-delivery-6277b05259b6/src/latex_review/preview.py",
+              "line": 758,
+              "function": "_render_node",
+              "calls": 5000,
+              "self_wall_seconds": 0.026928129000000002,
+              "cumulative_wall_seconds": 0.8943171560000001
+            },
+            {
+              "file": "/home/ubuntu/.dsh/state/superagent/work/writing-check-delivery-6277b05259b6/src/latex_review/text_diff.py",
+              "line": 63,
+              "function": "_memoized_sentences",
+              "calls": 5000,
+              "self_wall_seconds": 0.0042102630000000005,
+              "cumulative_wall_seconds": 0.874225887
+            }
+          ],
+          "selected_profile_calls": {
+            "_extract_html_units": 1,
+            "_html_units": 1,
+            "_split_sentences": 5000,
+            "split_sentences": 10000,
+            "validate_content": 1,
+            "enrich_content": 1
+          }
+        },
+        {
+          "event": "call",
+          "pid": 1140786,
+          "thread": 128149908531008,
+          "actor": "local_worker.py",
+          "at": 1989367.77158374,
+          "stage": "live.build",
+          "depth": 0,
+          "wall_seconds": 5.661209600046277,
+          "thread_cpu_seconds": 5.159138358999998,
+          "profile": "1140786-35-live_build.prof",
+          "error": null,
+          "revision": 3,
+          "requested_revision": 3,
+          "phase": "actual saved edit 2",
+          "html_memo": [
+            {
+              "event": "html_memo",
+              "pid": 1140786,
+              "thread": 128149908531008,
+              "actor": "local_worker.py",
+              "at": 1989365.725540705,
+              "revision": 3,
+              "html_characters": 3900878,
+              "nodes": 5000,
+              "units": 5000,
+              "extraction_calls": 0,
+              "actual_cache_hit": true
+            }
+          ],
+          "sentence_memo": [
+            {
+              "event": "sentence_memo",
+              "pid": 1140786,
+              "thread": 128149908531008,
+              "actor": "local_worker.py",
+              "at": 1989367.772196941,
+              "revision": 3,
+              "hits": 10000,
+              "misses": 0,
+              "retained_entries": 5000,
+              "max_entries": 8192
+            }
+          ],
+          "top_cumulative_wall": [
+            {
+              "file": "/home/ubuntu/.dsh/state/superagent/work/writing-check-delivery-6277b05259b6/src/latex_review/live.py",
+              "line": 51,
+              "function": "build",
+              "calls": 1,
+              "self_wall_seconds": 0.001832307,
+              "cumulative_wall_seconds": 5.646742742000001
+            },
+            {
+              "file": "/home/ubuntu/.dsh/state/superagent/work/writing-check-delivery-6277b05259b6/src/latex_review/preview.py",
+              "line": 793,
+              "function": "render_preview",
+              "calls": 1,
+              "self_wall_seconds": 0.021565506,
+              "cumulative_wall_seconds": 1.504995332
+            },
+            {
+              "file": "/home/ubuntu/.dsh/state/superagent/work/writing-check-delivery-6277b05259b6/src/latex_review/annotations/content.py",
+              "line": 239,
+              "function": "build_content",
+              "calls": 1,
+              "self_wall_seconds": 0.024634886,
+              "cumulative_wall_seconds": 1.4752393990000001
+            },
+            {
+              "file": "/tmp/writing-check-pipeline-profile.EA2Ib9/sitecustomize.py",
+              "line": 30,
+              "function": "wrapped",
+              "calls": 5,
+              "self_wall_seconds": 0.000160728,
+              "cumulative_wall_seconds": 1.374383659
+            },
+            {
+              "file": "/home/ubuntu/.dsh/state/superagent/work/writing-check-delivery-6277b05259b6/src/latex_review/checks/snapshot.py",
+              "line": 93,
+              "function": "capture_snapshot",
+              "calls": 1,
+              "self_wall_seconds": 0.000215083,
+              "cumulative_wall_seconds": 1.374054595
+            },
+            {
+              "file": "/home/ubuntu/.dsh/state/superagent/work/writing-check-delivery-6277b05259b6/src/latex_review/checks/snapshot.py",
+              "line": 110,
+              "function": "_capture",
+              "calls": 1,
+              "self_wall_seconds": 0.0033432630000000004,
+              "cumulative_wall_seconds": 1.373839512
+            },
+            {
+              "file": "~",
+              "line": 0,
+              "function": "<method 'join' of 'str' objects>",
+              "calls": 85947,
+              "self_wall_seconds": 0.14302108100000002,
+              "cumulative_wall_seconds": 1.301356242
+            },
+            {
+              "file": "/home/ubuntu/.dsh/state/superagent/work/writing-check-delivery-6277b05259b6/src/latex_review/sources.py",
+              "line": 83,
+              "function": "origin_ranges",
+              "calls": 15000,
+              "self_wall_seconds": 0.009673067,
+              "cumulative_wall_seconds": 1.230523139
+            },
+            {
+              "file": "/home/ubuntu/.dsh/state/superagent/work/writing-check-delivery-6277b05259b6/src/latex_review/source_map.py",
+              "line": 69,
+              "function": "map_range",
+              "calls": 15000,
+              "self_wall_seconds": 0.66537965,
+              "cumulative_wall_seconds": 1.2208500720000002
+            },
+            {
+              "file": "/home/ubuntu/.dsh/state/superagent/work/writing-check-delivery-6277b05259b6/src/latex_review/preview.py",
+              "line": 770,
+              "function": "_side",
+              "calls": 1,
+              "self_wall_seconds": 0.001735884,
+              "cumulative_wall_seconds": 1.189423295
+            },
+            {
+              "file": "/home/ubuntu/.dsh/state/superagent/work/writing-check-delivery-6277b05259b6/src/latex_review/structure.py",
+              "line": 625,
+              "function": "parse_project",
+              "calls": 1,
+              "self_wall_seconds": 0.005136583,
+              "cumulative_wall_seconds": 1.185201916
+            },
+            {
+              "file": "/home/ubuntu/.dsh/state/superagent/work/writing-check-delivery-6277b05259b6/src/latex_review/preview.py",
+              "line": 776,
+              "function": "<genexpr>",
+              "calls": 5001,
+              "self_wall_seconds": 0.004978756,
+              "cumulative_wall_seconds": 1.1790513660000002
+            },
+            {
+              "file": "/home/ubuntu/.dsh/state/superagent/work/writing-check-delivery-6277b05259b6/src/latex_review/preview.py",
+              "line": 758,
+              "function": "_render_node",
+              "calls": 5000,
+              "self_wall_seconds": 0.050106713000000004,
+              "cumulative_wall_seconds": 1.17407261
+            },
+            {
+              "file": "/home/ubuntu/.dsh/state/superagent/work/writing-check-delivery-6277b05259b6/src/latex_review/preview.py",
+              "line": 605,
+              "function": "_body",
+              "calls": 5000,
+              "self_wall_seconds": 0.217615843,
+              "cumulative_wall_seconds": 1.079506491
+            },
+            {
+              "file": "/home/ubuntu/.dsh/state/superagent/work/writing-check-delivery-6277b05259b6/src/latex_review/structure.py",
+              "line": 434,
+              "function": "scan",
+              "calls": 1,
+              "self_wall_seconds": 0.013554855000000001,
+              "cumulative_wall_seconds": 0.989266979
+            },
+            {
+              "file": "/home/ubuntu/.dsh/state/superagent/work/writing-check-delivery-6277b05259b6/src/latex_review/annotation_sources.py",
+              "line": 88,
+              "function": "enrich_content",
+              "calls": 1,
+              "self_wall_seconds": 0.036702458,
+              "cumulative_wall_seconds": 0.9351397260000001
+            },
+            {
+              "file": "/home/ubuntu/.dsh/state/superagent/work/writing-check-delivery-6277b05259b6/src/latex_review/annotation_sources.py",
+              "line": 23,
+              "function": "_continuous",
+              "calls": 10000,
+              "self_wall_seconds": 0.015317196000000002,
+              "cumulative_wall_seconds": 0.856431432
+            },
+            {
+              "file": "/home/ubuntu/.dsh/state/superagent/work/writing-check-delivery-6277b05259b6/src/latex_review/structure.py",
+              "line": 363,
+              "function": "_flush",
+              "calls": 5001,
+              "self_wall_seconds": 0.021760119,
+              "cumulative_wall_seconds": 0.8262782030000001
+            },
+            {
+              "file": "/home/ubuntu/.dsh/state/superagent/work/writing-check-delivery-6277b05259b6/src/latex_review/structure.py",
+              "line": 288,
+              "function": "add",
+              "calls": 5000,
+              "self_wall_seconds": 0.053329525,
+              "cumulative_wall_seconds": 0.7713027140000001
+            },
+            {
+              "file": "/home/ubuntu/.dsh/state/superagent/work/writing-check-delivery-6277b05259b6/src/latex_review/translation.py",
+              "line": 223,
+              "function": "build_current_units",
+              "calls": 1,
+              "self_wall_seconds": 0.025111474,
+              "cumulative_wall_seconds": 0.655158564
+            },
+            {
+              "file": "/home/ubuntu/.dsh/state/superagent/work/writing-check-delivery-6277b05259b6/src/latex_review/translation.py",
+              "line": 156,
+              "function": "_build_unit",
+              "calls": 5000,
+              "self_wall_seconds": 0.099515189,
+              "cumulative_wall_seconds": 0.5988389630000001
+            },
+            {
+              "file": "/home/ubuntu/.dsh/state/superagent/work/writing-check-delivery-6277b05259b6/src/latex_review/annotation_sources.py",
+              "line": 42,
+              "function": "_span",
+              "calls": 5000,
+              "self_wall_seconds": 0.021563003,
+              "cumulative_wall_seconds": 0.46013225500000005
+            },
+            {
+              "file": "/home/ubuntu/.dsh/state/superagent/work/writing-check-delivery-6277b05259b6/src/latex_review/translation.py",
+              "line": 96,
+              "function": "_protected_sentence",
+              "calls": 20000,
+              "self_wall_seconds": 0.081268146,
+              "cumulative_wall_seconds": 0.44192648300000004
+            },
+            {
+              "file": "/home/ubuntu/.local/share/uv/python/cpython-3.11.17-linux-x86_64-gnu/lib/python3.11/dataclasses.py",
+              "line": 1265,
+              "function": "asdict",
+              "calls": 5354,
+              "self_wall_seconds": 0.0056636970000000005,
+              "cumulative_wall_seconds": 0.39802886800000004
+            },
+            {
+              "file": "/home/ubuntu/.dsh/state/superagent/work/writing-check-delivery-6277b05259b6/src/latex_review/preview.py",
+              "line": 375,
+              "function": "_inline_html",
+              "calls": 25000,
+              "self_wall_seconds": 0.020553691000000002,
+              "cumulative_wall_seconds": 0.39478127700000004
+            }
+          ],
+          "selected_profile_calls": {
+            "_extract_html_units": 0,
+            "_html_units": 1,
+            "_split_sentences": 0,
+            "split_sentences": 10000,
+            "validate_content": 1,
+            "enrich_content": 1
+          }
+        }
+      ],
+      "stages_including_startup": {
+        "coordinator._execute": {
+          "thread_cpu_seconds": {
+            "count": 3,
+            "minimum": 1.423761273,
+            "median": 1.5608937809999999,
+            "maximum": 1.6074079720000003,
+            "sum_overlapping": 4.592063026
+          },
+          "wall_seconds": {
+            "count": 3,
+            "minimum": 1.4572775270789862,
+            "median": 1.6732800509780645,
+            "maximum": 1.718864853028208,
+            "sum_overlapping": 4.849422431085259
+          }
+        },
+        "coordinator._fresh": {
+          "thread_cpu_seconds": {
+            "count": 29,
+            "minimum": 0.057568664,
+            "median": 0.098310734,
+            "maximum": 0.104232902,
+            "sum_overlapping": 2.5565926080000003
+          },
+          "wall_seconds": {
+            "count": 29,
+            "minimum": 0.057973247952759266,
+            "median": 0.10631060414016247,
+            "maximum": 0.6309795009437948,
+            "sum_overlapping": 4.149623348843306
+          }
+        },
+        "coordinator.status": {
+          "thread_cpu_seconds": {
+            "count": 34,
+            "minimum": 0.001746886,
+            "median": 0.1017634405,
+            "maximum": 0.11032533600000001,
+            "sum_overlapping": 2.7358300649999996
+          },
+          "wall_seconds": {
+            "count": 34,
+            "minimum": 0.002302334876731038,
+            "median": 0.11265820194967091,
+            "maximum": 0.7743741571903229,
+            "sum_overlapping": 4.943764519877732
+          }
+        },
+        "http.worker_route": {
+          "thread_cpu_seconds": {
+            "count": 38,
+            "minimum": 8.388200000000002e-05,
+            "median": 0.0440133585,
+            "maximum": 0.41180928499999997,
+            "sum_overlapping": 3.508924476000001
+          },
+          "wall_seconds": {
+            "count": 38,
+            "minimum": 8.515594527125359e-05,
+            "median": 0.26969559385906905,
+            "maximum": 0.8442495700437576,
+            "sum_overlapping": 11.596216197358444
+          }
+        },
+        "live.build": {
+          "thread_cpu_seconds": {
+            "count": 3,
+            "minimum": 5.159138358999998,
+            "median": 9.557226654,
+            "maximum": 9.961417789,
+            "sum_overlapping": 24.677782801999996
+          },
+          "wall_seconds": {
+            "count": 3,
+            "minimum": 5.661209600046277,
+            "median": 10.29672189312987,
+            "maximum": 10.707829378079623,
+            "sum_overlapping": 26.66576087125577
+          }
+        },
+        "saved.notifier": {
+          "thread_cpu_seconds": {
+            "count": 3,
+            "minimum": 0.7405371599999999,
+            "median": 0.775611877,
+            "maximum": 0.942481494,
+            "sum_overlapping": 2.458630531
+          },
+          "wall_seconds": {
+            "count": 3,
+            "minimum": 0.8371207569725811,
+            "median": 1.245465316111222,
+            "maximum": 1.4498258030507714,
+            "sum_overlapping": 3.5324118761345744
+          }
+        },
+        "snapshot.capture": {
+          "thread_cpu_seconds": {
+            "count": 6,
+            "minimum": 1.12864813,
+            "median": 1.22059344,
+            "maximum": 1.3406435820000002,
+            "sum_overlapping": 7.366412027999999
+          },
+          "wall_seconds": {
+            "count": 6,
+            "minimum": 1.1372874351218343,
+            "median": 1.2633698605932295,
+            "maximum": 1.3740673491265625,
+            "sum_overlapping": 7.581744716735557
+          }
+        },
+        "snapshot.identity": {
+          "thread_cpu_seconds": {
+            "count": 3,
+            "minimum": 0.13567781400000012,
+            "median": 0.13646563199999973,
+            "maximum": 0.15484531000000068,
+            "sum_overlapping": 0.4269887560000005
+          },
+          "wall_seconds": {
+            "count": 3,
+            "minimum": 0.1361165929120034,
+            "median": 0.1410288130864501,
+            "maximum": 0.1549211679957807,
+            "sum_overlapping": 0.4320665739942342
+          }
+        },
+        "snapshot.raw_files": {
+          "thread_cpu_seconds": {
+            "count": 50,
+            "minimum": 0.004962583000000187,
+            "median": 0.0076938735,
+            "maximum": 0.011845966999999999,
+            "sum_overlapping": 0.36287182000000096
+          },
+          "wall_seconds": {
+            "count": 50,
+            "minimum": 0.0049691530875861645,
+            "median": 0.008674192591570318,
+            "maximum": 0.040797114837914705,
+            "sum_overlapping": 0.5293127119075507
+          }
+        },
+        "source.expand": {
+          "thread_cpu_seconds": {
+            "count": 50,
+            "minimum": 0.046009482,
+            "median": 0.05834431000000002,
+            "maximum": 0.084875649,
+            "sum_overlapping": 3.1371240099999986
+          },
+          "wall_seconds": {
+            "count": 50,
+            "minimum": 0.046063360990956426,
+            "median": 0.06367282604333013,
+            "maximum": 0.5098568010143936,
+            "sum_overlapping": 4.511022374033928
+          }
+        }
+      }
+    },
+    "prose": {
+      "source_aggregate_sha256": "32dfe568ac8ed4db7a826fd6809d6f258a477e984267d98d7711138054fcfc51",
+      "source_paths_changed_during_measurement": [],
+      "cleanup": {
+        "owned_entry_exit_code": 0,
+        "owned_entry_exited": true,
+        "owned_worker_exited": true,
+        "isolated_endpoint_removed": true
+      },
+      "authoritative_samples": 2,
+      "instrumented_elapsed_not_acceptance_seconds": [
+        12.662918743910268,
+        11.315759159158915
+      ],
+      "package_files_observed": [
+        "/home/ubuntu/.dsh/state/superagent/work/writing-check-delivery-6277b05259b6/src/latex_review/live.py"
+      ],
+      "builds": [
+        {
+          "event": "call",
+          "pid": 1141296,
+          "thread": 133526526404416,
+          "actor": "local_worker.py",
+          "at": 1989395.56521316,
+          "stage": "live.build",
+          "depth": 0,
+          "wall_seconds": 8.267576339887455,
+          "thread_cpu_seconds": 7.9660973330000004,
+          "profile": "1141296-0-live_build.prof",
+          "error": null,
+          "revision": 1,
+          "requested_revision": 1,
+          "phase": "initial throwaway preparation",
+          "html_memo": [
+            {
+              "event": "html_memo",
+              "pid": 1141296,
+              "thread": 133526526404416,
+              "actor": "local_worker.py",
+              "at": 1989393.934194366,
+              "revision": 1,
+              "html_characters": 3900878,
+              "nodes": 5000,
+              "units": 5000,
+              "extraction_calls": 1,
+              "actual_cache_hit": false
+            }
+          ],
+          "sentence_memo": [
+            {
+              "event": "sentence_memo",
+              "pid": 1141296,
+              "thread": 133526526404416,
+              "actor": "local_worker.py",
+              "at": 1989395.565740297,
+              "revision": 1,
+              "hits": 5000,
+              "misses": 5000,
+              "retained_entries": 5000,
+              "max_entries": 8192
+            }
+          ],
+          "top_cumulative_wall": [
+            {
+              "file": "/home/ubuntu/.dsh/state/superagent/work/writing-check-delivery-6277b05259b6/src/latex_review/live.py",
+              "line": 51,
+              "function": "build",
+              "calls": 1,
+              "self_wall_seconds": 0.001678468,
+              "cumulative_wall_seconds": 8.255859039
+            },
+            {
+              "file": "/home/ubuntu/.dsh/state/superagent/work/writing-check-delivery-6277b05259b6/src/latex_review/annotations/content.py",
+              "line": 239,
+              "function": "build_content",
+              "calls": 1,
+              "self_wall_seconds": 0.017969918,
+              "cumulative_wall_seconds": 4.287785776000001
+            },
+            {
+              "file": "/tmp/writing-check-pipeline-profile.EA2Ib9/sitecustomize.py",
+              "line": 75,
+              "function": "observed_html_units",
+              "calls": 1,
+              "self_wall_seconds": 0.000447994,
+              "cumulative_wall_seconds": 3.168755099
+            },
+            {
+              "file": "/home/ubuntu/.dsh/state/superagent/work/writing-check-delivery-6277b05259b6/src/latex_review/annotations/content.py",
+              "line": 214,
+              "function": "_html_units",
+              "calls": 1,
+              "self_wall_seconds": 0.000662206,
+              "cumulative_wall_seconds": 3.1680190990000003
+            },
+            {
+              "file": "/tmp/writing-check-pipeline-profile.EA2Ib9/sitecustomize.py",
+              "line": 68,
+              "function": "observed_extract",
+              "calls": 1,
+              "self_wall_seconds": 0.001096205,
+              "cumulative_wall_seconds": 3.139237082
+            },
+            {
+              "file": "/home/ubuntu/.dsh/state/superagent/work/writing-check-delivery-6277b05259b6/src/latex_review/annotations/content.py",
+              "line": 65,
+              "function": "_extract_html_units",
+              "calls": 1,
+              "self_wall_seconds": 0.148533417,
+              "cumulative_wall_seconds": 3.1381358180000003
+            },
+            {
+              "file": "/home/ubuntu/.local/share/uv/python/cpython-3.11.17-linux-x86_64-gnu/lib/python3.11/html/parser.py",
+              "line": 145,
+              "function": "feed",
+              "calls": 1,
+              "self_wall_seconds": 1.9508e-05,
+              "cumulative_wall_seconds": 1.490874199
+            },
+            {
+              "file": "/home/ubuntu/.local/share/uv/python/cpython-3.11.17-linux-x86_64-gnu/lib/python3.11/html/parser.py",
+              "line": 222,
+              "function": "goahead",
+              "calls": 1,
+              "self_wall_seconds": 0.23018771500000001,
+              "cumulative_wall_seconds": 1.4908538560000002
+            },
+            {
+              "file": "/home/ubuntu/.dsh/state/superagent/work/writing-check-delivery-6277b05259b6/src/latex_review/translation.py",
+              "line": 223,
+              "function": "build_current_units",
+              "calls": 1,
+              "self_wall_seconds": 0.025099338000000002,
+              "cumulative_wall_seconds": 1.417902127
+            },
+            {
+              "file": "/home/ubuntu/.dsh/state/superagent/work/writing-check-delivery-6277b05259b6/src/latex_review/translation.py",
+              "line": 156,
+              "function": "_build_unit",
+              "calls": 5000,
+              "self_wall_seconds": 0.195084516,
+              "cumulative_wall_seconds": 1.3627183280000001
+            },
+            {
+              "file": "/tmp/writing-check-pipeline-profile.EA2Ib9/sitecustomize.py",
+              "line": 30,
+              "function": "wrapped",
+              "calls": 5,
+              "self_wall_seconds": 0.000128107,
+              "cumulative_wall_seconds": 1.184410377
+            },
+            {
+              "file": "/home/ubuntu/.dsh/state/superagent/work/writing-check-delivery-6277b05259b6/src/latex_review/checks/snapshot.py",
+              "line": 93,
+              "function": "capture_snapshot",
+              "calls": 1,
+              "self_wall_seconds": 0.000125623,
+              "cumulative_wall_seconds": 1.1841450900000001
+            },
+            {
+              "file": "/home/ubuntu/.dsh/state/superagent/work/writing-check-delivery-6277b05259b6/src/latex_review/checks/snapshot.py",
+              "line": 110,
+              "function": "_capture",
+              "calls": 1,
+              "self_wall_seconds": 0.001944404,
+              "cumulative_wall_seconds": 1.1840194670000002
+            },
+            {
+              "file": "/home/ubuntu/.dsh/state/superagent/work/writing-check-delivery-6277b05259b6/src/latex_review/structure.py",
+              "line": 625,
+              "function": "parse_project",
+              "calls": 1,
+              "self_wall_seconds": 0.0030559190000000003,
+              "cumulative_wall_seconds": 1.033800446
+            },
+            {
+              "file": "/home/ubuntu/.dsh/state/superagent/work/writing-check-delivery-6277b05259b6/src/latex_review/sources.py",
+              "line": 83,
+              "function": "origin_ranges",
+              "calls": 15000,
+              "self_wall_seconds": 0.008081682,
+              "cumulative_wall_seconds": 0.9449740090000001
+            },
+            {
+              "file": "/home/ubuntu/.dsh/state/superagent/work/writing-check-delivery-6277b05259b6/src/latex_review/source_map.py",
+              "line": 69,
+              "function": "map_range",
+              "calls": 15000,
+              "self_wall_seconds": 0.49651797000000003,
+              "cumulative_wall_seconds": 0.936892327
+            },
+            {
+              "file": "/home/ubuntu/.dsh/state/superagent/work/writing-check-delivery-6277b05259b6/src/latex_review/structure.py",
+              "line": 434,
+              "function": "scan",
+              "calls": 1,
+              "self_wall_seconds": 0.011375902,
+              "cumulative_wall_seconds": 0.920861664
+            },
+            {
+              "file": "/home/ubuntu/.dsh/state/superagent/work/writing-check-delivery-6277b05259b6/src/latex_review/preview.py",
+              "line": 793,
+              "function": "render_preview",
+              "calls": 1,
+              "self_wall_seconds": 0.009553049000000001,
+              "cumulative_wall_seconds": 0.8006146980000001
+            },
+            {
+              "file": "/home/ubuntu/.local/share/uv/python/cpython-3.11.17-linux-x86_64-gnu/lib/python3.11/html/parser.py",
+              "line": 435,
+              "function": "parse_starttag",
+              "calls": 30017,
+              "self_wall_seconds": 0.316072152,
+              "cumulative_wall_seconds": 0.789531037
+            },
+            {
+              "file": "/home/ubuntu/.dsh/state/superagent/work/writing-check-delivery-6277b05259b6/src/latex_review/text_diff.py",
+              "line": 68,
+              "function": "split_sentences",
+              "calls": 10000,
+              "self_wall_seconds": 0.018326386,
+              "cumulative_wall_seconds": 0.789319674
+            },
+            {
+              "file": "/home/ubuntu/.dsh/state/superagent/work/writing-check-delivery-6277b05259b6/src/latex_review/structure.py",
+              "line": 363,
+              "function": "_flush",
+              "calls": 5001,
+              "self_wall_seconds": 0.019164105,
+              "cumulative_wall_seconds": 0.7756307370000001
+            },
+            {
+              "file": "/home/ubuntu/.dsh/state/superagent/work/writing-check-delivery-6277b05259b6/src/latex_review/text_diff.py",
+              "line": 63,
+              "function": "_memoized_sentences",
+              "calls": 5000,
+              "self_wall_seconds": 0.0038587950000000004,
+              "cumulative_wall_seconds": 0.7678337470000001
+            },
+            {
+              "file": "~",
+              "line": 0,
+              "function": "<method 'join' of 'str' objects>",
+              "calls": 86019,
+              "self_wall_seconds": 0.084262628,
+              "cumulative_wall_seconds": 0.765862971
+            },
+            {
+              "file": "/home/ubuntu/.dsh/state/superagent/work/writing-check-delivery-6277b05259b6/src/latex_review/text_diff.py",
+              "line": 76,
+              "function": "_split_sentences",
+              "calls": 5000,
+              "self_wall_seconds": 0.20363803000000003,
+              "cumulative_wall_seconds": 0.7639749520000001
+            },
+            {
+              "file": "/home/ubuntu/.dsh/state/superagent/work/writing-check-delivery-6277b05259b6/src/latex_review/structure.py",
+              "line": 288,
+              "function": "add",
+              "calls": 5000,
+              "self_wall_seconds": 0.052817646,
+              "cumulative_wall_seconds": 0.7250695650000001
+            }
+          ],
+          "selected_profile_calls": {
+            "_extract_html_units": 1,
+            "_html_units": 1,
+            "_split_sentences": 5000,
+            "split_sentences": 10000,
+            "validate_content": 1,
+            "enrich_content": 1
+          }
+        },
+        {
+          "event": "call",
+          "pid": 1141524,
+          "thread": 137810053068608,
+          "actor": "local_worker.py",
+          "at": 1989410.084359756,
+          "stage": "live.build",
+          "depth": 0,
+          "wall_seconds": 8.746697813039646,
+          "thread_cpu_seconds": 8.025126821999999,
+          "profile": "1141524-10-live_build.prof",
+          "error": null,
+          "revision": 2,
+          "requested_revision": 2,
+          "phase": "actual saved edit 1",
+          "html_memo": [
+            {
+              "event": "html_memo",
+              "pid": 1141524,
+              "thread": 137810053068608,
+              "actor": "local_worker.py",
+              "at": 1989408.265843583,
+              "revision": 2,
+              "html_characters": 3900887,
+              "nodes": 5000,
+              "units": 5000,
+              "extraction_calls": 1,
+              "actual_cache_hit": false
+            }
+          ],
+          "sentence_memo": [
+            {
+              "event": "sentence_memo",
+              "pid": 1141524,
+              "thread": 137810053068608,
+              "actor": "local_worker.py",
+              "at": 1989410.084913499,
+              "revision": 2,
+              "hits": 5000,
+              "misses": 5000,
+              "retained_entries": 5000,
+              "max_entries": 8192
+            }
+          ],
+          "top_cumulative_wall": [
+            {
+              "file": "/home/ubuntu/.dsh/state/superagent/work/writing-check-delivery-6277b05259b6/src/latex_review/live.py",
+              "line": 51,
+              "function": "build",
+              "calls": 1,
+              "self_wall_seconds": 0.001550795,
+              "cumulative_wall_seconds": 8.735923696
+            },
+            {
+              "file": "/home/ubuntu/.dsh/state/superagent/work/writing-check-delivery-6277b05259b6/src/latex_review/annotations/content.py",
+              "line": 239,
+              "function": "build_content",
+              "calls": 1,
+              "self_wall_seconds": 0.018705929,
+              "cumulative_wall_seconds": 4.488966974
+            },
+            {
+              "file": "/tmp/writing-check-pipeline-profile.EA2Ib9/sitecustomize.py",
+              "line": 75,
+              "function": "observed_html_units",
+              "calls": 1,
+              "self_wall_seconds": 0.000529603,
+              "cumulative_wall_seconds": 3.236646688
+            },
+            {
+              "file": "/home/ubuntu/.dsh/state/superagent/work/writing-check-delivery-6277b05259b6/src/latex_review/annotations/content.py",
+              "line": 214,
+              "function": "_html_units",
+              "calls": 1,
+              "self_wall_seconds": 0.0006557710000000001,
+              "cumulative_wall_seconds": 3.2355296790000003
+            },
+            {
+              "file": "/tmp/writing-check-pipeline-profile.EA2Ib9/sitecustomize.py",
+              "line": 68,
+              "function": "observed_extract",
+              "calls": 1,
+              "self_wall_seconds": 0.001028456,
+              "cumulative_wall_seconds": 3.205491013
+            },
+            {
+              "file": "/home/ubuntu/.dsh/state/superagent/work/writing-check-delivery-6277b05259b6/src/latex_review/annotations/content.py",
+              "line": 65,
+              "function": "_extract_html_units",
+              "calls": 1,
+              "self_wall_seconds": 0.17001549600000002,
+              "cumulative_wall_seconds": 3.2044569550000004
+            },
+            {
+              "file": "/home/ubuntu/.dsh/state/superagent/work/writing-check-delivery-6277b05259b6/src/latex_review/translation.py",
+              "line": 223,
+              "function": "build_current_units",
+              "calls": 1,
+              "self_wall_seconds": 0.027304796000000003,
+              "cumulative_wall_seconds": 1.594697057
+            },
+            {
+              "file": "/home/ubuntu/.dsh/state/superagent/work/writing-check-delivery-6277b05259b6/src/latex_review/translation.py",
+              "line": 156,
+              "function": "_build_unit",
+              "calls": 5000,
+              "self_wall_seconds": 0.187595266,
+              "cumulative_wall_seconds": 1.535660162
+            },
+            {
+              "file": "/home/ubuntu/.local/share/uv/python/cpython-3.11.17-linux-x86_64-gnu/lib/python3.11/html/parser.py",
+              "line": 145,
+              "function": "feed",
+              "calls": 1,
+              "self_wall_seconds": 2.0165e-05,
+              "cumulative_wall_seconds": 1.383891787
+            },
+            {
+              "file": "/home/ubuntu/.local/share/uv/python/cpython-3.11.17-linux-x86_64-gnu/lib/python3.11/html/parser.py",
+              "line": 222,
+              "function": "goahead",
+              "calls": 1,
+              "self_wall_seconds": 0.207968859,
+              "cumulative_wall_seconds": 1.383870492
+            },
+            {
+              "file": "/home/ubuntu/.dsh/state/superagent/work/writing-check-delivery-6277b05259b6/src/latex_review/sources.py",
+              "line": 83,
+              "function": "origin_ranges",
+              "calls": 15000,
+              "self_wall_seconds": 0.008397113000000001,
+              "cumulative_wall_seconds": 1.139904784
+            },
+            {
+              "file": "/home/ubuntu/.dsh/state/superagent/work/writing-check-delivery-6277b05259b6/src/latex_review/source_map.py",
+              "line": 69,
+              "function": "map_range",
+              "calls": 15000,
+              "self_wall_seconds": 0.628964457,
+              "cumulative_wall_seconds": 1.131507671
+            },
+            {
+              "file": "/tmp/writing-check-pipeline-profile.EA2Ib9/sitecustomize.py",
+              "line": 30,
+              "function": "wrapped",
+              "calls": 5,
+              "self_wall_seconds": 0.00013153,
+              "cumulative_wall_seconds": 1.1203076090000001
+            },
+            {
+              "file": "/home/ubuntu/.dsh/state/superagent/work/writing-check-delivery-6277b05259b6/src/latex_review/checks/snapshot.py",
+              "line": 93,
+              "function": "capture_snapshot",
+              "calls": 1,
+              "self_wall_seconds": 0.00013418500000000002,
+              "cumulative_wall_seconds": 1.120019297
+            },
+            {
+              "file": "/home/ubuntu/.dsh/state/superagent/work/writing-check-delivery-6277b05259b6/src/latex_review/checks/snapshot.py",
+              "line": 110,
+              "function": "_capture",
+              "calls": 1,
+              "self_wall_seconds": 0.002104697,
+              "cumulative_wall_seconds": 1.119885112
+            },
+            {
+              "file": "/home/ubuntu/.dsh/state/superagent/work/writing-check-delivery-6277b05259b6/src/latex_review/structure.py",
+              "line": 625,
+              "function": "parse_project",
+              "calls": 1,
+              "self_wall_seconds": 0.0029887010000000003,
+              "cumulative_wall_seconds": 0.9783985970000001
+            },
+            {
+              "file": "/home/ubuntu/.dsh/state/superagent/work/writing-check-delivery-6277b05259b6/src/latex_review/preview.py",
+              "line": 793,
+              "function": "render_preview",
+              "calls": 1,
+              "self_wall_seconds": 0.009491555,
+              "cumulative_wall_seconds": 0.895745191
+            },
+            {
+              "file": "/home/ubuntu/.dsh/state/superagent/work/writing-check-delivery-6277b05259b6/src/latex_review/annotation_sources.py",
+              "line": 88,
+              "function": "enrich_content",
+              "calls": 1,
+              "self_wall_seconds": 0.028124648000000002,
+              "cumulative_wall_seconds": 0.875520284
+            },
+            {
+              "file": "/home/ubuntu/.dsh/state/superagent/work/writing-check-delivery-6277b05259b6/src/latex_review/structure.py",
+              "line": 434,
+              "function": "scan",
+              "calls": 1,
+              "self_wall_seconds": 0.012181191000000001,
+              "cumulative_wall_seconds": 0.869998343
+            },
+            {
+              "file": "/home/ubuntu/.dsh/state/superagent/work/writing-check-delivery-6277b05259b6/src/latex_review/text_diff.py",
+              "line": 68,
+              "function": "split_sentences",
+              "calls": 10000,
+              "self_wall_seconds": 0.021934336000000002,
+              "cumulative_wall_seconds": 0.858226012
+            },
+            {
+              "file": "~",
+              "line": 0,
+              "function": "<method 'join' of 'str' objects>",
+              "calls": 86019,
+              "self_wall_seconds": 0.080643451,
+              "cumulative_wall_seconds": 0.8578000910000001
+            },
+            {
+              "file": "/home/ubuntu/.dsh/state/superagent/work/writing-check-delivery-6277b05259b6/src/latex_review/text_diff.py",
+              "line": 63,
+              "function": "_memoized_sentences",
+              "calls": 5000,
+              "self_wall_seconds": 0.0040417790000000006,
+              "cumulative_wall_seconds": 0.8330310940000001
+            },
+            {
+              "file": "/home/ubuntu/.dsh/state/superagent/work/writing-check-delivery-6277b05259b6/src/latex_review/text_diff.py",
+              "line": 76,
+              "function": "_split_sentences",
+              "calls": 5000,
+              "self_wall_seconds": 0.21992978000000002,
+              "cumulative_wall_seconds": 0.8289893150000001
+            },
+            {
+              "file": "/home/ubuntu/.dsh/state/superagent/work/writing-check-delivery-6277b05259b6/src/latex_review/annotation_sources.py",
+              "line": 23,
+              "function": "_continuous",
+              "calls": 10000,
+              "self_wall_seconds": 0.011889632,
+              "cumulative_wall_seconds": 0.807135272
+            },
+            {
+              "file": "/home/ubuntu/.dsh/state/superagent/work/writing-check-delivery-6277b05259b6/src/latex_review/preview.py",
+              "line": 770,
+              "function": "_side",
+              "calls": 1,
+              "self_wall_seconds": 0.0033054860000000003,
+              "cumulative_wall_seconds": 0.7979394350000001
+            }
+          ],
+          "selected_profile_calls": {
+            "_extract_html_units": 1,
+            "_html_units": 1,
+            "_split_sentences": 5000,
+            "split_sentences": 10000,
+            "validate_content": 1,
+            "enrich_content": 1
+          }
+        },
+        {
+          "event": "call",
+          "pid": 1141524,
+          "thread": 137810053068608,
+          "actor": "local_worker.py",
+          "at": 1989421.763795287,
+          "stage": "live.build",
+          "depth": 0,
+          "wall_seconds": 7.6904186678584665,
+          "thread_cpu_seconds": 7.2032476060000015,
+          "profile": "1141524-34-live_build.prof",
+          "error": null,
+          "revision": 3,
+          "requested_revision": 3,
+          "phase": "actual saved edit 2",
+          "html_memo": [
+            {
+              "event": "html_memo",
+              "pid": 1141524,
+              "thread": 137810053068608,
+              "actor": "local_worker.py",
+              "at": 1989420.019200052,
+              "revision": 3,
+              "html_characters": 3900887,
+              "nodes": 5000,
+              "units": 5000,
+              "extraction_calls": 1,
+              "actual_cache_hit": false
+            }
+          ],
+          "sentence_memo": [
+            {
+              "event": "sentence_memo",
+              "pid": 1141524,
+              "thread": 137810053068608,
+              "actor": "local_worker.py",
+              "at": 1989421.765711471,
+              "revision": 3,
+              "hits": 9999,
+              "misses": 1,
+              "retained_entries": 5001,
+              "max_entries": 8192
+            }
+          ],
+          "top_cumulative_wall": [
+            {
+              "file": "/home/ubuntu/.dsh/state/superagent/work/writing-check-delivery-6277b05259b6/src/latex_review/live.py",
+              "line": 51,
+              "function": "build",
+              "calls": 1,
+              "self_wall_seconds": 0.0018252650000000002,
+              "cumulative_wall_seconds": 7.674550948
+            },
+            {
+              "file": "/home/ubuntu/.dsh/state/superagent/work/writing-check-delivery-6277b05259b6/src/latex_review/annotations/content.py",
+              "line": 239,
+              "function": "build_content",
+              "calls": 1,
+              "self_wall_seconds": 0.020733796000000002,
+              "cumulative_wall_seconds": 4.21493903
+            },
+            {
+              "file": "/tmp/writing-check-pipeline-profile.EA2Ib9/sitecustomize.py",
+              "line": 75,
+              "function": "observed_html_units",
+              "calls": 1,
+              "self_wall_seconds": 0.00053552,
+              "cumulative_wall_seconds": 2.991138491
+            },
+            {
+              "file": "/home/ubuntu/.dsh/state/superagent/work/writing-check-delivery-6277b05259b6/src/latex_review/annotations/content.py",
+              "line": 214,
+              "function": "_html_units",
+              "calls": 1,
+              "self_wall_seconds": 0.0006488640000000001,
+              "cumulative_wall_seconds": 2.9903142980000004
+            },
+            {
+              "file": "/tmp/writing-check-pipeline-profile.EA2Ib9/sitecustomize.py",
+              "line": 68,
+              "function": "observed_extract",
+              "calls": 1,
+              "self_wall_seconds": 0.0008327170000000001,
+              "cumulative_wall_seconds": 2.959442532
+            },
+            {
+              "file": "/home/ubuntu/.dsh/state/superagent/work/writing-check-delivery-6277b05259b6/src/latex_review/annotations/content.py",
+              "line": 65,
+              "function": "_extract_html_units",
+              "calls": 1,
+              "self_wall_seconds": 0.155096238,
+              "cumulative_wall_seconds": 2.9586078770000004
+            },
+            {
+              "file": "/tmp/writing-check-pipeline-profile.EA2Ib9/sitecustomize.py",
+              "line": 30,
+              "function": "wrapped",
+              "calls": 5,
+              "self_wall_seconds": 0.000173756,
+              "cumulative_wall_seconds": 1.446755323
+            },
+            {
+              "file": "/home/ubuntu/.dsh/state/superagent/work/writing-check-delivery-6277b05259b6/src/latex_review/checks/snapshot.py",
+              "line": 93,
+              "function": "capture_snapshot",
+              "calls": 1,
+              "self_wall_seconds": 0.000143731,
+              "cumulative_wall_seconds": 1.44620385
+            },
+            {
+              "file": "/home/ubuntu/.dsh/state/superagent/work/writing-check-delivery-6277b05259b6/src/latex_review/checks/snapshot.py",
+              "line": 110,
+              "function": "_capture",
+              "calls": 1,
+              "self_wall_seconds": 0.002451953,
+              "cumulative_wall_seconds": 1.4460601190000002
+            },
+            {
+              "file": "/home/ubuntu/.dsh/state/superagent/work/writing-check-delivery-6277b05259b6/src/latex_review/structure.py",
+              "line": 625,
+              "function": "parse_project",
+              "calls": 1,
+              "self_wall_seconds": 0.0024491820000000003,
+              "cumulative_wall_seconds": 1.287783568
+            },
+            {
+              "file": "/home/ubuntu/.local/share/uv/python/cpython-3.11.17-linux-x86_64-gnu/lib/python3.11/html/parser.py",
+              "line": 145,
+              "function": "feed",
+              "calls": 1,
+              "self_wall_seconds": 7.243000000000001e-06,
+              "cumulative_wall_seconds": 1.2712192070000001
+            },
+            {
+              "file": "/home/ubuntu/.local/share/uv/python/cpython-3.11.17-linux-x86_64-gnu/lib/python3.11/html/parser.py",
+              "line": 222,
+              "function": "goahead",
+              "calls": 1,
+              "self_wall_seconds": 0.18728654700000003,
+              "cumulative_wall_seconds": 1.271210981
+            },
+            {
+              "file": "/home/ubuntu/.dsh/state/superagent/work/writing-check-delivery-6277b05259b6/src/latex_review/structure.py",
+              "line": 434,
+              "function": "scan",
+              "calls": 1,
+              "self_wall_seconds": 0.011194925000000001,
+              "cumulative_wall_seconds": 1.178024255
+            },
+            {
+              "file": "/home/ubuntu/.dsh/state/superagent/work/writing-check-delivery-6277b05259b6/src/latex_review/sources.py",
+              "line": 83,
+              "function": "origin_ranges",
+              "calls": 15000,
+              "self_wall_seconds": 0.009839449,
+              "cumulative_wall_seconds": 1.0973587280000001
+            },
+            {
+              "file": "/home/ubuntu/.dsh/state/superagent/work/writing-check-delivery-6277b05259b6/src/latex_review/source_map.py",
+              "line": 69,
+              "function": "map_range",
+              "calls": 15000,
+              "self_wall_seconds": 0.607126523,
+              "cumulative_wall_seconds": 1.0875192790000001
+            },
+            {
+              "file": "/home/ubuntu/.dsh/state/superagent/work/writing-check-delivery-6277b05259b6/src/latex_review/structure.py",
+              "line": 363,
+              "function": "_flush",
+              "calls": 5001,
+              "self_wall_seconds": 0.023382712,
+              "cumulative_wall_seconds": 0.99033033
+            },
+            {
+              "file": "/home/ubuntu/.dsh/state/superagent/work/writing-check-delivery-6277b05259b6/src/latex_review/structure.py",
+              "line": 288,
+              "function": "add",
+              "calls": 5000,
+              "self_wall_seconds": 0.064929837,
+              "cumulative_wall_seconds": 0.9213953640000001
+            },
+            {
+              "file": "/home/ubuntu/.dsh/state/superagent/work/writing-check-delivery-6277b05259b6/src/latex_review/preview.py",
+              "line": 793,
+              "function": "render_preview",
+              "calls": 1,
+              "self_wall_seconds": 0.009665039,
+              "cumulative_wall_seconds": 0.843130879
+            },
+            {
+              "file": "~",
+              "line": 0,
+              "function": "<method 'join' of 'str' objects>",
+              "calls": 85941,
+              "self_wall_seconds": 0.07349778600000001,
+              "cumulative_wall_seconds": 0.8141054470000001
+            },
+            {
+              "file": "/home/ubuntu/.dsh/state/superagent/work/writing-check-delivery-6277b05259b6/src/latex_review/preview.py",
+              "line": 770,
+              "function": "_side",
+              "calls": 1,
+              "self_wall_seconds": 0.0020597560000000003,
+              "cumulative_wall_seconds": 0.760180296
+            },
+            {
+              "file": "/home/ubuntu/.dsh/state/superagent/work/writing-check-delivery-6277b05259b6/src/latex_review/preview.py",
+              "line": 776,
+              "function": "<genexpr>",
+              "calls": 5001,
+              "self_wall_seconds": 0.0036755610000000004,
+              "cumulative_wall_seconds": 0.754344518
+            },
+            {
+              "file": "/home/ubuntu/.dsh/state/superagent/work/writing-check-delivery-6277b05259b6/src/latex_review/preview.py",
+              "line": 758,
+              "function": "_render_node",
+              "calls": 5000,
+              "self_wall_seconds": 0.022464815000000003,
+              "cumulative_wall_seconds": 0.750668957
+            },
+            {
+              "file": "/home/ubuntu/.dsh/state/superagent/work/writing-check-delivery-6277b05259b6/src/latex_review/annotation_sources.py",
+              "line": 88,
+              "function": "enrich_content",
+              "calls": 1,
+              "self_wall_seconds": 0.025819664000000003,
+              "cumulative_wall_seconds": 0.704132198
+            },
+            {
+              "file": "/home/ubuntu/.local/share/uv/python/cpython-3.11.17-linux-x86_64-gnu/lib/python3.11/html/parser.py",
+              "line": 435,
+              "function": "parse_starttag",
+              "calls": 30017,
+              "self_wall_seconds": 0.273536681,
+              "cumulative_wall_seconds": 0.694371014
+            },
+            {
+              "file": "/home/ubuntu/.dsh/state/superagent/work/writing-check-delivery-6277b05259b6/src/latex_review/preview.py",
+              "line": 605,
+              "function": "_body",
+              "calls": 5000,
+              "self_wall_seconds": 0.134386514,
+              "cumulative_wall_seconds": 0.6942068020000001
+            }
+          ],
+          "selected_profile_calls": {
+            "_extract_html_units": 1,
+            "_html_units": 1,
+            "_split_sentences": 1,
+            "split_sentences": 10000,
+            "validate_content": 1,
+            "enrich_content": 1
+          }
+        }
+      ],
+      "stages_including_startup": {
+        "coordinator._execute": {
+          "thread_cpu_seconds": {
+            "count": 3,
+            "minimum": 1.431492358,
+            "median": 1.4666915800000004,
+            "maximum": 1.4862200060000001,
+            "sum_overlapping": 4.384403944000001
+          },
+          "wall_seconds": {
+            "count": 3,
+            "minimum": 1.4837869638577104,
+            "median": 1.5904001980088651,
+            "maximum": 1.5989142321050167,
+            "sum_overlapping": 4.673101393971592
+          }
+        },
+        "coordinator._fresh": {
+          "thread_cpu_seconds": {
+            "count": 31,
+            "minimum": 0.057536369,
+            "median": 0.060470205000000006,
+            "maximum": 0.099955411,
+            "sum_overlapping": 1.9510555
+          },
+          "wall_seconds": {
+            "count": 31,
+            "minimum": 0.059213776141405106,
+            "median": 0.0670309578999877,
+            "maximum": 1.1677325170021504,
+            "sum_overlapping": 3.9611983485519886
+          }
+        },
+        "coordinator.status": {
+          "thread_cpu_seconds": {
+            "count": 36,
+            "minimum": 0.001847217,
+            "median": 0.06455856399999998,
+            "maximum": 0.10616835300000001,
+            "sum_overlapping": 2.100987452
+          },
+          "wall_seconds": {
+            "count": 36,
+            "minimum": 0.0022321019787341356,
+            "median": 0.07154971989803016,
+            "maximum": 1.1779491489287466,
+            "sum_overlapping": 4.4320213126484305
+          }
+        },
+        "http.worker_route": {
+          "thread_cpu_seconds": {
+            "count": 40,
+            "minimum": 0.00010694299999999997,
+            "median": 0.027327175,
+            "maximum": 0.431798689,
+            "sum_overlapping": 3.2141273040000007
+          },
+          "wall_seconds": {
+            "count": 40,
+            "minimum": 0.0001080359797924757,
+            "median": 0.20363307651132345,
+            "maximum": 1.8033497489523143,
+            "sum_overlapping": 10.713657559361309
+          }
+        },
+        "live.build": {
+          "thread_cpu_seconds": {
+            "count": 3,
+            "minimum": 7.2032476060000015,
+            "median": 7.9660973330000004,
+            "maximum": 8.025126821999999,
+            "sum_overlapping": 23.194471761000003
+          },
+          "wall_seconds": {
+            "count": 3,
+            "minimum": 7.6904186678584665,
+            "median": 8.267576339887455,
+            "maximum": 8.746697813039646,
+            "sum_overlapping": 24.704692820785567
+          }
+        },
+        "saved.notifier": {
+          "thread_cpu_seconds": {
+            "count": 3,
+            "minimum": 0.728429101,
+            "median": 0.801377284,
+            "maximum": 0.804528768,
+            "sum_overlapping": 2.334335153
+          },
+          "wall_seconds": {
+            "count": 3,
+            "minimum": 0.8142903591506183,
+            "median": 1.1784584131091833,
+            "maximum": 1.3714230828918517,
+            "sum_overlapping": 3.3641718551516533
+          }
+        },
+        "snapshot.capture": {
+          "thread_cpu_seconds": {
+            "count": 6,
+            "minimum": 1.098227307,
+            "median": 1.1509872065,
+            "maximum": 1.195074145,
+            "sum_overlapping": 6.875320921
+          },
+          "wall_seconds": {
+            "count": 6,
+            "minimum": 1.1200312399305403,
+            "median": 1.2310825149761513,
+            "maximum": 1.4462149960454553,
+            "sum_overlapping": 7.457785995909944
+          }
+        },
+        "snapshot.identity": {
+          "thread_cpu_seconds": {
+            "count": 3,
+            "minimum": 0.13528847099999997,
+            "median": 0.13712966999999998,
+            "maximum": 0.1439787629999998,
+            "sum_overlapping": 0.41639690399999973
+          },
+          "wall_seconds": {
+            "count": 3,
+            "minimum": 0.13539388496428728,
+            "median": 0.14427806506864727,
+            "maximum": 0.14893145696260035,
+            "sum_overlapping": 0.4286034069955349
+          }
+        },
+        "snapshot.raw_files": {
+          "thread_cpu_seconds": {
+            "count": 52,
+            "minimum": 0.0050082169999998705,
+            "median": 0.005335837999999961,
+            "maximum": 0.012662530000000005,
+            "sum_overlapping": 0.31614784600000057
+          },
+          "wall_seconds": {
+            "count": 52,
+            "minimum": 0.005008012056350708,
+            "median": 0.0057412495370954275,
+            "maximum": 0.055045354878529906,
+            "sum_overlapping": 0.48916692729108036
+          }
+        },
+        "source.expand": {
+          "thread_cpu_seconds": {
+            "count": 52,
+            "minimum": 0.04591269900000006,
+            "median": 0.048769651,
+            "maximum": 0.080805114,
+            "sum_overlapping": 2.6762113889999997
+          },
+          "wall_seconds": {
+            "count": 52,
+            "minimum": 0.04594475287012756,
+            "median": 0.05161880096420646,
+            "maximum": 1.0938868639059365,
+            "sum_overlapping": 4.558625185629353
+          }
+        }
+      }
+    }
+  },
+  "same_source_aggregate_both_kinds": true
+}
