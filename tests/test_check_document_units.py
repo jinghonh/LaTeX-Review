@@ -5,6 +5,13 @@ from types import SimpleNamespace
 from latex_review.checks.document import CheckDocument
 
 
+def test_text_cache_ignores_binary_dependencies():
+    snapshot = SimpleNamespace(files={'main.tex': b'Plain text', 'figure.pdf': b'%PDF' + bytes([0xC4])})
+    expanded = SimpleNamespace(source_map=SimpleNamespace(files={'main.tex': 'Plain text'}))
+    document = CheckDocument(snapshot, SimpleNamespace(expanded=expanded))
+    assert document._texts == {'main.tex': 'Plain text'}
+
+
 def test_unit_sweep_matches_all_node_reference_for_nested_crossing_and_ties():
     for seed in range(12):
         random = Random(seed)

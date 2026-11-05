@@ -14,7 +14,10 @@ class CheckDocument:
 
     @cached_property
     def _texts(self):
-        return {name: raw.decode('utf-8') for name, raw in self.snapshot.files.items()}
+        # The snapshot also retains binary dependencies such as included figures.
+        # Only files that contributed text to the expanded source need decoding.
+        names = self.parsed.expanded.source_map.files
+        return {name: self.snapshot.files[name].decode('utf-8') for name in names}
 
     @cached_property
     def _hashes(self):
