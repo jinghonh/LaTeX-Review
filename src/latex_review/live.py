@@ -78,7 +78,7 @@ def build(source: ProjectSource, output: Path, revision: int = 1) -> list[str]:
     preview = render_preview(None, project, figure_assets=assets,
                              sentence_highlights={(unit['side'], unit['node_id']): frozenset() for unit in units})
     from .annotations import MANIFEST, build_content, content_meta
-    annotation_content = build_content(project, preview.html)
+    annotation_content = build_content(project, preview.html, _fragment_plan=preview._fragment_plan)
     _write(output / MANIFEST, json.dumps(annotation_content, ensure_ascii=False))
     all_diagnostics = [*compile_diagnostics, *preview.diagnostics, *diagnostics]
     messages = [item.message for item in all_diagnostics]
@@ -266,6 +266,8 @@ def run_worker(recipe, stop):
     cache = Path(recipe['cache'])
     config = _config(Path(recipe['config']), recipe['config_explicit'])
     source = ProjectSource('new', root, recipe['entry'], ComparisonSource('directory', str(root)), configuration=config)
+    class _StartupCancelled(Exception):
+        pass
     with ExitStack() as stack:
         notifier = _SavedCheckNotifier(recipe, stop)
         stack.callback(notifier.close)
@@ -277,14 +279,28 @@ def run_worker(recipe, stop):
         revision = 1
         from .local_reports import copy_report
         from .report_directory import report_directory
-        with rebuild_lock(output), report_directory(output) as candidate:
-            if recipe.get('candidate'):
-                copy_report(Path(recipe['candidate']), candidate.directory, allow_empty=True)
-                messages = []
-            else:
-                messages = build(source, candidate.directory)
+        if stop.is_set():
+            return 0
+        try:
+            with rebuild_lock(output), report_directory(output) as candidate:
+                if recipe.get('candidate'):
+                    copy_report(Path(recipe['candidate']), candidate.directory, allow_empty=True)
+                    messages = []
+                else:
+                    messages = build(source, candidate.directory)
+                if stop.is_set():
+                    # Returning normally inside report_directory would promote
+                    # a cancelled initial build. Abort its transaction instead.
+                    raise _StartupCancelled
+        except _StartupCancelled:
+            return 0
         config = _config(Path(recipe['config']), recipe['config_explicit'])
         translation = TranslationConfig.from_mapping(config['translation']) if 'translation' in config else None
+        if stop.is_set():
+            return 0
+        if recipe.get('_initial_build_in_worker') is True and not recipe.get('candidate'):
+            write_json(recipe['ready'], {'nonce': recipe['nonce'], 'pid': os.getpid(),
+                                         'initial_build_complete': True})
         server = create_server(output, translation_config=translation, cache_directory=cache,
                                annotation_project_root=root)
         stack.callback(server.server_close)
@@ -292,8 +308,11 @@ def run_worker(recipe, stop):
         thread = Thread(target=server.serve_forever, kwargs={'poll_interval': .1}, daemon=True)
         thread.start()
         _write(output / 'live-status.json', json.dumps({'revision': revision, 'message': '持续预览已启动。'}, ensure_ascii=False))
-        write_json(recipe['ready'], {'nonce': recipe['nonce'], 'pid': os.getpid(),
-                                    'port': server.server_port, 'directory': str(output)})
+        ready = {'nonce': recipe['nonce'], 'pid': os.getpid(),
+                 'port': server.server_port, 'directory': str(output)}
+        if recipe.get('_initial_build_in_worker') is True and not recipe.get('candidate'):
+            ready['initial_build_complete'] = True
+        write_json(recipe['ready'], ready)
         from .project_profile import settings
         notifier.schedule(settings(source), is_current=lambda: events.generation == initial)
         previous = initial

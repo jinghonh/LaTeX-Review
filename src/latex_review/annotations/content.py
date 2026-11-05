@@ -62,10 +62,11 @@ def _semantic_units(units):
              for k, v in unit.items() if k not in ('selector', 'change_ids')} for unit in units]
 
 
-def _extract_html_units(nodes, preview_html):
+def _extract_html_units(nodes, preview_html, *, _parsed=None):
     """Extract only DOM-dependent facts; never retain a parsed project or source."""
-    parser = _PreviewParser()
-    parser.feed(preview_html)
+    parser = _parsed if _parsed is not None else _PreviewParser()
+    if _parsed is None:
+        parser.feed(preview_html)
     blocks, formulas, counters = [], [], {}
     block_tags = {'p', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'figcaption', 'td', 'th', 'blockquote', 'li'}
 
@@ -211,6 +212,15 @@ def _node_types(nodes, ids):
     return tuple(sorted((id, nodes[id].review.type) for id in ids if id in nodes))
 
 
+def _freeze_html_units(extracted):
+    return tuple(_HTMLUnit(
+        unit['id'], unit['kind'], unit['node_id'], unit['text'], unit['selector'],
+        tuple((atom['offset'], atom['formula_node_id'], atom['raw_latex'], atom['selector'])
+              for atom in unit['atoms']),
+        unit.get('raw_latex') if unit['kind'] == 'formula' else None,
+        tuple(unit.get('subunit', {}).items())) for unit in extracted)
+
+
 def _html_units(nodes, preview_html):
     cacheable = len(preview_html) <= _HTML_CACHE_MAX_CHARS
     if cacheable:
@@ -220,12 +230,7 @@ def _html_units(nodes, preview_html):
                 _HTML_CACHE.move_to_end(preview_html)
                 return cached.units
     extracted, node_ids = _extract_html_units(nodes, preview_html)
-    units = tuple(_HTMLUnit(
-        unit['id'], unit['kind'], unit['node_id'], unit['text'], unit['selector'],
-        tuple((atom['offset'], atom['formula_node_id'], atom['raw_latex'], atom['selector'])
-              for atom in unit['atoms']),
-        unit.get('raw_latex') if unit['kind'] == 'formula' else None,
-        tuple(unit.get('subunit', {}).items())) for unit in extracted)
+    units = _freeze_html_units(extracted)
     if cacheable and len(units) <= _HTML_CACHE_MAX_UNITS:
         cached = _HTMLExtraction(node_ids, _node_types(nodes, node_ids), units)
         with _HTML_CACHE_LOCK:
@@ -236,7 +241,8 @@ def _html_units(nodes, preview_html):
     return units
 
 
-def build_content(project, preview_html: str, *, project_root: Path | None = None, changes=()):
+def build_content(project, preview_html: str, *, project_root: Path | None = None, changes=(),
+                  _fragment_plan=None):
     """Bind immutable DOM extraction facts to this fresh captured project.
 
     Exact HTML and rendered owner membership/types may reuse pure extraction.
@@ -248,8 +254,14 @@ def build_content(project, preview_html: str, *, project_root: Path | None = Non
     entry = project.expanded.source.entry
     project_id = digest({'root': str(root), 'entry': entry})
     nodes = {n.review.id: n for n in project.nodes}
+    templates = None
+    if _fragment_plan is not None:
+        from .html_fragments import fragment_units
+        templates = fragment_units(project, preview_html, _fragment_plan)
+    if templates is None:
+        templates = _html_units(nodes, preview_html)
     units = []
-    for order, template in enumerate(_html_units(nodes, preview_html)):
+    for order, template in enumerate(templates):
         owner = nodes[template.node_id]
         unit = {'id': template.id, 'kind': template.kind, 'node_id': template.node_id,
                 'parent_node_id': owner.review.parent_id, 'text': template.text,

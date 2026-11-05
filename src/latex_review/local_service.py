@@ -185,6 +185,8 @@ class Slot:
         return OwnedProcess(proc, writer, recipe)
 
     def _wait_ready(self, owned, *, build=False):
+        initial_build = (not build and owned.recipe.get('_initial_build_in_worker') is True
+                         and owned.recipe.get('kind') == 'live' and not owned.recipe.get('candidate'))
         deadline = time.monotonic() + 600
         while time.monotonic() < deadline:
             if self.cancel.is_set() or self.closing or self.manager.closed.is_set():
@@ -197,8 +199,17 @@ class Slot:
                     if owned.process.wait(timeout=5) != 0:
                         raise LocalError('候选预览生成失败', 503)
                     return ready
+                if (initial_build and ready.get('initial_build_complete') is True
+                        and ready.get('pid') == owned.process.pid):
+                    # Preserve the old preparer(600s) + server(600s) allowance,
+                    # without an extra build or returning a half-ready worker.
+                    initial_build = False
+                    deadline = time.monotonic() + 600
                 if owned.process.poll() is not None:
                     raise LocalError('工作进程在就绪前退出', 503)
+                if 'port' not in ready:
+                    self.cancel.wait(.05)
+                    continue
                 try:
                     with urlopen(f"http://127.0.0.1:{ready['port']}/api/local-worker/health", timeout=1) as response:
                         health = json.load(response)
@@ -232,7 +243,12 @@ class Slot:
             operation.update(state='ready', url=self.url, pid=self.worker.process.pid,
                              port=self.worker.recipe['bound_port'], generation=self.worker.recipe['nonce'])
             return
-        if self.kind == 'live':
+        # A cold live slot already has a resident-worker startup path that
+        # builds atomically before advertising readiness. Keep that production
+        # build in its final owner, so the first save does not pay cold caches
+        # from a discarded preparer. Replacements still prepare separately to
+        # preserve the currently served last-good report on build failure.
+        if self.kind == 'live' and self.worker is not None:
             candidate = Path(tempfile.mkdtemp(prefix='live-', dir=self.manager.state / 'jobs'))
             operation['candidate'] = str(candidate)
             self.builder = self._spawn({**request, 'kind': 'build-live', 'candidate': str(candidate)})
@@ -254,19 +270,27 @@ class Slot:
                 self.state = 'blocked'
                 raise LocalError('槽位锁尚未释放', 409)
             worker_request = {**request}
+            worker_request.pop('_initial_build_in_worker', None)
             if self.kind == 'diff':
                 target = self.manager.state / 'reports' / self.paper_id / uuid.uuid4().hex
                 target.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
                 candidate.replace(target)
                 candidate = None
                 worker_request['directory'] = str(target)
-            else:
+            elif candidate is not None:
                 worker_request['candidate'] = str(candidate)
+            else:
+                # Candidate paths are owner-generated internal state, never a
+                # caller-provided shortcut around the resident initial build.
+                worker_request.pop('candidate', None)
+                worker_request.pop('source_fingerprint', None)
+                worker_request['_initial_build_in_worker'] = True
             self.worker = self._spawn(worker_request)
             self._wait_ready(self.worker)
             # Save the served private directory for diff recovery; live only saves
             # its public output recipe, not the disposable staging directory.
-            self.saved = {k: v for k, v in worker_request.items() if k not in ('candidate', 'source_fingerprint')}
+            self.saved = {k: v for k, v in worker_request.items()
+                          if k not in ('candidate', 'source_fingerprint', '_initial_build_in_worker')}
             self.fingerprint = operation['fingerprint']
             self.state, self.error = 'ready', ''
             self.manager.save()
