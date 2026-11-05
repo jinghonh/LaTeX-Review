@@ -241,6 +241,14 @@ class CheckCoordinator:
         return context['service_state'].overlay(deepcopy(run['report']))
 
     def _fresh(self, context, report):
+        from .model import ENGINE_VERSION, SCHEMA_VERSION
+        from .snapshot import PARSER_VERSION
+        # Persisted runs remain readable, but incompatible evaluation semantics
+        # cannot authorize current evidence or mutations after an upgrade.
+        if (report.get('schema_version') != SCHEMA_VERSION
+                or report['input'].get('engine_version') != ENGINE_VERSION
+                or report['input'].get('parser_version') != PARSER_VERSION):
+            return False
         configuration = self._configuration(context)
         if report['input'].get('configuration_hash') != identity_hash(configuration):
             return False

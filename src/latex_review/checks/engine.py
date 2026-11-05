@@ -22,14 +22,14 @@ def evaluate_current(document, knowledge=None, rule_set=None, *, configuration=N
     if scope not in {"all", "changed"}:
         raise ValueError("unsupported scope")
     knowledge = knowledge or {}
-    scan = current_findings(parsed)
+    scan = current_findings(parsed, _raw_labels_only=True)
     blind_spots = [{"code": "uncaptured_dependency", "message": "Capture-time dependency bytes unavailable", "file": name}
                    for name in snapshot.configuration.get("_snapshot_unverified_dependencies", [])]
     if scan["execution_uncertain"]:
         blind_spots.append({"code": "unexpanded_conditional", "message": "TeX conditionals are not executed by static rules", "file": None})
     for macro in scan["unexpanded_rule_macros"]:
         fragments = document.evidence(macro["start"], macro["end"])
-        blind_spots.append({"code": "unexpanded_rule_macro", "message": "Macro definitions may create rule facts not statically executed",
+        blind_spots.append({"code": "unexpanded_rule_macro", "message": "Unexpanded TeX definitions or computed commands may create rule facts",
                            "file": fragments[0]["file"] if fragments else None})
     for issue in parsed.expanded.diagnostics:
         if issue.certainty == "exact":

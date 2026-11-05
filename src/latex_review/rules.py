@@ -131,7 +131,7 @@ def _bibliography_reliable(project: ParsedProject) -> bool:
     return True
 
 
-def _findings(project: ParsedProject, *, sites=None) -> dict[tuple[str, str], list[_Site]]:
+def _findings(project: ParsedProject, *, sites=None, _raw_labels_only=False) -> dict[tuple[str, str], list[_Site]]:
     labels, citations, references = _sites(project) if sites is None else sites
     findings: dict[tuple[str, str], list[_Site]] = {}
     bibliography_reliable = _bibliography_reliable(project)
@@ -139,7 +139,7 @@ def _findings(project: ParsedProject, *, sites=None) -> dict[tuple[str, str], li
         if bibliography_reliable and key not in project.bibliography and f"bib:{key}" not in project.labels:
             findings[("bibliography_key_unresolved", key)] = sites
     for key, sites in references.items():
-        if key not in labels and key not in project.numbering.labels:
+        if key not in labels and (_raw_labels_only or key not in project.numbering.labels):
             findings[("unresolved_reference", key)] = sites
     for key, sites in labels.items():
         if len(sites) > 1:
@@ -151,13 +151,15 @@ def _findings(project: ParsedProject, *, sites=None) -> dict[tuple[str, str], li
     return findings
 
 
-def current_findings(project: ParsedProject) -> dict:
+def current_findings(project: ParsedProject, *, _raw_labels_only=False) -> dict:
     """Public single-side adapter over the same scanner used by check_rules.
 
     Sites carry expanded Unicode offsets, allowing callers to retain every
     SourceMap fragment and include instance instead of guessing from line numbers.
     Completeness/absence gates are the responsibility of the current-check engine;
     the historic two-side contract intentionally retains its existing behavior.
+    Canonical callers opt into raw labels only: compiled/private or uncaptured aux
+    labels cannot establish facts under a raw-source-only input identity.
     """
     mask = _rule_mask(project.expanded.text)
     # Current checks do not interpret macro definitions as executed source. The
@@ -183,9 +185,16 @@ def current_findings(project: ParsedProject) -> dict:
         argument = _argument(mask, command.end()) if command else None
         return {"start": site.offset, "end": argument[0] if argument else site.offset,
                 "node_id": site.owner.review.id if site.owner else None}
+    if _raw_labels_only:
+        # Computed command names can create labels/citations absent from the raw
+        # scanner. Reuse the existing absence-proof gate, after all inert masking.
+        unexpanded_rule_macros.extend(
+            {"start": command.start(), "end": command.end()}
+            for command in _COMMAND.finditer(mask) if command.group(1) in {'csname', 'endcsname'})
     return {"findings": [{"rule_id": code, "key": key,
                            "sites": [site_data(site) for site in sites]}
-                          for (code, key), sites in sorted(_findings(project, sites=(labels, citations, references)).items())],
+                          for (code, key), sites in sorted(_findings(
+                              project, sites=(labels, citations, references), _raw_labels_only=_raw_labels_only).items())],
             "bibliography_reliable": _bibliography_reliable(project),
             "unexpanded_rule_macros": unexpanded_rule_macros,
             "execution_uncertain": bool(re.search(r"\\(?:if(?:false|true|defined|x|num|dim|odd|case|cat|eof|hmode|vmode|mmode|inner|void|hbox|vbox)|else|fi)(?![A-Za-z@])", mask)),

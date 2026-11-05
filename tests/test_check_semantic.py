@@ -9,6 +9,7 @@ import pytest
 from jsonschema import Draft202012Validator
 
 from latex_review.checks.document import build_check_document
+from latex_review.checks.model import ENGINE_VERSION
 from latex_review.checks.snapshot import capture_snapshot
 from latex_review.checks.semantic import (
     MAX_RESPONSE_BYTES, SemanticError, build_request, export_request,
@@ -31,7 +32,7 @@ def host(tmp_path):
     document = build_check_document(snapshot)
     knowledge = {"revision": 1, "concepts": [{"id": "method", "formal_name": "method", "status": "confirmed"}]}
     input_data = {**snapshot.identity, "knowledge_hash": identity_hash(knowledge),
-                  "knowledge_revision": 1, "engine_version": "1.0", "rules": {"r": "1.0"},
+                  "knowledge_revision": 1, "engine_version": ENGINE_VERSION, "rules": {"r": "1.0"},
                   "configuration_hash": identity_hash({}), "scope": "all"}
     request = build_request(document, input_data, "concept_definition", knowledge=knowledge, request_id="known-request")
     return document, input_data, request

@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from copy import deepcopy
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, replace
 from datetime import datetime, timezone
 from hashlib import sha256
 from importlib.metadata import version
@@ -51,7 +51,10 @@ def snapshot_from_project(project, *, raw_files=None, configuration=None, includ
 
     Callers lacking capture-time resource bytes get explicit incomplete coverage,
     rather than pretending the parser's mutable-disk bibliography is verified.
+    Compilation metadata belongs to legacy rendering, not canonical source facts.
+    A fresh clone also drops any cached numbering from the renderer's project.
     """
+    project = replace(project, compiled_numbering={})
     expanded = project.expanded
     ident = paper_identity(expanded.source.worktree_origin or expanded.source.root, expanded.source.entry)
     raw = {name: text.encode("utf-8") for name, text in expanded.source_map.files.items()}
@@ -123,7 +126,6 @@ def _capture(entry, *, root, configuration, retries, source, include_title, pars
         config = deepcopy(dict(configuration or {}))
         source = ProjectSource("new", root, ident["entry"], ComparisonSource("directory", str(root)), configuration=config)
     else:
-        from dataclasses import replace
         if Path(entry).as_posix() != source.entry:
             raise ValueError("entry must match supplied ProjectSource")
         root = source.root

@@ -7,7 +7,7 @@ from jsonschema import Draft202012Validator
 from ..identity import identity_hash
 
 SCHEMA_VERSION = "1.0"
-ENGINE_VERSION = "1.0"
+ENGINE_VERSION = "1.0.1"
 RULE_VERSION = "1.0"
 
 

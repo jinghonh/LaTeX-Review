@@ -83,10 +83,8 @@ def build(source: ProjectSource, output: Path, revision: int = 1) -> list[str]:
     all_diagnostics = [*compile_diagnostics, *preview.diagnostics, *diagnostics]
     messages = [item.message for item in all_diagnostics]
     from .reading import build_reading
-    # Compilation may add numbering metadata, while all evidence remains bound
-    # to the exact capture used to render the page.
-    from dataclasses import replace
-    snapshot = replace(snapshot, parsed=project)
+    # Keep canonical checks on the original raw capture. Compiled numbering is
+    # used only by the legacy preview, translation and display diagnostics above.
     reading = build_reading(project, units, revision=revision, check_snapshot=snapshot,
                             preview_diagnostics=all_diagnostics)
     _write(output / 'checks.json', json.dumps(reading.checks, ensure_ascii=False))
