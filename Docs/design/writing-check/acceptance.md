@@ -1,5 +1,20 @@
 # Writing-check delivery progress and acceptance ledger
 
+## 当前合并决定（2026-11-05）
+
+请求人在核对剩余事项后明确授权合并 PR #56。本轮按阶段成果合并：实现与界面验收已完成，真实质量验收继续保留在 Issue #55。此次合并不表示原始 M0–M5、AC-01–AC-24 全部验收通过。
+
+- **界面与功能已验收**：固定 UI 应用 `bdc210440520c9880a6b31869199756969d26cfa` 的请求人本机 macOS 功能回归为 **1579 passed / 2 report-only skipped / 0 failed**，五项 CLI smoke 通过；[完整反馈](https://github.com/jinghonh/LaTeX-Review/issues/55#issuecomment-6655215384)。同一 Mac 的受控旧/新 FIFO 阅读位置误差为 **40.008938547486025px → 0.008938547486025072px**，保留原等待和 <3px 阈值。请求人已接受结果，不再为该残余误差追加修改或测试。
+- **最新工程回归通过**：`93c2503fa74cc26ccb289c6ac1e3d44677360da2` 的两个托管 macOS 功能 CI 均为 **1557 passed / 24 skipped**，没有性能基准；Linux 同 UI 应用完整回归为 **1562 passed / 19 skipped**。便携 probe 的默认 macOS 临时目录兼容修复也已由[请求人本机复核](https://github.com/jinghonh/LaTeX-Review/issues/55#issuecomment-6655363784)。
+- **保留的未完成项**：真实论文完整写作流程、真实 provider/model 调用与作者质量评价尚未验收；AC-14 仍仅部分支撑。模型调用仍须明确论文发送许可、模型与预算、凭据及人工评估者，按[语义评估协议](semantic-evaluation.md)补充。其余 23 项为自动化支撑，不等于真实作者质量认可。
+- **性能已知限制**：请求人决定不再优化，当前 ≤2s 目标未达标。最后本机 comment/prose N10 p95 为 **2.013339917000849 / 2.0056546250125393s**。停止优化不改写为性能通过；CI 保存性能任务跳过不计作通过。
+
+历史托管 407px/9743px 事件的精确调度仍未复原；当前缺陷类别已有受控旧坏新好证据，且最新功能回归与请求人界面验收通过。历史失败保留为调查记录，不据此宣称其为随机失败。
+
+## 历史阶段记录（以下状态绑定各自基线）
+
+以下表格保留当时观察和未验收范围。当前合并决定及已完成回归以上节为准；逐项技术边界参见[技术台账](verification.md)。
+
 This ledger begins with **M0 evidence**, not a declaration that M0–M5 is complete. Update individual rows only after inspecting implementation and collecting the stated evidence. “Not run” does not mean passed; baseline behavior is not new-feature acceptance. The [archived plan](<plan.md>) and [archived specification](<spec.md>) retain full requirements.
 
 Evidence layers stay distinct: the rows below record inspected baseline/browser observations, while the separate [AC-01–24 automated verification counterpart](<verification.md>) records inspected assertions, independently reported test selections and remaining full-regression status. Its unit/integration results do not substitute for browser observations or unavailable real-resource acceptance; earlier M0 navigation/history/scroll failures require their own final fixed-source reruns. The inspected [four-class semantic evaluation protocol](<semantic-evaluation.md>) supplies implementer-prepared synthetic cases and prerequisites only: **not author-approved input, no actual provider calls, and no completed human quality assessment**.
