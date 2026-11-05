@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from contextlib import ExitStack, contextmanager
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 import os
 from fnmatch import fnmatch
@@ -51,6 +51,7 @@ class Dependency:
     argument: str | None = None
     source_start: int | None = None
     source_end: int | None = None
+    external_prefix: str | None = None
 
 
 @dataclass(frozen=True)
@@ -79,12 +80,15 @@ class ExpandedProject:
     source_map: SourceMap
     dependencies: tuple[Dependency, ...]
     diagnostics: tuple[SourceIssue, ...]
+    external_labels: dict[str, str] = field(default_factory=dict)
+    external_prefixes: tuple[str, ...] = ()
+    uncertain_external_prefixes: tuple[str, ...] = ()
 
     def origin_ranges(self, start: int, end: int):
         return self.source_map.map_range(start, end)
 
 
-_COMMAND = re.compile(r"\\(input|include|bibliography|addbibresource|includegraphics|bibliographystyle|graphicspath)(?![A-Za-z@])")
+_COMMAND = re.compile(r"\\(input|include|bibliography|addbibresource|includegraphics|bibliographystyle|graphicspath|externaldocument)(?![A-Za-z@])")
 _MACRO_DEFINITION = re.compile(r"\\(newcommand|renewcommand|providecommand|DeclareRobustCommand|newenvironment|renewenvironment|provideenvironment|def|gdef|edef|xdef)(?![A-Za-z@])")
 _GRAPHICS = (".pdf", ".png", ".jpg", ".jpeg", ".eps", ".svg", ".webp")
 _SOURCE_EVENT = re.compile(r"[\\%]")
@@ -313,6 +317,86 @@ def _group_end(text: str, position: int, opening: str, closing: str) -> int | No
     return None
 
 
+def _externaldocument_options(text: str, cursor: int) -> tuple[str, int] | None:
+    """Read xr's optional prefix/options and return the prefix plus argument start."""
+    cursor = _skip_space_comments(text, cursor)
+    prefix = ""
+    if cursor < len(text) and text[cursor] == "[":
+        close = _group_end(text, cursor, "[", "]")
+        if close is None:
+            return None
+        prefix = text[cursor + 1:close - 1].strip()
+        cursor = _skip_space_comments(text, close)
+        if cursor < len(text) and text[cursor] == "[":
+            close = _group_end(text, cursor, "[", "]")
+            if close is None:
+                return None
+            cursor = _skip_space_comments(text, close)
+    return prefix, cursor
+
+
+def _externaldocument_prefix(text: str, start: int) -> str | None:
+    command = re.match(r"\\externaldocument(?![A-Za-z@])", text[start:])
+    if command is None:
+        return None
+    parsed = _externaldocument_options(text, start + command.end())
+    return None if parsed is None else parsed[0]
+
+
+def _aux_mask(text: str) -> str:
+    chars = list(text)
+    cursor = 0
+    while cursor < len(text):
+        marker = text.find("%", cursor)
+        if marker < 0:
+            break
+        backslashes = 0
+        index = marker - 1
+        while index >= 0 and text[index] == "\\":
+            backslashes += 1
+            index -= 1
+        if backslashes % 2:
+            cursor = marker + 1
+            continue
+        end = marker
+        while end < len(text) and text[end] not in "\r\n":
+            chars[end] = " "
+            end += 1
+        cursor = end
+    return "".join(chars)
+
+
+def _aux_labels(text: str) -> tuple[dict[str, str], tuple[str, ...]]:
+    """Extract label keys from trusted, non-executed aux syntax."""
+    masked = _aux_mask(text)
+    labels: dict[str, str] = {}
+    nested: list[str] = []
+    errors: list[str] = []
+    for match in re.finditer(r"\\(?:newlabel|@input)(?![A-Za-z@])", masked):
+        cursor = _skip_space_comments(masked, match.end())
+        key = _group_end(masked, cursor, "{", "}")
+        if key is None:
+            errors.append("malformed_external_aux")
+            continue
+        value = masked[cursor + 1:key - 1]
+        if match.group(0).endswith("@input"):
+            if not value.endswith(".aux") or "/" in value and Path(value).is_absolute():
+                errors.append("malformed_external_aux")
+            else:
+                nested.append(value)
+            continue
+        first = _group_end(masked, key, "{", "}")
+        if first is None:
+            errors.append("malformed_external_aux")
+            continue
+        name = value.strip()
+        if not name or "\\" in name or "{" in name or "}" in name:
+            errors.append("malformed_external_aux")
+            continue
+        labels[name] = masked[key + 1:first - 1]
+    return labels, tuple((*errors, *nested))
+
+
 def _macro_definition_end(text: str, match: re.Match[str]) -> tuple[int, str] | None:
     cursor = match.end()
     if text[cursor:cursor + 1] == "*":
@@ -415,7 +499,14 @@ def _commands(text: str, extra_names=(), file_exists=None):
         if name == "includegraphics" and cursor < len(text) and text[cursor] == "*":
             cursor += 1
         cursor = _skip_space_comments(text, cursor)
+        if name == "externaldocument":
+            parsed = _externaldocument_options(text, cursor)
+            if parsed is None:
+                index = match.end()
+                continue
+            _, cursor = parsed
         if name in ("includegraphics", "addbibresource") and cursor < len(text) and text[cursor] == "[":
+
             close = text.find("]", cursor + 1)
             if close < 0:
                 index = match.end()
@@ -455,6 +546,9 @@ def expand_project(source: ProjectSource) -> ExpandedProject:
     files: dict[str, str] = {}
     dependencies: list[Dependency] = []
     issues: list[SourceIssue] = []
+    external_labels: dict[str, str] = {}
+    external_prefixes: list[str] = []
+    uncertain_external_prefixes: list[str] = []
     graphics_paths: list[str] = []
     length = 0
     instance_number = 0
@@ -517,6 +611,83 @@ def expand_project(source: ProjectSource) -> ExpandedProject:
                         return None, "ignored_dependency"
         return None, "missing_dependency" if in_root_candidate else "dependency_outside_root"
 
+    def load_external(file: str, argument: str, prefix: str, start: int, end: int,
+                      instance: str, chain: tuple[str, ...]) -> None:
+        external_prefixes.append(prefix)
+        unreliable = False
+        if "\\" in prefix or "{" in prefix or "}" in prefix:
+            issue("uncertain_external_reference", "外部引用前缀无法静态解析", file, start, end, chain)
+            unreliable = True
+        resolved, problem = candidate_file(file, argument, (".aux",))
+        if problem:
+            issue("missing_external_aux" if problem == "missing_dependency" else problem,
+                  f"无法读取 externaldocument 辅助文件 {argument}；包含链：{' → '.join(chain)}",
+                  file, start, end, chain)
+            uncertain_external_prefixes.append(prefix)
+            return
+        aux_path = source.root / resolved
+        dependencies.append(Dependency("external_aux", resolved, file, instance, argument, start, end, prefix))
+        nested_files: set[str] = set()
+        labels: dict[str, str] = {}
+        visited: set[Path] = set()
+        aux_error = False
+
+        def read_aux(relative: str, parent: Path) -> None:
+            nonlocal aux_error
+            path = (parent / relative).resolve()
+            root = source.root.resolve()
+            if not _within(root, path) or path.suffix != ".aux" or not path.is_file():
+                aux_error = True
+                return
+            if path in visited or len(visited) >= 128:
+                return
+            visited.add(path)
+            try:
+                if path.stat().st_size > 4 * 1024 * 1024:
+                    raise OSError("辅助文件过大")
+                text = path.read_bytes().decode("utf-8")
+            except (OSError, UnicodeError):
+                aux_error = True
+                return
+            relative_name = path.relative_to(root).as_posix()
+            files[relative_name] = text
+            nested_files.add(relative_name)
+            found, references = _aux_labels(text)
+            if any(value == "malformed_external_aux" for value in references):
+                aux_error = True
+            labels.update(found)
+            for nested in references:
+                if nested != "malformed_external_aux":
+                    read_aux(nested, path.parent)
+
+        read_aux(resolved, source.root)
+        nested_files.discard(resolved)
+        for nested in sorted(nested_files):
+            dependencies.append(Dependency("external_aux", nested, resolved, instance, nested, start, end, prefix))
+        source_tex, _ = candidate_file(file, argument, (".tex",))
+        if source_tex:
+            source_path = source.root / source_tex
+            try:
+                source_text = source_path.read_bytes().decode("utf-8")
+                files[source_tex] = source_text
+                dependencies.append(Dependency("external_source", source_tex, file, instance, argument, start, end, prefix))
+                if aux_path.stat().st_mtime_ns < source_path.stat().st_mtime_ns:
+                    issue("stale_external_aux", "externaldocument 辅助文件早于对应源码，无法确认标签状态",
+                          file, start, end, chain)
+                    unreliable = True
+            except (OSError, UnicodeError):
+                issue("unreadable_external_source", f"无法读取 externaldocument 对应源码 {argument}",
+                      file, start, end, chain)
+                unreliable = True
+        if aux_error:
+            issue("malformed_external_aux", f"无法可靠解析 externaldocument 辅助文件 {argument}",
+                  file, start, end, chain)
+            unreliable = True
+        if unreliable:
+            uncertain_external_prefixes.append(prefix)
+        else:
+            external_labels.update({f"{prefix}{key}": value for key, value in labels.items()})
+
     def visit(file: str, chain: tuple[str, ...]) -> None:
         nonlocal instance_number
         instance_number += 1
@@ -560,6 +731,16 @@ def expand_project(source: ProjectSource) -> ExpandedProject:
                 continue
             if name == "graphicspath":
                 graphics_paths.extend(re.findall(r"\{([^{}]+)\}", argument))
+                continue
+            if name == "externaldocument":
+                prefix = _externaldocument_prefix(content, start)
+                if prefix is None:
+                    issue("uncertain_external_reference", "externaldocument 参数无法静态解析", file, start, end, chain)
+                else:
+                    load_external(file, argument.strip(), prefix, start, end, instance, chain)
+                emit(file, content, cursor, start, instance)
+                emit(file, content, start, end, instance)
+                cursor = end
                 continue
             if name in ("input", "include"):
                 resolved, problem = candidate_file(file, argument, (".tex",))
@@ -620,4 +801,6 @@ def expand_project(source: ProjectSource) -> ExpandedProject:
 
     visit(source.entry, (source.entry,))
     text = "".join(output)
-    return ExpandedProject(source, text, SourceMap(text, files, tuple(spans)), tuple(dependencies), tuple(issues))
+    return ExpandedProject(source, text, SourceMap(text, files, tuple(spans)), tuple(dependencies), tuple(issues),
+                           external_labels, tuple(dict.fromkeys(external_prefixes)),
+                           tuple(dict.fromkeys(uncertain_external_prefixes)))

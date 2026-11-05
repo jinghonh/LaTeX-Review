@@ -14,7 +14,9 @@ class CheckDocument:
 
     @cached_property
     def _texts(self):
-        return {name: raw.decode('utf-8') for name, raw in self.snapshot.files.items()}
+        # Evidence can only originate from expanded source segments. Resource
+        # dependencies such as PDFs are captured for identity but are binary.
+        return self.parsed.expanded.source_map.files
 
     @cached_property
     def _hashes(self):
