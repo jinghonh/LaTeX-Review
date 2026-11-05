@@ -4,6 +4,7 @@
 #review-workspace .report-controls {top:calc(var(--workspace-nav-height,0px) + 16px);}
 #review-workspace #sections-side,#review-workspace .annotation-overview[open] {top:calc(var(--workspace-nav-height,0px) + 16px);}
 #review-workspace .changes-side {top:var(--workspace-nav-height,0px);}
+.reading-view #review-workspace .preview-side :is(h1,h2,h3,h4,h5,h6) {scroll-margin-top:var(--workspace-heading-inset,calc(var(--workspace-nav-height,0px) + 160px));}
 @media(max-width:1099px) {#review-workspace #sections-side{top:calc(var(--workspace-nav-height,0px) + 12px);}}
 @media(max-width:999px) {#review-workspace .annotation-overview[open]{top:calc(var(--workspace-nav-height,0px) + 12px);}}
 @media(max-width:800px) {#review-workspace .report-controls{top:calc(var(--workspace-nav-height,0px) + 12px);}}

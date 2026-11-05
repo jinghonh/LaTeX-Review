@@ -127,7 +127,18 @@ D_{e_k}\varphi_m(\omega)\approx\\
             assert fraction['y'] > left['y']
             assert equation.locator('[id="mjx-eqn:16"]').count() == 1
             assert equation.locator('.math-tex').get_attribute('data-annotation-math-source') == original
-            assert equation.evaluate('n => n.scrollHeight <= n.clientHeight + 1')
+            assert equation.evaluate('n => n.scrollHeight <= n.clientHeight + 1'), equation.evaluate('''n => ({
+                width: innerWidth, fonts: document.fonts.status, client: n.clientHeight, scroll: n.scrollHeight,
+                assistiveHeight: n.querySelector('mjx-assistive-mml')?.getBoundingClientRect().height
+            })''')
+            assert equation.locator('mjx-container').evaluate('''node => {
+                const r = node.getBoundingClientRect(), host = node.closest(".node-equation").getBoundingClientRect();
+                return r.top >= host.top && r.bottom <= host.bottom;
+            }''')
+            assistive = equation.locator('mjx-assistive-mml')
+            assert assistive.locator('math').count() == 1
+            assert assistive.get_attribute('aria-hidden') != 'true'
+            assert assistive.text_content().strip()
             assert page.evaluate('document.documentElement.scrollWidth <= innerWidth')
     finally:
         page.close()

@@ -216,9 +216,22 @@ def test_live_section_tree_restores_expansion(tmp_path):
         api.expect(page.locator('#sections-side')).to_be_hidden()
         page.set_viewport_size({'width': 390, 'height': 900})
         page.locator('#toggle-sections').click()
+        page.evaluate('() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))')
+        page.wait_for_function('() => !window.reviewReadingPosition?.isResizing()')
         page.get_by_role('button', name='1.1 Second', exact=True).click()
+        page.evaluate('() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))')
         api.expect(page.locator('#sections-side')).to_be_hidden()
         api.expect(page.get_by_role('button', name='1.1 Second', exact=True, include_hidden=True)).to_have_attribute('aria-current', 'location')
+        assert page.evaluate('scrollY >= document.documentElement.scrollHeight - innerHeight - 1')
+        heading = page.locator('.preview-side[data-side="new"] h3').filter(has_text='Second')
+        assert heading.evaluate('node => node.getBoundingClientRect().top >= document.querySelector(".report-controls").getBoundingClientRect().bottom && node.getBoundingClientRect().bottom <= innerHeight')
+        # A subsequent native jump must replace the bottom-clamped selection.
+        page.locator('#toggle-sections').click()
+        page.get_by_role('button', name='1 First', exact=True).click()
+        page.evaluate('() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))')
+        api.expect(page.get_by_role('button', name='1 First', exact=True, include_hidden=True)).to_have_attribute('aria-current', 'location')
+        heading = page.locator('.preview-side[data-side="new"] .node-section > h2').first
+        assert heading.evaluate('node => node.getBoundingClientRect().top >= document.querySelector(".report-controls").getBoundingClientRect().bottom && node.getBoundingClientRect().bottom <= innerHeight')
         assert not errors
         browser.close()
 
