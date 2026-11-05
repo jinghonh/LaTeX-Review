@@ -1,0 +1,1326 @@
+{
+  "schema_version": "1.0",
+  "complete": true,
+  "platform": "macOS-26.6.2-arm64-arm-64bit",
+  "python": "3.11.9",
+  "source_boundary_begin": {
+    "utc": "2026-11-05T06:16:33.696705+00:00",
+    "files": {
+      "src/latex_review/__init__.py": "33e5dabf1a9f3337d90ed5d2cd2f44dde0ad43692755c7870b75eafbe0fd6af7",
+      "src/latex_review/agent_tools.py": "0c0bbc569991cb58c1c262ba72e753494dfed826a43fa67ef1f9e540f5459ca7",
+      "src/latex_review/annotation_audit.py": "5d1f1bc22e85da7cca2f46030a937c40b405bb76c04a9d3e8a46cd746210f97f",
+      "src/latex_review/annotation_batch_cli.py": "68766999dc9c85b2e6150d4bb23d3d698480904cf53eb400dab530e1e932687a",
+      "src/latex_review/annotation_cli.py": "ba7e8ae44c15fe9c6dd6cb65d36c426835908f82de9b53bf41a81717096e815a",
+      "src/latex_review/annotation_codec.js": "7ad38b0880cffa45fc2bdb1e117823936cbd1db6959644625231f035bedbd80c",
+      "src/latex_review/annotation_delivery.js": "cfc04438e247f614d0945f07d50720480c8041fe48774c2a7bdb35c6f4adea33",
+      "src/latex_review/annotation_jobs.py": "09b9286e353a31da6ef17e19e166a560c73bdf646a6b948a0fa32aa9a13ec5cc",
+      "src/latex_review/annotation_output.py": "bc290834b935824516abc4b53cf2a50f5a6990bea8c55b09b7ddac87857350de",
+      "src/latex_review/annotation_review_record.py": "6ee0fa92fb7dde18fbf34a4365f485be22ae358efaf779fad4c5f773d994ce7a",
+      "src/latex_review/annotation_sources.py": "5d8bd91932a085df4c147bd2d679cb337e3641be372d37199afa40a216fe4ffe",
+      "src/latex_review/annotations/__init__.py": "1081f3696da3ab2cb2e4f24c095d051248f96f906edbe4966e1307b86262270c",
+      "src/latex_review/annotations/_batch.py": "b10702af8779b3d089ee1f3b80f12a0b5d03347de5333ab5cb9483437d3511e5",
+      "src/latex_review/annotations/_locations.py": "67a569f23b059632e88fcb9a211b92b985de1374277ce1fb31ebd2566a024181",
+      "src/latex_review/annotations/_preflight.py": "eb02b01e1c1f60f4e73bbc7751eed619ccde00a4a9825fb95515760f7e0a7270",
+      "src/latex_review/annotations/_storage.py": "4a167c97d2670bb6dad552f7aabd9ba3d21f0559a2671b95023f25ed6dab0ce1",
+      "src/latex_review/annotations/_suggestions.py": "64ddcdf47f62c1d5a17bb5f525aacf87d37b20e2bc43fa0049386a46c8992006",
+      "src/latex_review/annotations/_validation.py": "e313e78241a8fd22390c2bf3eafb5c81ae7600ac96e3bde4d7476e150b55ce1e",
+      "src/latex_review/annotations/content.py": "5503e911bfbc8fada71cf329a6067275beeff6bec6542d9bbc19d91998904b94",
+      "src/latex_review/annotations/html_fragments.py": "d7e10900efad118bbec36340211455cb339a5ebe5bfcdabe4301b2812817ba68",
+      "src/latex_review/annotations/store.py": "8f357c7bd4e02db6960c55db6ae9045d95ab805e296bee75ae1fa70d6081650b",
+      "src/latex_review/bibliography.py": "231826a405351b5fdad5375514a05249bd2057f9ec9503490bb49655b3fe109a",
+      "src/latex_review/cache.py": "8b2d1a6cb33c42fc1c92e78abdb20cd2f2502ad5e2ffb529c5a88af72c28e2e6",
+      "src/latex_review/check_configuration.py": "e027612631c828ce76bc63cf4503add626292832152c06754f53cfeb12992e08",
+      "src/latex_review/checks/__init__.py": "3b6e1cfb8859660434b9c035bc9c3af127c228c1fd9bf29fa5d97e91e193e249",
+      "src/latex_review/checks/annotation_link.py": "e77a9ebbcb7abe3a0a08e2290f6636510121a8ea7f8e2a9aab8df6098026b921",
+      "src/latex_review/checks/cli.py": "0fe086200fb9ce7da2911a5495a588861c1f74fc44e64cc71401999e65e62052",
+      "src/latex_review/checks/diagnostics.py": "0aa52036e6b67c413edf4b79a369679be4827df7c5145930c81f4b05296fc249",
+      "src/latex_review/checks/document.py": "7688a2c8c0fad70f9f640a9188c9208f5f75d737270dce01e327add2e800b59c",
+      "src/latex_review/checks/engine.py": "eafabbb6a2413775f8a456d98d59f756245c2fa813be9bb32d6215c35b7dd4ec",
+      "src/latex_review/checks/finding_review.py": "75f42bca601fcea8de43614576fc4bb2a5cd889f00c07c8d17dc8a9345975ccb",
+      "src/latex_review/checks/http.py": "9c0f74af6df5ad14554ac5ceb05a273b86516b4f01821ed0238db53e609ca1ad",
+      "src/latex_review/checks/knowledge_rules.py": "5d9d74b4052f5c0feb9c089488a901a729edb7a75dfa29bbf0d197697839e1b8",
+      "src/latex_review/checks/model.py": "1c1bd83a782c273858e34109d908a81d6dd99c66aaa506fb8ece454b8976b7a7",
+      "src/latex_review/checks/registry.py": "7a455815d58baf35e029d4e8325bd951c01a00b5ab9ac523ca98307608e45403",
+      "src/latex_review/checks/semantic.py": "a91b607973ccca7551a1efb10106986eb26b6678857b8dc2b1feb1ee37c01038",
+      "src/latex_review/checks/semantic_cli.py": "75e730555edc49b27070c5a8fdc03792898f8b81b5080cf33e8e075105bb6d7d",
+      "src/latex_review/checks/semantic_service.py": "9e6e4d6675e659294ea3bbbdf709de58bd1c508b7379b0e16615c0070f9ed9e4",
+      "src/latex_review/checks/service.py": "39a6f0701a8aef9cce6f62ee6ccc445ed0453d1151da63fa112786dbdce5bf03",
+      "src/latex_review/checks/service_state.py": "5d4ee62949ff7c11cd168efd273734e07051adebff2a576b957c2895d789a885",
+      "src/latex_review/checks/snapshot.py": "3f17e12a11924cdb3d8fe8874fb45d8856260f196d33db4e8c9fd91e3b41f1a2",
+      "src/latex_review/checks/store.py": "693088547f37e3a17a9ab2830b35dc667848c8cb5fb46b789356437bbd13aef1",
+      "src/latex_review/ci.py": "0b62229ec684e9d17ae9dde190b38da1f78496676260501799bd90ffa4d59235",
+      "src/latex_review/ci_comment.py": "eda47a37fbd176f09facdc93539fdc2c38bd10c6dbf5aa2d3aedc21119e18800",
+      "src/latex_review/cli.py": "58147d0bdb4a946e9674d203d9bdffbe3eaec52f5ab3c7358786bab31841b1a9",
+      "src/latex_review/comparison.py": "fde346a211d68434ca0d39ce7abd3d82398b2f0634d17c3e3b69e7a35cbfd29c",
+      "src/latex_review/compilation.py": "6f79a893cb68426f55a011bcfaf65ea1886a8a6458587a317f6ab14ddc88a9bb",
+      "src/latex_review/compile_numbering.py": "78883f4b7e14981fa8562ef908ccf2b0e178ef941504cae843cc70e6f07f3ded",
+      "src/latex_review/contract.py": "2b201dbe9347d7fd0b78926bfe21a60b4c1c5593962b9a304b2eebe16323660e",
+      "src/latex_review/delivery.py": "e25e7356f9b3296bf9f4302ccbd52cdb7345f208d749dc1f6a451efabc1e0214",
+      "src/latex_review/file_events.py": "554aba1027c5cc8b5aa3f75b63a1db7fff5437db6c9e69b832d6fd0d3ba1fcf7",
+      "src/latex_review/fragment_render.py": "5346450e25fd36e5f22279c66bc09a7af3de19fc4eeafb8ab3f8b51408e24ff7",
+      "src/latex_review/identity.py": "52f4da6d0358ff7be200e2327ee35ef087c5bad5b94e16ba7eae59e398890f35",
+      "src/latex_review/latex_commands.py": "03430f1eb877dd5a086be3e1605cd330108a59ca0456489dd4d0be8b86911ab3",
+      "src/latex_review/live.py": "45bcc8338db6b250e347ac103c46b5d44d8e915e3cb7a1b1161edb7f9a4ebf03",
+      "src/latex_review/live_reader.js": "e60be6feee93d1f0030ed087520dde6518ffd4b990e6b23b24f5dd7807fdd90f",
+      "src/latex_review/local_client.py": "9ec525c42adfc4022fce586e76c012b23027a27e02216d9937ca4f34bb9dd2cf",
+      "src/latex_review/local_dashboard.html": "d86d3c2b5c9751ff2fd9ccb6d12566f2132326c5e3a11afdef3655360b9338ea",
+      "src/latex_review/local_history.py": "c7f269a77cc222cc0eac02c4cd7c32e781ef017c078259bb7245a1d719ae0997",
+      "src/latex_review/local_history_events.py": "9bbe30fd9f2a2dac5423efcc0865c0b2ee7fa16f7192e5043bfc5da1a4cedfca",
+      "src/latex_review/local_paths.py": "664fda439776309db5c0c4ba6cec73de39ae41c1042e6c94984b54898454ed0a",
+      "src/latex_review/local_protocol.py": "6291e6f5f936855dd8bc1ac70bc171a637dcc977524f33f650fdf30f699abf05",
+      "src/latex_review/local_report.html": "c52b4da1abcd370ad4ff06a0fad2f1c982f6faccc05c5dfaea848e39d5463094",
+      "src/latex_review/local_reports.py": "ffb2c416d0d40ec1fda29dc3504ece6711ff26dff515f83a0561fe7d1b3412bd",
+      "src/latex_review/local_security.py": "baca4ea990108f99526f75f583b5a967cd34af01c5dcbfcd4754aaaa2cd4556f",
+      "src/latex_review/local_service.py": "d556a59f44ba27b406d5204fba392c93b30dc78c0e704b6863f74da20e664452",
+      "src/latex_review/local_state.py": "b634a3acc45cffb71f8f10e63a46d76c2b183b4c31a10da27e603036d69ef44b",
+      "src/latex_review/local_tasks.py": "d1f396a930a64bc68ba1c5e417ad3d785b8288f3a34701058a4f9062a6237c2e",
+      "src/latex_review/local_worker.py": "e69c67f9d90c817ccffa6e8fbda4566e7ff36d1d4aceddc820c72ff7ca7f72dc",
+      "src/latex_review/macros.py": "2206796e11680519c48bf0ee3b78764f7e8c84f933edd9232dfdb76c5fb577e1",
+      "src/latex_review/matching.py": "a33a841e528035cbcf317c12eb690fd70dce12ea8e9c26bd9472d2b71cdc5f85",
+      "src/latex_review/math_render.js": "3d825d4878d8791677b3bcd4a4b60851fa5789934617d7ec0ea23091d4237323",
+      "src/latex_review/math_structure.py": "445790c73f9931a4a35e7df050fa693caa5c50c9664032e754e115117355c34c",
+      "src/latex_review/numbering.py": "afa977d64b4a779c05d8686001f43f44596ff812214f98c5665568131eab1e5c",
+      "src/latex_review/output_leases.py": "66b55a1b724d983ae134cd66dc4fd80708e25000fe269524b4c24d5098f2dbb9",
+      "src/latex_review/pdf_cache.py": "7a1aaae595e53e099145d28e1336946885c31f31ffa2f6e8a725f79269be889c",
+      "src/latex_review/preview.py": "7e6614b822d5d2ea2d6fd6d889c77c34fd8e0f63110272cb1e79eb4d025b29e5",
+      "src/latex_review/preview_fragments.py": "42c42db1def3efc3fa09cb8c3fe937690e4f2459d0aab3133cc446f3e765d151",
+      "src/latex_review/project_profile.py": "94bb332df04b716149d9ed95cf909589d816c1f52139dc3be56194efd1e48bce",
+      "src/latex_review/quote_matching.py": "d97503bd6a66160512fe25e3171c910c6151e0b067d67a7fbe3805142225e270",
+      "src/latex_review/reading.py": "2c0e461d72fc4a59bce20ea43309fd48a350b1531a94954b3b5acb3a00a4d8e9",
+      "src/latex_review/reading_position.js": "2164d281180128f6e9dc1121152a89ca957e352abb6750b7837e114dec0d541c",
+      "src/latex_review/report.css": "087f4f500f7487e84520a27479802c9f405f9368f23303a4ca0c8628b96641db",
+      "src/latex_review/report.py": "98d9ff000cb05e2123be391012b23036d47c42334eb1f81a0c6efa6b1b7c1940",
+      "src/latex_review/report_annotations.js": "1b47731a3f8d36ffa8447a1529f40e2ff4cacf45400fcf2568e2f14589c82a4c",
+      "src/latex_review/report_directory.py": "26d07ce81507bde82d82799f425d0fd1e6beeb47d37fee0464020945160cc19d",
+      "src/latex_review/report_interaction.js": "826eb0554c190c4082b85b09ff72aac9d958bfa34411510165f9321ec51fee53",
+      "src/latex_review/report_reader.js": "f98cae74a35585e55a68217a8664c042cdf710dffc4a21af6b59c1ab3d9bbd5f",
+      "src/latex_review/report_rebuild.py": "a453e25d30e956a14118fa6d1fb66320c01df42b48ee37be63e177225a1e9920",
+      "src/latex_review/report_search.js": "e7f561a7762155daa0ceb4819e18f4b66422155d1dc441bd175701fc331f881d",
+      "src/latex_review/report_sections.js": "fb5034b1fecf03defc68566a31309510a0b56a32c7350216b289f743cd1c6a96",
+      "src/latex_review/report_translation.js": "795439f9a19e6d490a45d2c0e868f99bd64530022b9a3ad37060c5d63fa299bc",
+      "src/latex_review/resource_cache.py": "7dc5da295a682179aadb77eaa421b7bb761218ad145d3d23b35cbcc3c41b327a",
+      "src/latex_review/review_knowledge.js": "d365cabb1e86b473c5b232bef71240f0616323247d601208fb567c898df14503",
+      "src/latex_review/review_semantic.js": "e543ca1b2ecf7b838a0f3a83994322c7deaeffe1c97899f1d4bfe3281af2885d",
+      "src/latex_review/review_workspace.css": "1b315a9b98a980072c8f1aeed76f295495fb1d106993c1eee290d842ac0fc7ee",
+      "src/latex_review/review_workspace.js": "feb55803b5f78c7c8cc18f39c7bee741fe2572f5778c0b13934f023fad7ce6b4",
+      "src/latex_review/rules.py": "105ab25a8e77bf70bb267c9a4ee5ae61bfc993dedc57842f039a0b3cfe4b3e9a",
+      "src/latex_review/run_manifest.py": "b28b355e057b24e858f623432d38863ffe0b012b8b99c1c85f356c52a2347a83",
+      "src/latex_review/schemas/annotation-suggestion.schema.json": "39f1fc6498524e333ed3e2657d73aef2776956befb7e4a075c38753e20307f27",
+      "src/latex_review/schemas/checks.schema.json": "3aa356490c7fc9395fa5c704de2c5eaace010802aa5ae06faea07bfbdb644d7f",
+      "src/latex_review/schemas/diagnostics.schema.json": "123d095d41de361eab5720569ff86af90b7879a1176bcd6c73e46df9d3429d0c",
+      "src/latex_review/schemas/diff.schema.json": "a029b25b83a7f1c255cb483bce9b4f664ed6292437362f45595a47aeae2e1329",
+      "src/latex_review/schemas/knowledge.schema.json": "f88c5492e93f9c5875005afe42c2f9c906aea1375ac2066fa1b6fa1773f243fc",
+      "src/latex_review/schemas/semantic-request.schema.json": "ea9f22e16272d768ea5f304f51f2153c19efb4938dc4f716c9dbc58958c3b830",
+      "src/latex_review/schemas/semantic-response.schema.json": "8cf890b97705ccfd687df9331feecae697ad7e266050172bf45384b9a8783ff2",
+      "src/latex_review/serve.py": "9888665b447a53796b6517e00d8a8e633321da99c48ef966f34c7ea1fb0beb80",
+      "src/latex_review/source_map.py": "650404a4c92af623287996a2ffe402f02998c19d288a5b27729fb8f44a63bf29",
+      "src/latex_review/sources.py": "e167b69481bd16649984b668106a11f6434a33c3390aa759e17315be17a86622",
+      "src/latex_review/structure.py": "1d95016c9a4e255ef8a9639a4883f6c0be4eb5aa8ca1119a10fa01fd06c3977c",
+      "src/latex_review/structured_diff.py": "397a9d531569a492f8feb607e4ef5a6224415e94e41686227bb593c65daed09e",
+      "src/latex_review/table_model.py": "0a491594822806ca14317b2af805929ff18f7a9f4198a2d875864168ce4abbde",
+      "src/latex_review/text_diff.py": "f1c5f1534d5823eb993eb7787c4064bb16b9b296076c96effed69862bc0d25e9",
+      "src/latex_review/translation.py": "00e773a245d95cf1fab5839cf54cb8e1351fc91a2b9eb96ba6ae1312f3ab1020",
+      "src/latex_review/translation_session.py": "ec3f36778d38d50ad5589e324a8999081f0e10ee56c49473a94e257f7247e3a9",
+      "src/latex_review/upload.py": "f94ae43267053b5b28a90f2924db3981c9c3284b96df5110ac25b90137084ef8",
+      "src/latex_review/version_storage.py": "0c34a856ae93290f135db83e696ee0a9c508d98049381b2d5a0a07468c3a6d85",
+      "src/latex_review/visual.py": "3375dc67c56d6bea8d2f1dee43ffe0d2d1f997c064a78a486478c799d01df6af",
+      "Docs/design/writing-check/evidence/benchmark_saved_checks.py": "6b0d313a29bc5791bcb4040a762cd074267c9e868945cdec5301e6a482155597",
+      "Docs/design/writing-check/evidence/benchmark_checks.py": "39e401cdc692cf1a482332f7f6af707d3d807d86c5ecff935df8ed86ba37682d"
+    },
+    "aggregate_sha256": "9b6ac042d72f1111213495d55abf9b70d0e273e2d0c1ffa5ef39a023a0f1e20c"
+  },
+  "environment_begin": {
+    "load_average": [
+      1.60595703125,
+      10.6640625,
+      12.05615234375
+    ],
+    "logical_cpus": 3
+  },
+  "concurrent_workload_declared": "No concurrent test or benchmark processes intentionally launched on this runner; other workflow jobs use separate runners.",
+  "source_files": 40,
+  "paragraphs": 5000,
+  "requested_saves": 10,
+  "edit_kind": "prose",
+  "edit_workload": "Change one ordinary word in paragraph 0 per save; fixed paragraph/file counts; published visible text proof included.",
+  "notifier_debounce_ms": 800,
+  "observer_poll_sleep_seconds": 0.5,
+  "per_settle_timeout_seconds": 90.0,
+  "samples": [
+    {
+      "status_polls": 5,
+      "status_rtt_seconds": [
+        0.03199983299998621,
+        0.23754937500007145,
+        0.11822141699997246,
+        0.29352095799993094,
+        0.05216912499997761
+      ],
+      "old_input_polls": 4,
+      "no_new_run_polls": 3,
+      "states_observed": [
+        {
+          "seconds": 0.032984374999955435,
+          "state": "completed"
+        },
+        {
+          "seconds": 2.4325251249999837,
+          "state": "running"
+        },
+        {
+          "seconds": 3.138242916999957,
+          "state": "completed"
+        }
+      ],
+      "observation_errors": [],
+      "load_at_start": {
+        "load_average": [
+          1.55712890625,
+          10.50341796875,
+          11.9912109375
+        ],
+        "logical_cpus": 3
+      },
+      "first_matching_preview_publication_seconds": 2.1389930829999457,
+      "preview_content_id": "6ba2b0a281bf17126b4ab367897668a9f6bf4ea6ab1c0636b41ceea805618943",
+      "live_revision": 2,
+      "watcher_message": "\u5df2\u66f4\u65b0\u5f53\u524d\u8bba\u6587\u3002\u9884\u89c8\u8bca\u65ad\uff1a0 \u9879\u3002",
+      "first_new_run_observed_seconds": 2.4325251249999837,
+      "first_running_observed_seconds": 2.4325251249999837,
+      "first_completed_status_seconds": 3.138242916999957,
+      "visible_change_proof": {
+        "verified_visible_text_change": true,
+        "manifest_version_id": "22068da31877334b6afc643cbf6f690da666b44b2ac0f68e3ff8328084aacb45",
+        "published_text_units": 5000,
+        "unit_id": "paragraph-1a07162f2ebb8aeb:block:0",
+        "node_id": "paragraph-1a07162f2ebb8aeb",
+        "unit_order": 0,
+        "unit_text_sha256": "ac4fc07a177a44830d1b8a24844b478db585875fcb522f45e56e382cb10bf0ea",
+        "before_text": "Paragraph 0 describes a synthetic evaluation.",
+        "after_text": "Paragraph 0 describes a syntheticrevision1 evaluation.",
+        "changed_ordinary_word": true
+      },
+      "visible_change_verification_seconds": 0.08659445799992227,
+      "save_to_verified_current_seconds": 3.3577709579999464,
+      "input_id": "e58cc045a6ed2ae993b1309ec403f9b12dabba0db9ded90b5c536efbe3432915",
+      "content_id": "6ba2b0a281bf17126b4ab367897668a9f6bf4ea6ab1c0636b41ceea805618943",
+      "run_id": "d8d434440f4b4425a396aaedbb5ab3d3",
+      "status": "completed",
+      "requested_scope": "changed",
+      "evaluation_mode": "full",
+      "fallback_reason": "full_scan_required_for_global_rules",
+      "expected_saved_file_sha256": "f66e6f8d1f0357d14ebb45f86d8bc58fd0419375eff2febc32478eac9d81d431",
+      "authoritative_match": true,
+      "final_status": {
+        "state": "completed",
+        "stale": false,
+        "current_input_id": "e58cc045a6ed2ae993b1309ec403f9b12dabba0db9ded90b5c536efbe3432915",
+        "current_run": {
+          "run_id": "d8d434440f4b4425a396aaedbb5ab3d3",
+          "paper_id": "3e119cc1198899636d7599efeba8b4b714db079e68bd3c106ccc407289c4d49b",
+          "state": "completed",
+          "scope": "changed",
+          "page_version": "22068da31877334b6afc643cbf6f690da666b44b2ac0f68e3ff8328084aacb45",
+          "input_id": "e58cc045a6ed2ae993b1309ec403f9b12dabba0db9ded90b5c536efbe3432915",
+          "error": null
+        },
+        "available": true
+      },
+      "load_at_end": {
+        "load_average": [
+          1.51220703125,
+          10.34521484375,
+          11.9267578125
+        ],
+        "logical_cpus": 3
+      },
+      "save": 1,
+      "write_seconds": 0.0006234999999605861,
+      "observed_intervals_not_internal_stage_durations": {
+        "save_to_preview_publication_seconds": 2.1389930829999457,
+        "publication_to_first_new_run_seconds": 0.293532042000038,
+        "first_new_run_to_completed_status_seconds": 0.7057177919999731,
+        "completed_status_to_export_verified_seconds": 0.21952804099998957
+      }
+    },
+    {
+      "status_polls": 4,
+      "status_rtt_seconds": [
+        0.04008041700001286,
+        0.5505157919999419,
+        0.4416932920000818,
+        0.04882150000003094
+      ],
+      "old_input_polls": 3,
+      "no_new_run_polls": 2,
+      "states_observed": [
+        {
+          "seconds": 0.04085708299999169,
+          "state": "completed"
+        },
+        {
+          "seconds": 2.28509562499994,
+          "state": "running"
+        },
+        {
+          "seconds": 2.869647083000018,
+          "state": "completed"
+        }
+      ],
+      "observation_errors": [],
+      "load_at_start": {
+        "load_average": [
+          1.51220703125,
+          10.34521484375,
+          11.9267578125
+        ],
+        "logical_cpus": 3
+      },
+      "first_matching_preview_publication_seconds": 1.8433970830000135,
+      "preview_content_id": "e6d83cf4831981ce7966c651a05fed5384e88fa7eeb63edc597482d114c7a9d6",
+      "live_revision": 3,
+      "watcher_message": "\u5df2\u66f4\u65b0\u5f53\u524d\u8bba\u6587\u3002\u9884\u89c8\u8bca\u65ad\uff1a0 \u9879\u3002",
+      "first_new_run_observed_seconds": 2.28509562499994,
+      "first_running_observed_seconds": 2.28509562499994,
+      "first_completed_status_seconds": 2.869647083000018,
+      "visible_change_proof": {
+        "verified_visible_text_change": true,
+        "manifest_version_id": "dc645b67e6cc15b2eff5bb6b98f5f3fb7cf4bfe24ed6aa4d7233832cc20a29d0",
+        "published_text_units": 5000,
+        "unit_id": "paragraph-003c4e4663954e12:block:0",
+        "node_id": "paragraph-003c4e4663954e12",
+        "unit_order": 0,
+        "unit_text_sha256": "5107557008809a743ce93a454071a0117eb13d64daf41ee4b72c9137e2e7e842",
+        "before_text": "Paragraph 0 describes a syntheticrevision1 evaluation.",
+        "after_text": "Paragraph 0 describes a syntheticrevision2 evaluation.",
+        "changed_ordinary_word": true
+      },
+      "visible_change_verification_seconds": 0.028240999999979977,
+      "save_to_verified_current_seconds": 3.025546458000008,
+      "input_id": "53fd95c810e94efff20f792104e8cdc1cf6b5cfff3805eb6030e70c654312907",
+      "content_id": "e6d83cf4831981ce7966c651a05fed5384e88fa7eeb63edc597482d114c7a9d6",
+      "run_id": "fcb22995ff5c4df9876c07716129fe31",
+      "status": "completed",
+      "requested_scope": "changed",
+      "evaluation_mode": "full",
+      "fallback_reason": "full_scan_required_for_global_rules",
+      "expected_saved_file_sha256": "9f785f3d5cbc22b743a80805fa1063325d59dcd0b7a0adf2b3a278ad6d5b901b",
+      "authoritative_match": true,
+      "final_status": {
+        "state": "completed",
+        "stale": false,
+        "current_input_id": "53fd95c810e94efff20f792104e8cdc1cf6b5cfff3805eb6030e70c654312907",
+        "current_run": {
+          "run_id": "fcb22995ff5c4df9876c07716129fe31",
+          "paper_id": "3e119cc1198899636d7599efeba8b4b714db079e68bd3c106ccc407289c4d49b",
+          "state": "completed",
+          "scope": "changed",
+          "page_version": "dc645b67e6cc15b2eff5bb6b98f5f3fb7cf4bfe24ed6aa4d7233832cc20a29d0",
+          "input_id": "53fd95c810e94efff20f792104e8cdc1cf6b5cfff3805eb6030e70c654312907",
+          "error": null
+        },
+        "available": true
+      },
+      "load_at_end": {
+        "load_average": [
+          1.51220703125,
+          10.34521484375,
+          11.9267578125
+        ],
+        "logical_cpus": 3
+      },
+      "save": 2,
+      "write_seconds": 0.00026074999993852543,
+      "observed_intervals_not_internal_stage_durations": {
+        "save_to_preview_publication_seconds": 1.8433970830000135,
+        "publication_to_first_new_run_seconds": 0.4416985419999264,
+        "first_new_run_to_completed_status_seconds": 0.5845514580000781,
+        "completed_status_to_export_verified_seconds": 0.15589937499998996
+      }
+    },
+    {
+      "status_polls": 5,
+      "status_rtt_seconds": [
+        0.03576695800006746,
+        0.3228100420000146,
+        0.1964730839999902,
+        0.16117962500004523,
+        0.06051004200003263
+      ],
+      "old_input_polls": 4,
+      "no_new_run_polls": 3,
+      "states_observed": [
+        {
+          "seconds": 0.036541875000011714,
+          "state": "completed"
+        },
+        {
+          "seconds": 2.4578034580000576,
+          "state": "running"
+        },
+        {
+          "seconds": 3.1118937920000462,
+          "state": "completed"
+        }
+      ],
+      "observation_errors": [],
+      "load_at_start": {
+        "load_average": [
+          1.51220703125,
+          10.34521484375,
+          11.9267578125
+        ],
+        "logical_cpus": 3
+      },
+      "first_matching_preview_publication_seconds": 2.296621625000057,
+      "preview_content_id": "d755dd4017b64d9f90eb31d5afb14d3ebb47d58da9d521037292853b09f6a63d",
+      "live_revision": 4,
+      "watcher_message": "\u5df2\u66f4\u65b0\u5f53\u524d\u8bba\u6587\u3002\u9884\u89c8\u8bca\u65ad\uff1a0 \u9879\u3002",
+      "first_new_run_observed_seconds": 2.4578034580000576,
+      "first_running_observed_seconds": 2.4578034580000576,
+      "first_completed_status_seconds": 3.1118937920000462,
+      "visible_change_proof": {
+        "verified_visible_text_change": true,
+        "manifest_version_id": "c94b71be5efa89d847e4515636d7f49fc2054a7008b853645e8e602f96844978",
+        "published_text_units": 5000,
+        "unit_id": "paragraph-b1bff19cb689f866:block:0",
+        "node_id": "paragraph-b1bff19cb689f866",
+        "unit_order": 0,
+        "unit_text_sha256": "bb23580fb306a342eda5c661bdb8e39bb4aa2b9bc9beb04c23bd95067aff37a1",
+        "before_text": "Paragraph 0 describes a syntheticrevision2 evaluation.",
+        "after_text": "Paragraph 0 describes a syntheticrevision3 evaluation.",
+        "changed_ordinary_word": true
+      },
+      "visible_change_verification_seconds": 0.036186041000064506,
+      "save_to_verified_current_seconds": 3.293773917000067,
+      "input_id": "7e13f36372986ceca93c805ffd0e88ab4fb3d95bfc5857e118b8d9db9ad45a0f",
+      "content_id": "d755dd4017b64d9f90eb31d5afb14d3ebb47d58da9d521037292853b09f6a63d",
+      "run_id": "1c4122edc4c749b58ef1a44f7771b9c2",
+      "status": "completed",
+      "requested_scope": "changed",
+      "evaluation_mode": "full",
+      "fallback_reason": "full_scan_required_for_global_rules",
+      "expected_saved_file_sha256": "f0cf5357f9db46d2ee604094a38ba0bb2e943883061a8f5b84be2bd5510e3942",
+      "authoritative_match": true,
+      "final_status": {
+        "state": "completed",
+        "stale": false,
+        "current_input_id": "7e13f36372986ceca93c805ffd0e88ab4fb3d95bfc5857e118b8d9db9ad45a0f",
+        "current_run": {
+          "run_id": "1c4122edc4c749b58ef1a44f7771b9c2",
+          "paper_id": "3e119cc1198899636d7599efeba8b4b714db079e68bd3c106ccc407289c4d49b",
+          "state": "completed",
+          "scope": "changed",
+          "page_version": "c94b71be5efa89d847e4515636d7f49fc2054a7008b853645e8e602f96844978",
+          "input_id": "7e13f36372986ceca93c805ffd0e88ab4fb3d95bfc5857e118b8d9db9ad45a0f",
+          "error": null
+        },
+        "available": true
+      },
+      "load_at_end": {
+        "load_average": [
+          1.470703125,
+          10.18994140625,
+          11.8623046875
+        ],
+        "logical_cpus": 3
+      },
+      "save": 3,
+      "write_seconds": 0.0005435000000488799,
+      "observed_intervals_not_internal_stage_durations": {
+        "save_to_preview_publication_seconds": 2.296621625000057,
+        "publication_to_first_new_run_seconds": 0.16118183300000055,
+        "first_new_run_to_completed_status_seconds": 0.6540903339999886,
+        "completed_status_to_export_verified_seconds": 0.1818801250000206
+      }
+    },
+    {
+      "status_polls": 5,
+      "status_rtt_seconds": [
+        0.04271612499996991,
+        0.38104654199992183,
+        0.13139108300003954,
+        0.15809391599998435,
+        0.05005520899999283
+      ],
+      "old_input_polls": 4,
+      "no_new_run_polls": 3,
+      "states_observed": [
+        {
+          "seconds": 0.04443541599994205,
+          "state": "completed"
+        },
+        {
+          "seconds": 2.507135166000012,
+          "state": "running"
+        },
+        {
+          "seconds": 3.0634682909999356,
+          "state": "completed"
+        }
+      ],
+      "observation_errors": [],
+      "load_at_start": {
+        "load_average": [
+          1.470703125,
+          10.18994140625,
+          11.8623046875
+        ],
+        "logical_cpus": 3
+      },
+      "first_matching_preview_publication_seconds": 2.349039707999964,
+      "preview_content_id": "319a376ea52437308d5173304a2ceef45c01f6e056186baa135c22bfc24d4673",
+      "live_revision": 5,
+      "watcher_message": "\u5df2\u66f4\u65b0\u5f53\u524d\u8bba\u6587\u3002\u9884\u89c8\u8bca\u65ad\uff1a0 \u9879\u3002",
+      "first_new_run_observed_seconds": 2.507135166000012,
+      "first_running_observed_seconds": 2.507135166000012,
+      "first_completed_status_seconds": 3.0634682909999356,
+      "visible_change_proof": {
+        "verified_visible_text_change": true,
+        "manifest_version_id": "47c4783aa2613512a7f56668943b70aa1f1c661987f14c0f1eca09fab02dfac3",
+        "published_text_units": 5000,
+        "unit_id": "paragraph-05714529ef37629b:block:0",
+        "node_id": "paragraph-05714529ef37629b",
+        "unit_order": 0,
+        "unit_text_sha256": "4e4fe11a92ef59d53215bbf36b450dfd1666fa283768494d4c88c7a81e4e78b3",
+        "before_text": "Paragraph 0 describes a syntheticrevision3 evaluation.",
+        "after_text": "Paragraph 0 describes a syntheticrevision4 evaluation.",
+        "changed_ordinary_word": true
+      },
+      "visible_change_verification_seconds": 0.06810150000001158,
+      "save_to_verified_current_seconds": 3.251052125000001,
+      "input_id": "b4851bdd9134f5656223a82465a1c704aca513ef9cbad5ecfe9ad2c015c7d72f",
+      "content_id": "319a376ea52437308d5173304a2ceef45c01f6e056186baa135c22bfc24d4673",
+      "run_id": "509c43d22789480685de8f501fb13282",
+      "status": "completed",
+      "requested_scope": "changed",
+      "evaluation_mode": "full",
+      "fallback_reason": "full_scan_required_for_global_rules",
+      "expected_saved_file_sha256": "e6e17ea1df6d99af3f80bd49b54412172bb3f8c8c4bb94a33e3de75bc3b1deeb",
+      "authoritative_match": true,
+      "final_status": {
+        "state": "completed",
+        "stale": false,
+        "current_input_id": "b4851bdd9134f5656223a82465a1c704aca513ef9cbad5ecfe9ad2c015c7d72f",
+        "current_run": {
+          "run_id": "509c43d22789480685de8f501fb13282",
+          "paper_id": "3e119cc1198899636d7599efeba8b4b714db079e68bd3c106ccc407289c4d49b",
+          "state": "completed",
+          "scope": "changed",
+          "page_version": "47c4783aa2613512a7f56668943b70aa1f1c661987f14c0f1eca09fab02dfac3",
+          "input_id": "b4851bdd9134f5656223a82465a1c704aca513ef9cbad5ecfe9ad2c015c7d72f",
+          "error": null
+        },
+        "available": true
+      },
+      "load_at_end": {
+        "load_average": [
+          1.4326171875,
+          10.037109375,
+          11.79833984375
+        ],
+        "logical_cpus": 3
+      },
+      "save": 4,
+      "write_seconds": 0.0008365829999092966,
+      "observed_intervals_not_internal_stage_durations": {
+        "save_to_preview_publication_seconds": 2.349039707999964,
+        "publication_to_first_new_run_seconds": 0.15809545800004798,
+        "first_new_run_to_completed_status_seconds": 0.5563331249999237,
+        "completed_status_to_export_verified_seconds": 0.1875838340000655
+      }
+    },
+    {
+      "status_polls": 4,
+      "status_rtt_seconds": [
+        0.032499916000006124,
+        0.42558979099999306,
+        0.3920074159999558,
+        0.047131166999974994
+      ],
+      "old_input_polls": 3,
+      "no_new_run_polls": 2,
+      "states_observed": [
+        {
+          "seconds": 0.03314162499998474,
+          "state": "completed"
+        },
+        {
+          "seconds": 2.102268292000076,
+          "state": "running"
+        },
+        {
+          "seconds": 2.787737375000006,
+          "state": "completed"
+        }
+      ],
+      "observation_errors": [],
+      "load_at_start": {
+        "load_average": [
+          1.4326171875,
+          10.037109375,
+          11.79833984375
+        ],
+        "logical_cpus": 3
+      },
+      "first_matching_preview_publication_seconds": 1.7102590000000646,
+      "preview_content_id": "ba3d001d49c15c3db79d22f5d7e435a68eaef546087dae60ca7e6393b3c69ddb",
+      "live_revision": 6,
+      "watcher_message": "\u5df2\u66f4\u65b0\u5f53\u524d\u8bba\u6587\u3002\u9884\u89c8\u8bca\u65ad\uff1a0 \u9879\u3002",
+      "first_new_run_observed_seconds": 2.102268292000076,
+      "first_running_observed_seconds": 2.102268292000076,
+      "first_completed_status_seconds": 2.787737375000006,
+      "visible_change_proof": {
+        "verified_visible_text_change": true,
+        "manifest_version_id": "cddbc44ab4ff46ff20b0db0c5458c3526da4c1923741b99daead6e031e190212",
+        "published_text_units": 5000,
+        "unit_id": "paragraph-3e91b72928ddfe62:block:0",
+        "node_id": "paragraph-3e91b72928ddfe62",
+        "unit_order": 0,
+        "unit_text_sha256": "0affb3cf9d8bb97457c6acde795dc5c3c35813e017cf40644af9c6517c6fe418",
+        "before_text": "Paragraph 0 describes a syntheticrevision4 evaluation.",
+        "after_text": "Paragraph 0 describes a syntheticrevision5 evaluation.",
+        "changed_ordinary_word": true
+      },
+      "visible_change_verification_seconds": 0.025888291999990543,
+      "save_to_verified_current_seconds": 2.8845421670000633,
+      "input_id": "bdafc2d0ee35b687ee22df4ac9a2dad244f4cf35a015bfddcd83dfc42e15c602",
+      "content_id": "ba3d001d49c15c3db79d22f5d7e435a68eaef546087dae60ca7e6393b3c69ddb",
+      "run_id": "0435df28dc3244688d3c514a6b2843c2",
+      "status": "completed",
+      "requested_scope": "changed",
+      "evaluation_mode": "full",
+      "fallback_reason": "full_scan_required_for_global_rules",
+      "expected_saved_file_sha256": "d0610a349d8566126fc3738abd64a149bfe98489d4e7bc9cc82b49f20e3bf381",
+      "authoritative_match": true,
+      "final_status": {
+        "state": "completed",
+        "stale": false,
+        "current_input_id": "bdafc2d0ee35b687ee22df4ac9a2dad244f4cf35a015bfddcd83dfc42e15c602",
+        "current_run": {
+          "run_id": "0435df28dc3244688d3c514a6b2843c2",
+          "paper_id": "3e119cc1198899636d7599efeba8b4b714db079e68bd3c106ccc407289c4d49b",
+          "state": "completed",
+          "scope": "changed",
+          "page_version": "cddbc44ab4ff46ff20b0db0c5458c3526da4c1923741b99daead6e031e190212",
+          "input_id": "bdafc2d0ee35b687ee22df4ac9a2dad244f4cf35a015bfddcd83dfc42e15c602",
+          "error": null
+        },
+        "available": true
+      },
+      "load_at_end": {
+        "load_average": [
+          1.4326171875,
+          10.037109375,
+          11.79833984375
+        ],
+        "logical_cpus": 3
+      },
+      "save": 5,
+      "write_seconds": 0.00026879200004259474,
+      "observed_intervals_not_internal_stage_durations": {
+        "save_to_preview_publication_seconds": 1.7102590000000646,
+        "publication_to_first_new_run_seconds": 0.39200929200001156,
+        "first_new_run_to_completed_status_seconds": 0.6854690829999299,
+        "completed_status_to_export_verified_seconds": 0.0968047920000572
+      }
+    },
+    {
+      "status_polls": 5,
+      "status_rtt_seconds": [
+        0.034093540999947436,
+        0.12719283299998096,
+        0.10039112499998737,
+        0.15712683300000663,
+        0.05025762500008568
+      ],
+      "old_input_polls": 4,
+      "no_new_run_polls": 3,
+      "states_observed": [
+        {
+          "seconds": 0.03479916599997068,
+          "state": "completed"
+        },
+        {
+          "seconds": 2.3549252080000542,
+          "state": "running"
+        },
+        {
+          "seconds": 2.9884684580000567,
+          "state": "completed"
+        }
+      ],
+      "observation_errors": [],
+      "load_at_start": {
+        "load_average": [
+          1.4326171875,
+          10.037109375,
+          11.79833984375
+        ],
+        "logical_cpus": 3
+      },
+      "first_matching_preview_publication_seconds": 2.197797291000029,
+      "preview_content_id": "54898c0b7671cdfb09b577334f18d62a389479db9bab3cfe3f999665354683d4",
+      "live_revision": 7,
+      "watcher_message": "\u5df2\u66f4\u65b0\u5f53\u524d\u8bba\u6587\u3002\u9884\u89c8\u8bca\u65ad\uff1a0 \u9879\u3002",
+      "first_new_run_observed_seconds": 2.3549252080000542,
+      "first_running_observed_seconds": 2.3549252080000542,
+      "first_completed_status_seconds": 2.9884684580000567,
+      "visible_change_proof": {
+        "verified_visible_text_change": true,
+        "manifest_version_id": "cc8f61b835ed0d770aff713568ac9f651c4d708ef753a3d9b6b75b95e24f9c44",
+        "published_text_units": 5000,
+        "unit_id": "paragraph-8d5fdbf749469f8c:block:0",
+        "node_id": "paragraph-8d5fdbf749469f8c",
+        "unit_order": 0,
+        "unit_text_sha256": "fd8429e199024f8f7571672d59f10ba8bfcd48c5458386c746e87dae0fe5116e",
+        "before_text": "Paragraph 0 describes a syntheticrevision5 evaluation.",
+        "after_text": "Paragraph 0 describes a syntheticrevision6 evaluation.",
+        "changed_ordinary_word": true
+      },
+      "visible_change_verification_seconds": 0.05848512500006109,
+      "save_to_verified_current_seconds": 3.166525290999971,
+      "input_id": "207185095a8792856e2bfe8a84cb4ee4ca0ab116f26e9c955efd970edd6afdc6",
+      "content_id": "54898c0b7671cdfb09b577334f18d62a389479db9bab3cfe3f999665354683d4",
+      "run_id": "0e4d706dda284f57a445e3eb046c1323",
+      "status": "completed",
+      "requested_scope": "changed",
+      "evaluation_mode": "full",
+      "fallback_reason": "full_scan_required_for_global_rules",
+      "expected_saved_file_sha256": "fb5698e9dfbe51a53d7bd0d02e6aa5a20f8b5bd4fa8e64d541d42962dcc6541c",
+      "authoritative_match": true,
+      "final_status": {
+        "state": "completed",
+        "stale": false,
+        "current_input_id": "207185095a8792856e2bfe8a84cb4ee4ca0ab116f26e9c955efd970edd6afdc6",
+        "current_run": {
+          "run_id": "0e4d706dda284f57a445e3eb046c1323",
+          "paper_id": "3e119cc1198899636d7599efeba8b4b714db079e68bd3c106ccc407289c4d49b",
+          "state": "completed",
+          "scope": "changed",
+          "page_version": "cc8f61b835ed0d770aff713568ac9f651c4d708ef753a3d9b6b75b95e24f9c44",
+          "input_id": "207185095a8792856e2bfe8a84cb4ee4ca0ab116f26e9c955efd970edd6afdc6",
+          "error": null
+        },
+        "available": true
+      },
+      "load_at_end": {
+        "load_average": [
+          1.55810546875,
+          9.919921875,
+          11.74658203125
+        ],
+        "logical_cpus": 3
+      },
+      "save": 6,
+      "write_seconds": 0.00030495800001517637,
+      "observed_intervals_not_internal_stage_durations": {
+        "save_to_preview_publication_seconds": 2.197797291000029,
+        "publication_to_first_new_run_seconds": 0.15712791700002526,
+        "first_new_run_to_completed_status_seconds": 0.6335432500000024,
+        "completed_status_to_export_verified_seconds": 0.17805683299991415
+      }
+    },
+    {
+      "status_polls": 4,
+      "status_rtt_seconds": [
+        0.034213792000059584,
+        0.41966020800009574,
+        0.4676217080000242,
+        0.08124333300008857
+      ],
+      "old_input_polls": 3,
+      "no_new_run_polls": 2,
+      "states_observed": [
+        {
+          "seconds": 0.03477037499999369,
+          "state": "completed"
+        },
+        {
+          "seconds": 2.1239684159999115,
+          "state": "running"
+        },
+        {
+          "seconds": 2.835948665999922,
+          "state": "completed"
+        }
+      ],
+      "observation_errors": [],
+      "load_at_start": {
+        "load_average": [
+          1.55810546875,
+          9.919921875,
+          11.74658203125
+        ],
+        "logical_cpus": 3
+      },
+      "first_matching_preview_publication_seconds": 1.6563468329999296,
+      "preview_content_id": "bea8025ffe3cd682ff2dba9645d0ff3fc730ee7f5babc00a02523af785b5ee0b",
+      "live_revision": 8,
+      "watcher_message": "\u5df2\u66f4\u65b0\u5f53\u524d\u8bba\u6587\u3002\u9884\u89c8\u8bca\u65ad\uff1a0 \u9879\u3002",
+      "first_new_run_observed_seconds": 2.1239684159999115,
+      "first_running_observed_seconds": 2.1239684159999115,
+      "first_completed_status_seconds": 2.835948665999922,
+      "visible_change_proof": {
+        "verified_visible_text_change": true,
+        "manifest_version_id": "9ec50efb31c3f5afdf3d6ed1a455b5d9279b4192335b714a5a97e036bc0c7e5b",
+        "published_text_units": 5000,
+        "unit_id": "paragraph-8d58380fc4de72d7:block:0",
+        "node_id": "paragraph-8d58380fc4de72d7",
+        "unit_order": 0,
+        "unit_text_sha256": "fd4c59dae5a06fa15ffb7695d80b9a6fb039ef773123ae91cb9913c3895aec8e",
+        "before_text": "Paragraph 0 describes a syntheticrevision6 evaluation.",
+        "after_text": "Paragraph 0 describes a syntheticrevision7 evaluation.",
+        "changed_ordinary_word": true
+      },
+      "visible_change_verification_seconds": 0.027641749999929743,
+      "save_to_verified_current_seconds": 2.9360602499999686,
+      "input_id": "447091efa32018b48a1674cc4343eabae35d752c765e8a300a8571f51666e654",
+      "content_id": "bea8025ffe3cd682ff2dba9645d0ff3fc730ee7f5babc00a02523af785b5ee0b",
+      "run_id": "074b139cb68d4ffab5c8e4155d3bacb5",
+      "status": "completed",
+      "requested_scope": "changed",
+      "evaluation_mode": "full",
+      "fallback_reason": "full_scan_required_for_global_rules",
+      "expected_saved_file_sha256": "e88989264365f9dd3fb5d034141fd8da63425398322268d2e2b2d4f8178c2f42",
+      "authoritative_match": true,
+      "final_status": {
+        "state": "completed",
+        "stale": false,
+        "current_input_id": "447091efa32018b48a1674cc4343eabae35d752c765e8a300a8571f51666e654",
+        "current_run": {
+          "run_id": "074b139cb68d4ffab5c8e4155d3bacb5",
+          "paper_id": "3e119cc1198899636d7599efeba8b4b714db079e68bd3c106ccc407289c4d49b",
+          "state": "completed",
+          "scope": "changed",
+          "page_version": "9ec50efb31c3f5afdf3d6ed1a455b5d9279b4192335b714a5a97e036bc0c7e5b",
+          "input_id": "447091efa32018b48a1674cc4343eabae35d752c765e8a300a8571f51666e654",
+          "error": null
+        },
+        "available": true
+      },
+      "load_at_end": {
+        "load_average": [
+          1.55810546875,
+          9.919921875,
+          11.74658203125
+        ],
+        "logical_cpus": 3
+      },
+      "save": 7,
+      "write_seconds": 0.00021483299997271388,
+      "observed_intervals_not_internal_stage_durations": {
+        "save_to_preview_publication_seconds": 1.6563468329999296,
+        "publication_to_first_new_run_seconds": 0.4676215829999819,
+        "first_new_run_to_completed_status_seconds": 0.7119802500000105,
+        "completed_status_to_export_verified_seconds": 0.1001115840000466
+      }
+    },
+    {
+      "status_polls": 5,
+      "status_rtt_seconds": [
+        0.03719695799998135,
+        0.09733245799998258,
+        0.06489145900002313,
+        0.17360387500002616,
+        0.07990987499999846
+      ],
+      "old_input_polls": 4,
+      "no_new_run_polls": 3,
+      "states_observed": [
+        {
+          "seconds": 0.03782362499998726,
+          "state": "completed"
+        },
+        {
+          "seconds": 2.166607333999991,
+          "state": "running"
+        },
+        {
+          "seconds": 2.7486617089999754,
+          "state": "completed"
+        }
+      ],
+      "observation_errors": [],
+      "load_at_start": {
+        "load_average": [
+          1.55810546875,
+          9.919921875,
+          11.74658203125
+        ],
+        "logical_cpus": 3
+      },
+      "first_matching_preview_publication_seconds": 1.9930018750000045,
+      "preview_content_id": "f7113215b405be33928d47ec3b1cf0c73849d668a5c2e340ec2a7adbec996527",
+      "live_revision": 9,
+      "watcher_message": "\u5df2\u66f4\u65b0\u5f53\u524d\u8bba\u6587\u3002\u9884\u89c8\u8bca\u65ad\uff1a0 \u9879\u3002",
+      "first_new_run_observed_seconds": 2.166607333999991,
+      "first_running_observed_seconds": 2.166607333999991,
+      "first_completed_status_seconds": 2.7486617089999754,
+      "visible_change_proof": {
+        "verified_visible_text_change": true,
+        "manifest_version_id": "313f25ae8037e2166eb9c5931f84ced199cf592797c37fde5c83a8b92624740a",
+        "published_text_units": 5000,
+        "unit_id": "paragraph-93377a3947c21b05:block:0",
+        "node_id": "paragraph-93377a3947c21b05",
+        "unit_order": 0,
+        "unit_text_sha256": "103dbe9c49c453c36e4fb9e64bcc5a3f06a6cf742452bc1e28b9e8548f71ea44",
+        "before_text": "Paragraph 0 describes a syntheticrevision7 evaluation.",
+        "after_text": "Paragraph 0 describes a syntheticrevision8 evaluation.",
+        "changed_ordinary_word": true
+      },
+      "visible_change_verification_seconds": 0.023265749999950458,
+      "save_to_verified_current_seconds": 2.88193375000003,
+      "input_id": "5a445ad3c25b17be2eccb475c33070d62fa33d93073659490c924cecb698a758",
+      "content_id": "f7113215b405be33928d47ec3b1cf0c73849d668a5c2e340ec2a7adbec996527",
+      "run_id": "a3b65327ba424bb697a404f686262f64",
+      "status": "completed",
+      "requested_scope": "changed",
+      "evaluation_mode": "full",
+      "fallback_reason": "full_scan_required_for_global_rules",
+      "expected_saved_file_sha256": "e2a58a2b11e7965a6ee9c488e139f13886b55ad60c2f18f6364ed933b4c109f6",
+      "authoritative_match": true,
+      "final_status": {
+        "state": "completed",
+        "stale": false,
+        "current_input_id": "5a445ad3c25b17be2eccb475c33070d62fa33d93073659490c924cecb698a758",
+        "current_run": {
+          "run_id": "a3b65327ba424bb697a404f686262f64",
+          "paper_id": "3e119cc1198899636d7599efeba8b4b714db079e68bd3c106ccc407289c4d49b",
+          "state": "completed",
+          "scope": "changed",
+          "page_version": "313f25ae8037e2166eb9c5931f84ced199cf592797c37fde5c83a8b92624740a",
+          "input_id": "5a445ad3c25b17be2eccb475c33070d62fa33d93073659490c924cecb698a758",
+          "error": null
+        },
+        "available": true
+      },
+      "load_at_end": {
+        "load_average": [
+          1.59326171875,
+          9.7880859375,
+          11.689453125
+        ],
+        "logical_cpus": 3
+      },
+      "save": 8,
+      "write_seconds": 0.0002850419999731457,
+      "observed_intervals_not_internal_stage_durations": {
+        "save_to_preview_publication_seconds": 1.9930018750000045,
+        "publication_to_first_new_run_seconds": 0.1736054589999867,
+        "first_new_run_to_completed_status_seconds": 0.5820543749999842,
+        "completed_status_to_export_verified_seconds": 0.13327204100005474
+      }
+    },
+    {
+      "status_polls": 5,
+      "status_rtt_seconds": [
+        0.031719916999918496,
+        0.09792829199989228,
+        0.11916829200004031,
+        0.1385625830000663,
+        0.07813633299997491
+      ],
+      "old_input_polls": 4,
+      "no_new_run_polls": 3,
+      "states_observed": [
+        {
+          "seconds": 0.032111958000086815,
+          "state": "completed"
+        },
+        {
+          "seconds": 2.1338166660000297,
+          "state": "running"
+        },
+        {
+          "seconds": 2.858168458000023,
+          "state": "completed"
+        }
+      ],
+      "observation_errors": [],
+      "load_at_start": {
+        "load_average": [
+          1.59326171875,
+          9.7880859375,
+          11.689453125
+        ],
+        "logical_cpus": 3
+      },
+      "first_matching_preview_publication_seconds": 1.995252832999995,
+      "preview_content_id": "58e322a1faf94de2b759d5a29142c81e89a0b3a7e1de1cb86a99172a1ffabb6d",
+      "live_revision": 10,
+      "watcher_message": "\u5df2\u66f4\u65b0\u5f53\u524d\u8bba\u6587\u3002\u9884\u89c8\u8bca\u65ad\uff1a0 \u9879\u3002",
+      "first_new_run_observed_seconds": 2.1338166660000297,
+      "first_running_observed_seconds": 2.1338166660000297,
+      "first_completed_status_seconds": 2.858168458000023,
+      "visible_change_proof": {
+        "verified_visible_text_change": true,
+        "manifest_version_id": "b057a634f18fac107a18c9e89493a9132990b6d9b25593bbcd4fbb0749c21feb",
+        "published_text_units": 5000,
+        "unit_id": "paragraph-8e8a374a64a9c9bb:block:0",
+        "node_id": "paragraph-8e8a374a64a9c9bb",
+        "unit_order": 0,
+        "unit_text_sha256": "049d30bf59bddb768eb137d40ddbdf7af81b71f0e055e4c7e7869457ea71a67e",
+        "before_text": "Paragraph 0 describes a syntheticrevision8 evaluation.",
+        "after_text": "Paragraph 0 describes a syntheticrevision9 evaluation.",
+        "changed_ordinary_word": true
+      },
+      "visible_change_verification_seconds": 0.04660400000000209,
+      "save_to_verified_current_seconds": 3.013264083000081,
+      "input_id": "d83bf6979c9da570603af85a4d79d2f771fd15f1abc0e0710d01eb3a4bc1a864",
+      "content_id": "58e322a1faf94de2b759d5a29142c81e89a0b3a7e1de1cb86a99172a1ffabb6d",
+      "run_id": "f9ec1efe95904a4796b38c1ccc52dfd1",
+      "status": "completed",
+      "requested_scope": "changed",
+      "evaluation_mode": "full",
+      "fallback_reason": "full_scan_required_for_global_rules",
+      "expected_saved_file_sha256": "6d6bbbad82db839bb7d52390137e71178c8fc457a976e92a2005389bc3a53df1",
+      "authoritative_match": true,
+      "final_status": {
+        "state": "completed",
+        "stale": false,
+        "current_input_id": "d83bf6979c9da570603af85a4d79d2f771fd15f1abc0e0710d01eb3a4bc1a864",
+        "current_run": {
+          "run_id": "f9ec1efe95904a4796b38c1ccc52dfd1",
+          "paper_id": "3e119cc1198899636d7599efeba8b4b714db079e68bd3c106ccc407289c4d49b",
+          "state": "completed",
+          "scope": "changed",
+          "page_version": "b057a634f18fac107a18c9e89493a9132990b6d9b25593bbcd4fbb0749c21feb",
+          "input_id": "d83bf6979c9da570603af85a4d79d2f771fd15f1abc0e0710d01eb3a4bc1a864",
+          "error": null
+        },
+        "available": true
+      },
+      "load_at_end": {
+        "load_average": [
+          1.46533203125,
+          9.62548828125,
+          11.62060546875
+        ],
+        "logical_cpus": 3
+      },
+      "save": 9,
+      "write_seconds": 0.00015187500002866727,
+      "observed_intervals_not_internal_stage_durations": {
+        "save_to_preview_publication_seconds": 1.995252832999995,
+        "publication_to_first_new_run_seconds": 0.13856383300003472,
+        "first_new_run_to_completed_status_seconds": 0.7243517919999931,
+        "completed_status_to_export_verified_seconds": 0.15509562500005813
+      }
+    },
+    {
+      "status_polls": 4,
+      "status_rtt_seconds": [
+        0.031868750000057844,
+        0.24723920799999632,
+        0.24317962500003887,
+        0.06302466700003606
+      ],
+      "old_input_polls": 3,
+      "no_new_run_polls": 3,
+      "states_observed": [
+        {
+          "seconds": 0.03241912499993305,
+          "state": "completed"
+        }
+      ],
+      "observation_errors": [],
+      "load_at_start": {
+        "load_average": [
+          1.46533203125,
+          9.62548828125,
+          11.62060546875
+        ],
+        "logical_cpus": 3
+      },
+      "first_matching_preview_publication_seconds": 2.366977082999938,
+      "preview_content_id": "4c72fe0e46f783c8a3c957155092becf8d6cb8e9111715462f52bb3d94f1ab59",
+      "live_revision": 11,
+      "watcher_message": "\u5df2\u66f4\u65b0\u5f53\u524d\u8bba\u6587\u3002\u9884\u89c8\u8bca\u65ad\uff1a0 \u9879\u3002",
+      "first_new_run_observed_seconds": 2.4300067079999508,
+      "first_completed_status_seconds": 2.4300067079999508,
+      "visible_change_proof": {
+        "verified_visible_text_change": true,
+        "manifest_version_id": "6998c1390a69239209fc2238733057cec17e5e141c5a4ed095e9ab94b51a00eb",
+        "published_text_units": 5000,
+        "unit_id": "paragraph-3355cfff9ef46d90:block:0",
+        "node_id": "paragraph-3355cfff9ef46d90",
+        "unit_order": 0,
+        "unit_text_sha256": "bf4a5eac38d70de552796328a2d53c274697374c71bdcc5f6c2a57cfe325b802",
+        "before_text": "Paragraph 0 describes a syntheticrevision9 evaluation.",
+        "after_text": "Paragraph 0 describes a syntheticrevision10 evaluation.",
+        "changed_ordinary_word": true
+      },
+      "visible_change_verification_seconds": 0.023032791999980873,
+      "save_to_verified_current_seconds": 2.520595125,
+      "input_id": "4591536dc5326ad16f6aeabbdf86ddb5e78bbaac5fad674fe5d5771891f40815",
+      "content_id": "4c72fe0e46f783c8a3c957155092becf8d6cb8e9111715462f52bb3d94f1ab59",
+      "run_id": "41f849c1652149219643d60a90bbb3fe",
+      "status": "completed",
+      "requested_scope": "changed",
+      "evaluation_mode": "full",
+      "fallback_reason": "full_scan_required_for_global_rules",
+      "expected_saved_file_sha256": "e3a9adb10ce997fa2bfe9c28536554c762307b6ff0c01fa570a32d71cafcde2b",
+      "authoritative_match": true,
+      "final_status": {
+        "state": "completed",
+        "stale": false,
+        "current_input_id": "4591536dc5326ad16f6aeabbdf86ddb5e78bbaac5fad674fe5d5771891f40815",
+        "current_run": {
+          "run_id": "41f849c1652149219643d60a90bbb3fe",
+          "paper_id": "3e119cc1198899636d7599efeba8b4b714db079e68bd3c106ccc407289c4d49b",
+          "state": "completed",
+          "scope": "changed",
+          "page_version": "6998c1390a69239209fc2238733057cec17e5e141c5a4ed095e9ab94b51a00eb",
+          "input_id": "4591536dc5326ad16f6aeabbdf86ddb5e78bbaac5fad674fe5d5771891f40815",
+          "error": null
+        },
+        "available": true
+      },
+      "load_at_end": {
+        "load_average": [
+          1.46533203125,
+          9.62548828125,
+          11.62060546875
+        ],
+        "logical_cpus": 3
+      },
+      "save": 10,
+      "write_seconds": 0.00017683299995496782,
+      "observed_intervals_not_internal_stage_durations": {
+        "save_to_preview_publication_seconds": 2.366977082999938,
+        "publication_to_first_new_run_seconds": 0.06302962500001286,
+        "first_new_run_to_completed_status_seconds": 0.0,
+        "completed_status_to_export_verified_seconds": 0.09058841700004905
+      }
+    }
+  ],
+  "measurement": "Real private entry ensure -> live worker native watcher/rebuild -> asynchronous saved notifier -> coordinator -> worker HTTP status/export.",
+  "boundary_notes": [
+    "Timer starts immediately before source write; write close included; no fsync durability claim.",
+    "Elapsed verified-current includes filesystem event detection, full preview rebuild/publication, default 800ms debounce, HTTP notify, coordinator queue and complete check, status observation and export verification.",
+    "Publication/queue/running timestamps are first-observed upper bounds, not isolated internal stage durations. Short queue/running states can be missed.",
+    "Polling sleeps plus recorded HTTP RTT introduce detection delay and observer load. No browser refresh or browser paint is measured.",
+    "Cold ensure/start and baseline settle are separate from sequential saved-edit samples.",
+    "Spec saved-hot p95 target is <=2s excluding TeX compilation and external network/model calls. This measurement includes rendering, debounce and local loopback transport; no external network/model calls or TeX compilation occur.",
+    "Source boundary hashes identify observed workspace, not a claim of exact final revision."
+  ],
+  "source_bytes_initial": 1479521,
+  "entry_start_seconds": 0.300101459000075,
+  "ensure_to_worker_ready_seconds": 2.6684910000000173,
+  "baseline_after_worker_ready": {
+    "status_polls": 3,
+    "status_rtt_seconds": [
+      0.1433362920000718,
+      0.06869108299997606,
+      0.04749850000007427
+    ],
+    "old_input_polls": 2,
+    "no_new_run_polls": 2,
+    "states_observed": [
+      {
+        "seconds": 0.14439141699995162,
+        "state": null
+      },
+      {
+        "seconds": 1.4850942089999535,
+        "state": "completed"
+      }
+    ],
+    "observation_errors": [],
+    "load_at_start": {
+      "load_average": [
+        1.55712890625,
+        10.50341796875,
+        11.9912109375
+      ],
+      "logical_cpus": 3
+    },
+    "first_matching_preview_publication_seconds": 0.0010506249999480133,
+    "preview_content_id": "a2c9ef9a615a98dc9487a36bea64fbf0ba32fa31d950edd6bcbe0e59eaef3996",
+    "live_revision": 1,
+    "watcher_message": "\u6301\u7eed\u9884\u89c8\u5df2\u542f\u52a8\u3002",
+    "first_new_run_observed_seconds": 1.4850942089999535,
+    "first_completed_status_seconds": 1.4850942089999535,
+    "save_to_verified_current_seconds": 1.5906137089999675,
+    "input_id": "9b02f02909df2b13de2ed0dab0a29d0cac643fda7fc7b3e6568d547aec710380",
+    "content_id": "a2c9ef9a615a98dc9487a36bea64fbf0ba32fa31d950edd6bcbe0e59eaef3996",
+    "run_id": "6f7f9d3ed50c4f43ab033a3acb7fb3ec",
+    "status": "completed",
+    "requested_scope": "changed",
+    "evaluation_mode": "full",
+    "fallback_reason": "no_baseline",
+    "expected_saved_file_sha256": "e7ac09ac6b707fe5722a0736273fee32ffc9aa18a1d3022ea337c679ea637723",
+    "authoritative_match": true,
+    "final_status": {
+      "state": "completed",
+      "stale": false,
+      "current_input_id": "9b02f02909df2b13de2ed0dab0a29d0cac643fda7fc7b3e6568d547aec710380",
+      "current_run": {
+        "run_id": "6f7f9d3ed50c4f43ab033a3acb7fb3ec",
+        "paper_id": "3e119cc1198899636d7599efeba8b4b714db079e68bd3c106ccc407289c4d49b",
+        "state": "completed",
+        "scope": "changed",
+        "page_version": "3dfcfe653ed63b9e8683ba8a7e77f8d4743bcdd733dda12fa9321af6a15de35f",
+        "input_id": "9b02f02909df2b13de2ed0dab0a29d0cac643fda7fc7b3e6568d547aec710380",
+        "error": null
+      },
+      "available": true
+    },
+    "load_at_end": {
+      "load_average": [
+        1.55712890625,
+        10.50341796875,
+        11.9912109375
+      ],
+      "logical_cpus": 3
+    }
+  },
+  "saved_median_seconds": 3.0194052705000445,
+  "saved_p95_nearest_rank_seconds": 3.3577709579999464,
+  "saved_min_seconds": 2.520595125,
+  "saved_max_seconds": 3.3577709579999464,
+  "saved_hot_p95_target_seconds": 2,
+  "saved_hot_p95_target_met": false,
+  "cleanup": {
+    "owned_entry_exit_code": 0,
+    "owned_entry_exited": true,
+    "owned_worker_exited": true,
+    "isolated_endpoint_removed": true
+  },
+  "source_boundary_end": {
+    "utc": "2026-11-05T06:17:09.555631+00:00",
+    "files": {
+      "src/latex_review/__init__.py": "33e5dabf1a9f3337d90ed5d2cd2f44dde0ad43692755c7870b75eafbe0fd6af7",
+      "src/latex_review/agent_tools.py": "0c0bbc569991cb58c1c262ba72e753494dfed826a43fa67ef1f9e540f5459ca7",
+      "src/latex_review/annotation_audit.py": "5d1f1bc22e85da7cca2f46030a937c40b405bb76c04a9d3e8a46cd746210f97f",
+      "src/latex_review/annotation_batch_cli.py": "68766999dc9c85b2e6150d4bb23d3d698480904cf53eb400dab530e1e932687a",
+      "src/latex_review/annotation_cli.py": "ba7e8ae44c15fe9c6dd6cb65d36c426835908f82de9b53bf41a81717096e815a",
+      "src/latex_review/annotation_codec.js": "7ad38b0880cffa45fc2bdb1e117823936cbd1db6959644625231f035bedbd80c",
+      "src/latex_review/annotation_delivery.js": "cfc04438e247f614d0945f07d50720480c8041fe48774c2a7bdb35c6f4adea33",
+      "src/latex_review/annotation_jobs.py": "09b9286e353a31da6ef17e19e166a560c73bdf646a6b948a0fa32aa9a13ec5cc",
+      "src/latex_review/annotation_output.py": "bc290834b935824516abc4b53cf2a50f5a6990bea8c55b09b7ddac87857350de",
+      "src/latex_review/annotation_review_record.py": "6ee0fa92fb7dde18fbf34a4365f485be22ae358efaf779fad4c5f773d994ce7a",
+      "src/latex_review/annotation_sources.py": "5d8bd91932a085df4c147bd2d679cb337e3641be372d37199afa40a216fe4ffe",
+      "src/latex_review/annotations/__init__.py": "1081f3696da3ab2cb2e4f24c095d051248f96f906edbe4966e1307b86262270c",
+      "src/latex_review/annotations/_batch.py": "b10702af8779b3d089ee1f3b80f12a0b5d03347de5333ab5cb9483437d3511e5",
+      "src/latex_review/annotations/_locations.py": "67a569f23b059632e88fcb9a211b92b985de1374277ce1fb31ebd2566a024181",
+      "src/latex_review/annotations/_preflight.py": "eb02b01e1c1f60f4e73bbc7751eed619ccde00a4a9825fb95515760f7e0a7270",
+      "src/latex_review/annotations/_storage.py": "4a167c97d2670bb6dad552f7aabd9ba3d21f0559a2671b95023f25ed6dab0ce1",
+      "src/latex_review/annotations/_suggestions.py": "64ddcdf47f62c1d5a17bb5f525aacf87d37b20e2bc43fa0049386a46c8992006",
+      "src/latex_review/annotations/_validation.py": "e313e78241a8fd22390c2bf3eafb5c81ae7600ac96e3bde4d7476e150b55ce1e",
+      "src/latex_review/annotations/content.py": "5503e911bfbc8fada71cf329a6067275beeff6bec6542d9bbc19d91998904b94",
+      "src/latex_review/annotations/html_fragments.py": "d7e10900efad118bbec36340211455cb339a5ebe5bfcdabe4301b2812817ba68",
+      "src/latex_review/annotations/store.py": "8f357c7bd4e02db6960c55db6ae9045d95ab805e296bee75ae1fa70d6081650b",
+      "src/latex_review/bibliography.py": "231826a405351b5fdad5375514a05249bd2057f9ec9503490bb49655b3fe109a",
+      "src/latex_review/cache.py": "8b2d1a6cb33c42fc1c92e78abdb20cd2f2502ad5e2ffb529c5a88af72c28e2e6",
+      "src/latex_review/check_configuration.py": "e027612631c828ce76bc63cf4503add626292832152c06754f53cfeb12992e08",
+      "src/latex_review/checks/__init__.py": "3b6e1cfb8859660434b9c035bc9c3af127c228c1fd9bf29fa5d97e91e193e249",
+      "src/latex_review/checks/annotation_link.py": "e77a9ebbcb7abe3a0a08e2290f6636510121a8ea7f8e2a9aab8df6098026b921",
+      "src/latex_review/checks/cli.py": "0fe086200fb9ce7da2911a5495a588861c1f74fc44e64cc71401999e65e62052",
+      "src/latex_review/checks/diagnostics.py": "0aa52036e6b67c413edf4b79a369679be4827df7c5145930c81f4b05296fc249",
+      "src/latex_review/checks/document.py": "7688a2c8c0fad70f9f640a9188c9208f5f75d737270dce01e327add2e800b59c",
+      "src/latex_review/checks/engine.py": "eafabbb6a2413775f8a456d98d59f756245c2fa813be9bb32d6215c35b7dd4ec",
+      "src/latex_review/checks/finding_review.py": "75f42bca601fcea8de43614576fc4bb2a5cd889f00c07c8d17dc8a9345975ccb",
+      "src/latex_review/checks/http.py": "9c0f74af6df5ad14554ac5ceb05a273b86516b4f01821ed0238db53e609ca1ad",
+      "src/latex_review/checks/knowledge_rules.py": "5d9d74b4052f5c0feb9c089488a901a729edb7a75dfa29bbf0d197697839e1b8",
+      "src/latex_review/checks/model.py": "1c1bd83a782c273858e34109d908a81d6dd99c66aaa506fb8ece454b8976b7a7",
+      "src/latex_review/checks/registry.py": "7a455815d58baf35e029d4e8325bd951c01a00b5ab9ac523ca98307608e45403",
+      "src/latex_review/checks/semantic.py": "a91b607973ccca7551a1efb10106986eb26b6678857b8dc2b1feb1ee37c01038",
+      "src/latex_review/checks/semantic_cli.py": "75e730555edc49b27070c5a8fdc03792898f8b81b5080cf33e8e075105bb6d7d",
+      "src/latex_review/checks/semantic_service.py": "9e6e4d6675e659294ea3bbbdf709de58bd1c508b7379b0e16615c0070f9ed9e4",
+      "src/latex_review/checks/service.py": "39a6f0701a8aef9cce6f62ee6ccc445ed0453d1151da63fa112786dbdce5bf03",
+      "src/latex_review/checks/service_state.py": "5d4ee62949ff7c11cd168efd273734e07051adebff2a576b957c2895d789a885",
+      "src/latex_review/checks/snapshot.py": "3f17e12a11924cdb3d8fe8874fb45d8856260f196d33db4e8c9fd91e3b41f1a2",
+      "src/latex_review/checks/store.py": "693088547f37e3a17a9ab2830b35dc667848c8cb5fb46b789356437bbd13aef1",
+      "src/latex_review/ci.py": "0b62229ec684e9d17ae9dde190b38da1f78496676260501799bd90ffa4d59235",
+      "src/latex_review/ci_comment.py": "eda47a37fbd176f09facdc93539fdc2c38bd10c6dbf5aa2d3aedc21119e18800",
+      "src/latex_review/cli.py": "58147d0bdb4a946e9674d203d9bdffbe3eaec52f5ab3c7358786bab31841b1a9",
+      "src/latex_review/comparison.py": "fde346a211d68434ca0d39ce7abd3d82398b2f0634d17c3e3b69e7a35cbfd29c",
+      "src/latex_review/compilation.py": "6f79a893cb68426f55a011bcfaf65ea1886a8a6458587a317f6ab14ddc88a9bb",
+      "src/latex_review/compile_numbering.py": "78883f4b7e14981fa8562ef908ccf2b0e178ef941504cae843cc70e6f07f3ded",
+      "src/latex_review/contract.py": "2b201dbe9347d7fd0b78926bfe21a60b4c1c5593962b9a304b2eebe16323660e",
+      "src/latex_review/delivery.py": "e25e7356f9b3296bf9f4302ccbd52cdb7345f208d749dc1f6a451efabc1e0214",
+      "src/latex_review/file_events.py": "554aba1027c5cc8b5aa3f75b63a1db7fff5437db6c9e69b832d6fd0d3ba1fcf7",
+      "src/latex_review/fragment_render.py": "5346450e25fd36e5f22279c66bc09a7af3de19fc4eeafb8ab3f8b51408e24ff7",
+      "src/latex_review/identity.py": "52f4da6d0358ff7be200e2327ee35ef087c5bad5b94e16ba7eae59e398890f35",
+      "src/latex_review/latex_commands.py": "03430f1eb877dd5a086be3e1605cd330108a59ca0456489dd4d0be8b86911ab3",
+      "src/latex_review/live.py": "45bcc8338db6b250e347ac103c46b5d44d8e915e3cb7a1b1161edb7f9a4ebf03",
+      "src/latex_review/live_reader.js": "e60be6feee93d1f0030ed087520dde6518ffd4b990e6b23b24f5dd7807fdd90f",
+      "src/latex_review/local_client.py": "9ec525c42adfc4022fce586e76c012b23027a27e02216d9937ca4f34bb9dd2cf",
+      "src/latex_review/local_dashboard.html": "d86d3c2b5c9751ff2fd9ccb6d12566f2132326c5e3a11afdef3655360b9338ea",
+      "src/latex_review/local_history.py": "c7f269a77cc222cc0eac02c4cd7c32e781ef017c078259bb7245a1d719ae0997",
+      "src/latex_review/local_history_events.py": "9bbe30fd9f2a2dac5423efcc0865c0b2ee7fa16f7192e5043bfc5da1a4cedfca",
+      "src/latex_review/local_paths.py": "664fda439776309db5c0c4ba6cec73de39ae41c1042e6c94984b54898454ed0a",
+      "src/latex_review/local_protocol.py": "6291e6f5f936855dd8bc1ac70bc171a637dcc977524f33f650fdf30f699abf05",
+      "src/latex_review/local_report.html": "c52b4da1abcd370ad4ff06a0fad2f1c982f6faccc05c5dfaea848e39d5463094",
+      "src/latex_review/local_reports.py": "ffb2c416d0d40ec1fda29dc3504ece6711ff26dff515f83a0561fe7d1b3412bd",
+      "src/latex_review/local_security.py": "baca4ea990108f99526f75f583b5a967cd34af01c5dcbfcd4754aaaa2cd4556f",
+      "src/latex_review/local_service.py": "d556a59f44ba27b406d5204fba392c93b30dc78c0e704b6863f74da20e664452",
+      "src/latex_review/local_state.py": "b634a3acc45cffb71f8f10e63a46d76c2b183b4c31a10da27e603036d69ef44b",
+      "src/latex_review/local_tasks.py": "d1f396a930a64bc68ba1c5e417ad3d785b8288f3a34701058a4f9062a6237c2e",
+      "src/latex_review/local_worker.py": "e69c67f9d90c817ccffa6e8fbda4566e7ff36d1d4aceddc820c72ff7ca7f72dc",
+      "src/latex_review/macros.py": "2206796e11680519c48bf0ee3b78764f7e8c84f933edd9232dfdb76c5fb577e1",
+      "src/latex_review/matching.py": "a33a841e528035cbcf317c12eb690fd70dce12ea8e9c26bd9472d2b71cdc5f85",
+      "src/latex_review/math_render.js": "3d825d4878d8791677b3bcd4a4b60851fa5789934617d7ec0ea23091d4237323",
+      "src/latex_review/math_structure.py": "445790c73f9931a4a35e7df050fa693caa5c50c9664032e754e115117355c34c",
+      "src/latex_review/numbering.py": "afa977d64b4a779c05d8686001f43f44596ff812214f98c5665568131eab1e5c",
+      "src/latex_review/output_leases.py": "66b55a1b724d983ae134cd66dc4fd80708e25000fe269524b4c24d5098f2dbb9",
+      "src/latex_review/pdf_cache.py": "7a1aaae595e53e099145d28e1336946885c31f31ffa2f6e8a725f79269be889c",
+      "src/latex_review/preview.py": "7e6614b822d5d2ea2d6fd6d889c77c34fd8e0f63110272cb1e79eb4d025b29e5",
+      "src/latex_review/preview_fragments.py": "42c42db1def3efc3fa09cb8c3fe937690e4f2459d0aab3133cc446f3e765d151",
+      "src/latex_review/project_profile.py": "94bb332df04b716149d9ed95cf909589d816c1f52139dc3be56194efd1e48bce",
+      "src/latex_review/quote_matching.py": "d97503bd6a66160512fe25e3171c910c6151e0b067d67a7fbe3805142225e270",
+      "src/latex_review/reading.py": "2c0e461d72fc4a59bce20ea43309fd48a350b1531a94954b3b5acb3a00a4d8e9",
+      "src/latex_review/reading_position.js": "2164d281180128f6e9dc1121152a89ca957e352abb6750b7837e114dec0d541c",
+      "src/latex_review/report.css": "087f4f500f7487e84520a27479802c9f405f9368f23303a4ca0c8628b96641db",
+      "src/latex_review/report.py": "98d9ff000cb05e2123be391012b23036d47c42334eb1f81a0c6efa6b1b7c1940",
+      "src/latex_review/report_annotations.js": "1b47731a3f8d36ffa8447a1529f40e2ff4cacf45400fcf2568e2f14589c82a4c",
+      "src/latex_review/report_directory.py": "26d07ce81507bde82d82799f425d0fd1e6beeb47d37fee0464020945160cc19d",
+      "src/latex_review/report_interaction.js": "826eb0554c190c4082b85b09ff72aac9d958bfa34411510165f9321ec51fee53",
+      "src/latex_review/report_reader.js": "f98cae74a35585e55a68217a8664c042cdf710dffc4a21af6b59c1ab3d9bbd5f",
+      "src/latex_review/report_rebuild.py": "a453e25d30e956a14118fa6d1fb66320c01df42b48ee37be63e177225a1e9920",
+      "src/latex_review/report_search.js": "e7f561a7762155daa0ceb4819e18f4b66422155d1dc441bd175701fc331f881d",
+      "src/latex_review/report_sections.js": "fb5034b1fecf03defc68566a31309510a0b56a32c7350216b289f743cd1c6a96",
+      "src/latex_review/report_translation.js": "795439f9a19e6d490a45d2c0e868f99bd64530022b9a3ad37060c5d63fa299bc",
+      "src/latex_review/resource_cache.py": "7dc5da295a682179aadb77eaa421b7bb761218ad145d3d23b35cbcc3c41b327a",
+      "src/latex_review/review_knowledge.js": "d365cabb1e86b473c5b232bef71240f0616323247d601208fb567c898df14503",
+      "src/latex_review/review_semantic.js": "e543ca1b2ecf7b838a0f3a83994322c7deaeffe1c97899f1d4bfe3281af2885d",
+      "src/latex_review/review_workspace.css": "1b315a9b98a980072c8f1aeed76f295495fb1d106993c1eee290d842ac0fc7ee",
+      "src/latex_review/review_workspace.js": "feb55803b5f78c7c8cc18f39c7bee741fe2572f5778c0b13934f023fad7ce6b4",
+      "src/latex_review/rules.py": "105ab25a8e77bf70bb267c9a4ee5ae61bfc993dedc57842f039a0b3cfe4b3e9a",
+      "src/latex_review/run_manifest.py": "b28b355e057b24e858f623432d38863ffe0b012b8b99c1c85f356c52a2347a83",
+      "src/latex_review/schemas/annotation-suggestion.schema.json": "39f1fc6498524e333ed3e2657d73aef2776956befb7e4a075c38753e20307f27",
+      "src/latex_review/schemas/checks.schema.json": "3aa356490c7fc9395fa5c704de2c5eaace010802aa5ae06faea07bfbdb644d7f",
+      "src/latex_review/schemas/diagnostics.schema.json": "123d095d41de361eab5720569ff86af90b7879a1176bcd6c73e46df9d3429d0c",
+      "src/latex_review/schemas/diff.schema.json": "a029b25b83a7f1c255cb483bce9b4f664ed6292437362f45595a47aeae2e1329",
+      "src/latex_review/schemas/knowledge.schema.json": "f88c5492e93f9c5875005afe42c2f9c906aea1375ac2066fa1b6fa1773f243fc",
+      "src/latex_review/schemas/semantic-request.schema.json": "ea9f22e16272d768ea5f304f51f2153c19efb4938dc4f716c9dbc58958c3b830",
+      "src/latex_review/schemas/semantic-response.schema.json": "8cf890b97705ccfd687df9331feecae697ad7e266050172bf45384b9a8783ff2",
+      "src/latex_review/serve.py": "9888665b447a53796b6517e00d8a8e633321da99c48ef966f34c7ea1fb0beb80",
+      "src/latex_review/source_map.py": "650404a4c92af623287996a2ffe402f02998c19d288a5b27729fb8f44a63bf29",
+      "src/latex_review/sources.py": "e167b69481bd16649984b668106a11f6434a33c3390aa759e17315be17a86622",
+      "src/latex_review/structure.py": "1d95016c9a4e255ef8a9639a4883f6c0be4eb5aa8ca1119a10fa01fd06c3977c",
+      "src/latex_review/structured_diff.py": "397a9d531569a492f8feb607e4ef5a6224415e94e41686227bb593c65daed09e",
+      "src/latex_review/table_model.py": "0a491594822806ca14317b2af805929ff18f7a9f4198a2d875864168ce4abbde",
+      "src/latex_review/text_diff.py": "f1c5f1534d5823eb993eb7787c4064bb16b9b296076c96effed69862bc0d25e9",
+      "src/latex_review/translation.py": "00e773a245d95cf1fab5839cf54cb8e1351fc91a2b9eb96ba6ae1312f3ab1020",
+      "src/latex_review/translation_session.py": "ec3f36778d38d50ad5589e324a8999081f0e10ee56c49473a94e257f7247e3a9",
+      "src/latex_review/upload.py": "f94ae43267053b5b28a90f2924db3981c9c3284b96df5110ac25b90137084ef8",
+      "src/latex_review/version_storage.py": "0c34a856ae93290f135db83e696ee0a9c508d98049381b2d5a0a07468c3a6d85",
+      "src/latex_review/visual.py": "3375dc67c56d6bea8d2f1dee43ffe0d2d1f997c064a78a486478c799d01df6af",
+      "Docs/design/writing-check/evidence/benchmark_saved_checks.py": "6b0d313a29bc5791bcb4040a762cd074267c9e868945cdec5301e6a482155597",
+      "Docs/design/writing-check/evidence/benchmark_checks.py": "39e401cdc692cf1a482332f7f6af707d3d807d86c5ecff935df8ed86ba37682d"
+    },
+    "aggregate_sha256": "9b6ac042d72f1111213495d55abf9b70d0e273e2d0c1ffa5ef39a023a0f1e20c"
+  },
+  "source_paths_changed_during_measurement": [],
+  "environment_end": {
+    "load_average": [
+      1.46533203125,
+      9.62548828125,
+      11.62060546875
+    ],
+    "logical_cpus": 3
+  }
+}
