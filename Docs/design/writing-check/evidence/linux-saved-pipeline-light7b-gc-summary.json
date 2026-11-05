@@ -1,0 +1,981 @@
+{
+  "diagnostic_only": true,
+  "source_aggregate_sha256": "de00f087600364452c93faee440e9ece9435fb19b99c1d3fd91799e6877d560b",
+  "attribution": "Exclusive GC callback labels; includes startup/saves/cleanup. Per-save root-span deltas in analysis.",
+  "kinds": {
+    "comment": [
+      {
+        "event": "gc_summary",
+        "pid": 1296756,
+        "thread": 126434052261696,
+        "actor": "local_worker.py",
+        "at": 1999364.125725227,
+        "rows": [
+          {
+            "thread": 126434052261696,
+            "stage": "unattributed",
+            "generation": 0,
+            "collections": 3,
+            "wall_seconds": 0.00030360580421984196,
+            "thread_cpu_seconds": 0.0003006110000000617,
+            "collected": 9,
+            "uncollectable": 0
+          },
+          {
+            "thread": 126434052261696,
+            "stage": "unattributed",
+            "generation": 1,
+            "collections": 1,
+            "wall_seconds": 0.0012490579392760992,
+            "thread_cpu_seconds": 0.0010606140000000153,
+            "collected": 338,
+            "uncollectable": 0
+          },
+          {
+            "thread": 126433994614464,
+            "stage": "unattributed",
+            "generation": 0,
+            "collections": 3,
+            "wall_seconds": 0.00042848894372582436,
+            "thread_cpu_seconds": 0.0004267860000000007,
+            "collected": 361,
+            "uncollectable": 0
+          },
+          {
+            "thread": 126434052261696,
+            "stage": "source.parse_project",
+            "generation": 0,
+            "collections": 174,
+            "wall_seconds": 0.013103239936754107,
+            "thread_cpu_seconds": 0.012937395999997825,
+            "collected": 265,
+            "uncollectable": 0
+          },
+          {
+            "thread": 126434052261696,
+            "stage": "source.parse_project",
+            "generation": 1,
+            "collections": 16,
+            "wall_seconds": 0.016009041108191013,
+            "thread_cpu_seconds": 0.015587274000000817,
+            "collected": 0,
+            "uncollectable": 0
+          },
+          {
+            "thread": 126434052261696,
+            "stage": "source.parse_project",
+            "generation": 2,
+            "collections": 2,
+            "wall_seconds": 0.1471306902822107,
+            "thread_cpu_seconds": 0.14668968899999868,
+            "collected": 0,
+            "uncollectable": 0
+          },
+          {
+            "thread": 126434052261696,
+            "stage": "translation.units",
+            "generation": 0,
+            "collections": 1107,
+            "wall_seconds": 0.09007602836936712,
+            "thread_cpu_seconds": 0.08955238600001669,
+            "collected": 752276,
+            "uncollectable": 0
+          },
+          {
+            "thread": 126434052261696,
+            "stage": "translation.units",
+            "generation": 1,
+            "collections": 101,
+            "wall_seconds": 0.023852791637182236,
+            "thread_cpu_seconds": 0.023747344000003223,
+            "collected": 74767,
+            "uncollectable": 0
+          },
+          {
+            "thread": 126434052261696,
+            "stage": "translation.units",
+            "generation": 2,
+            "collections": 4,
+            "wall_seconds": 0.34475106676109135,
+            "thread_cpu_seconds": 0.3437455050000007,
+            "collected": 3228,
+            "uncollectable": 0
+          },
+          {
+            "thread": 126434052261696,
+            "stage": "live.build",
+            "generation": 0,
+            "collections": 40,
+            "wall_seconds": 0.0010935352183878422,
+            "thread_cpu_seconds": 0.0010843739999981672,
+            "collected": 1231,
+            "uncollectable": 0
+          },
+          {
+            "thread": 126434052261696,
+            "stage": "live.build",
+            "generation": 1,
+            "collections": 3,
+            "wall_seconds": 0.0008004449773579836,
+            "thread_cpu_seconds": 0.000801728999998863,
+            "collected": 51,
+            "uncollectable": 0
+          },
+          {
+            "thread": 126434052261696,
+            "stage": "preview.render",
+            "generation": 0,
+            "collections": 40,
+            "wall_seconds": 0.0026564577128738165,
+            "thread_cpu_seconds": 0.0026236969999955395,
+            "collected": 39,
+            "uncollectable": 0
+          },
+          {
+            "thread": 126434052261696,
+            "stage": "preview.render",
+            "generation": 1,
+            "collections": 4,
+            "wall_seconds": 0.00240086717531085,
+            "thread_cpu_seconds": 0.002400247999998939,
+            "collected": 84,
+            "uncollectable": 0
+          },
+          {
+            "thread": 126434052261696,
+            "stage": "annotations.build",
+            "generation": 0,
+            "collections": 426,
+            "wall_seconds": 0.045118957525119185,
+            "thread_cpu_seconds": 0.04146757700000592,
+            "collected": 122804,
+            "uncollectable": 0
+          },
+          {
+            "thread": 126434052261696,
+            "stage": "annotations.build",
+            "generation": 1,
+            "collections": 39,
+            "wall_seconds": 0.024691926315426826,
+            "thread_cpu_seconds": 0.024685564000002547,
+            "collected": 16312,
+            "uncollectable": 0
+          },
+          {
+            "thread": 126434052261696,
+            "stage": "annotations.build",
+            "generation": 2,
+            "collections": 2,
+            "wall_seconds": 0.20631285291165113,
+            "thread_cpu_seconds": 0.20577571799999994,
+            "collected": 1359,
+            "uncollectable": 0
+          },
+          {
+            "thread": 126434052261696,
+            "stage": "reading.build",
+            "generation": 0,
+            "collections": 78,
+            "wall_seconds": 0.0028114612214267254,
+            "thread_cpu_seconds": 0.0016939399999991167,
+            "collected": 0,
+            "uncollectable": 0
+          },
+          {
+            "thread": 126434052261696,
+            "stage": "reading.build",
+            "generation": 1,
+            "collections": 6,
+            "wall_seconds": 0.002378255594521761,
+            "thread_cpu_seconds": 0.0023635180000027844,
+            "collected": 0,
+            "uncollectable": 0
+          },
+          {
+            "thread": 126434052261696,
+            "stage": "manifest.decode",
+            "generation": 0,
+            "collections": 133,
+            "wall_seconds": 0.003532163565978408,
+            "thread_cpu_seconds": 0.0035014920000051575,
+            "collected": 0,
+            "uncollectable": 0
+          },
+          {
+            "thread": 126434052261696,
+            "stage": "manifest.decode",
+            "generation": 1,
+            "collections": 12,
+            "wall_seconds": 0.005478118546307087,
+            "thread_cpu_seconds": 0.005363432999996753,
+            "collected": 0,
+            "uncollectable": 0
+          },
+          {
+            "thread": 126434052261696,
+            "stage": "manifest.decode",
+            "generation": 2,
+            "collections": 2,
+            "wall_seconds": 0.2344561971258372,
+            "thread_cpu_seconds": 0.23388213100000144,
+            "collected": 135,
+            "uncollectable": 0
+          },
+          {
+            "thread": 126434052261696,
+            "stage": null,
+            "generation": 0,
+            "collections": 74,
+            "wall_seconds": 0.002476537600159645,
+            "thread_cpu_seconds": 0.00247033100000138,
+            "collected": 33,
+            "uncollectable": 0
+          },
+          {
+            "thread": 126434052261696,
+            "stage": null,
+            "generation": 1,
+            "collections": 7,
+            "wall_seconds": 0.005574030103161931,
+            "thread_cpu_seconds": 0.005578513999999757,
+            "collected": 0,
+            "uncollectable": 0
+          },
+          {
+            "thread": 126433619859136,
+            "stage": "manifest.decode",
+            "generation": 0,
+            "collections": 314,
+            "wall_seconds": 0.008476165356114507,
+            "thread_cpu_seconds": 0.008339565999999729,
+            "collected": 76,
+            "uncollectable": 0
+          },
+          {
+            "thread": 126433619859136,
+            "stage": "manifest.decode",
+            "generation": 1,
+            "collections": 29,
+            "wall_seconds": 0.016071121906861663,
+            "thread_cpu_seconds": 0.016083314000000015,
+            "collected": 86,
+            "uncollectable": 0
+          },
+          {
+            "thread": 126433619859136,
+            "stage": "manifest.decode",
+            "generation": 2,
+            "collections": 3,
+            "wall_seconds": 0.30863480526022613,
+            "thread_cpu_seconds": 0.30795423499999997,
+            "collected": 42,
+            "uncollectable": 0
+          },
+          {
+            "thread": 126433628251840,
+            "stage": "manifest.decode",
+            "generation": 0,
+            "collections": 224,
+            "wall_seconds": 0.006103051360696554,
+            "thread_cpu_seconds": 0.005985673000000101,
+            "collected": 344,
+            "uncollectable": 0
+          },
+          {
+            "thread": 126433628251840,
+            "stage": "manifest.decode",
+            "generation": 1,
+            "collections": 20,
+            "wall_seconds": 0.011679823976010084,
+            "thread_cpu_seconds": 0.011600205000000002,
+            "collected": 0,
+            "uncollectable": 0
+          },
+          {
+            "thread": 126433628251840,
+            "stage": "manifest.load",
+            "generation": 0,
+            "collections": 1,
+            "wall_seconds": 4.351092502474785e-05,
+            "thread_cpu_seconds": 4.357300000000508e-05,
+            "collected": 0,
+            "uncollectable": 0
+          },
+          {
+            "thread": 126433628251840,
+            "stage": "manifest.decode",
+            "generation": 2,
+            "collections": 1,
+            "wall_seconds": 0.1037259220611304,
+            "thread_cpu_seconds": 0.10219259100000001,
+            "collected": 0,
+            "uncollectable": 0
+          },
+          {
+            "thread": 126433636644544,
+            "stage": "unattributed",
+            "generation": 0,
+            "collections": 1,
+            "wall_seconds": 6.911484524607658e-05,
+            "thread_cpu_seconds": 6.788599999999964e-05,
+            "collected": 0,
+            "uncollectable": 0
+          },
+          {
+            "thread": 126433619859136,
+            "stage": null,
+            "generation": 0,
+            "collections": 1,
+            "wall_seconds": 0.00012580701150000095,
+            "thread_cpu_seconds": 0.00012511800000000045,
+            "collected": 0,
+            "uncollectable": 0
+          },
+          {
+            "thread": 126434052261696,
+            "stage": "snapshot.capture",
+            "generation": 0,
+            "collections": 1,
+            "wall_seconds": 0.00032373308204114437,
+            "thread_cpu_seconds": 0.00032234799999919517,
+            "collected": 31,
+            "uncollectable": 0
+          }
+        ],
+        "final_peak_rss_kib": 243648
+      },
+      {
+        "event": "gc_summary",
+        "pid": 1296749,
+        "thread": 134057759061824,
+        "actor": "local_service.py",
+        "at": 1999364.408271205,
+        "rows": [
+          {
+            "thread": 134057759061824,
+            "stage": "unattributed",
+            "generation": 0,
+            "collections": 3,
+            "wall_seconds": 0.0003416102845221758,
+            "thread_cpu_seconds": 0.0003389360000000674,
+            "collected": 179,
+            "uncollectable": 0
+          },
+          {
+            "thread": 134057759061824,
+            "stage": "unattributed",
+            "generation": 1,
+            "collections": 1,
+            "wall_seconds": 0.0010639559477567673,
+            "thread_cpu_seconds": 0.0010644750000000092,
+            "collected": 175,
+            "uncollectable": 0
+          },
+          {
+            "thread": 134057718154944,
+            "stage": "unattributed",
+            "generation": 0,
+            "collections": 3,
+            "wall_seconds": 0.0005054168868809938,
+            "thread_cpu_seconds": 0.0005033440000000001,
+            "collected": 132,
+            "uncollectable": 0
+          },
+          {
+            "thread": 134057701369536,
+            "stage": "source.parse_project",
+            "generation": 0,
+            "collections": 174,
+            "wall_seconds": 0.01404741732403636,
+            "thread_cpu_seconds": 0.013681931000001243,
+            "collected": 521,
+            "uncollectable": 0
+          },
+          {
+            "thread": 134057701369536,
+            "stage": "source.parse_project",
+            "generation": 1,
+            "collections": 16,
+            "wall_seconds": 0.019256732426583767,
+            "thread_cpu_seconds": 0.019045289999999646,
+            "collected": 490,
+            "uncollectable": 0
+          },
+          {
+            "thread": 134057701369536,
+            "stage": "source.parse_project",
+            "generation": 2,
+            "collections": 2,
+            "wall_seconds": 0.09101021895185113,
+            "thread_cpu_seconds": 0.09082040300000002,
+            "collected": 153,
+            "uncollectable": 0
+          },
+          {
+            "thread": 134057701369536,
+            "stage": "engine.evaluate",
+            "generation": 0,
+            "collections": 1,
+            "wall_seconds": 0.00033494015224277973,
+            "thread_cpu_seconds": 0.0003358679999999614,
+            "collected": 149,
+            "uncollectable": 0
+          },
+          {
+            "thread": 134057701369536,
+            "stage": "snapshot.identity",
+            "generation": 0,
+            "collections": 3,
+            "wall_seconds": 0.0010370309464633465,
+            "thread_cpu_seconds": 0.0010345280000001456,
+            "collected": 195,
+            "uncollectable": 0
+          },
+          {
+            "thread": 134057718154944,
+            "stage": "coordinator._fresh",
+            "generation": 0,
+            "collections": 2,
+            "wall_seconds": 0.0007372219115495682,
+            "thread_cpu_seconds": 0.0007350789999999927,
+            "collected": 949,
+            "uncollectable": 0
+          },
+          {
+            "thread": 134057701369536,
+            "stage": "snapshot.capture",
+            "generation": 0,
+            "collections": 2,
+            "wall_seconds": 0.0012723237741738558,
+            "thread_cpu_seconds": 0.0012500869999998443,
+            "collected": 93,
+            "uncollectable": 0
+          }
+        ],
+        "final_peak_rss_kib": 119468
+      },
+      {
+        "event": "gc_summary",
+        "pid": 1296738,
+        "thread": 124212176078656,
+        "actor": "benchmark_saved_checks.py",
+        "at": 1999364.572770893,
+        "rows": [
+          {
+            "thread": 124212176078656,
+            "stage": "unattributed",
+            "generation": 0,
+            "collections": 10,
+            "wall_seconds": 0.0017547630704939365,
+            "thread_cpu_seconds": 0.0017441820000000385,
+            "collected": 5243,
+            "uncollectable": 0
+          },
+          {
+            "thread": 124212176078656,
+            "stage": "unattributed",
+            "generation": 1,
+            "collections": 1,
+            "wall_seconds": 0.001462344080209732,
+            "thread_cpu_seconds": 0.0014624179999999654,
+            "collected": 240,
+            "uncollectable": 0
+          }
+        ],
+        "final_peak_rss_kib": 144076
+      }
+    ],
+    "prose": [
+      {
+        "event": "gc_summary",
+        "pid": 1297900,
+        "thread": 135526166062912,
+        "actor": "local_worker.py",
+        "at": 1999459.243265816,
+        "rows": [
+          {
+            "thread": 135526166062912,
+            "stage": "unattributed",
+            "generation": 0,
+            "collections": 3,
+            "wall_seconds": 0.00030316784977912903,
+            "thread_cpu_seconds": 0.0003011729999999324,
+            "collected": 9,
+            "uncollectable": 0
+          },
+          {
+            "thread": 135526166062912,
+            "stage": "unattributed",
+            "generation": 1,
+            "collections": 1,
+            "wall_seconds": 0.001215863972902298,
+            "thread_cpu_seconds": 0.0012161199999999872,
+            "collected": 338,
+            "uncollectable": 0
+          },
+          {
+            "thread": 135526108624576,
+            "stage": "unattributed",
+            "generation": 0,
+            "collections": 3,
+            "wall_seconds": 0.00045305490493774414,
+            "thread_cpu_seconds": 0.0004510909999999997,
+            "collected": 361,
+            "uncollectable": 0
+          },
+          {
+            "thread": 135526166062912,
+            "stage": "source.parse_project",
+            "generation": 0,
+            "collections": 175,
+            "wall_seconds": 0.016355190193280578,
+            "thread_cpu_seconds": 0.012921261000000517,
+            "collected": 265,
+            "uncollectable": 0
+          },
+          {
+            "thread": 135526166062912,
+            "stage": "source.parse_project",
+            "generation": 1,
+            "collections": 16,
+            "wall_seconds": 0.014836220303550363,
+            "thread_cpu_seconds": 0.014720936999999934,
+            "collected": 0,
+            "uncollectable": 0
+          },
+          {
+            "thread": 135526166062912,
+            "stage": "source.parse_project",
+            "generation": 2,
+            "collections": 2,
+            "wall_seconds": 0.2007661482784897,
+            "thread_cpu_seconds": 0.14668928100000156,
+            "collected": 0,
+            "uncollectable": 0
+          },
+          {
+            "thread": 135526166062912,
+            "stage": "translation.units",
+            "generation": 0,
+            "collections": 1107,
+            "wall_seconds": 0.10510592092759907,
+            "thread_cpu_seconds": 0.09350146099999423,
+            "collected": 752628,
+            "uncollectable": 0
+          },
+          {
+            "thread": 135526166062912,
+            "stage": "translation.units",
+            "generation": 1,
+            "collections": 101,
+            "wall_seconds": 0.026860773330554366,
+            "thread_cpu_seconds": 0.025057036000003086,
+            "collected": 75502,
+            "uncollectable": 0
+          },
+          {
+            "thread": 135526166062912,
+            "stage": "translation.units",
+            "generation": 2,
+            "collections": 3,
+            "wall_seconds": 0.2616175527218729,
+            "thread_cpu_seconds": 0.2452319340000002,
+            "collected": 2436,
+            "uncollectable": 0
+          },
+          {
+            "thread": 135526166062912,
+            "stage": "live.build",
+            "generation": 0,
+            "collections": 38,
+            "wall_seconds": 0.001064190873876214,
+            "thread_cpu_seconds": 0.0010541409999991203,
+            "collected": 701,
+            "uncollectable": 0
+          },
+          {
+            "thread": 135526166062912,
+            "stage": "live.build",
+            "generation": 1,
+            "collections": 3,
+            "wall_seconds": 0.0009155850857496262,
+            "thread_cpu_seconds": 0.0009178180000000147,
+            "collected": 68,
+            "uncollectable": 0
+          },
+          {
+            "thread": 135526166062912,
+            "stage": "preview.render",
+            "generation": 0,
+            "collections": 39,
+            "wall_seconds": 0.002515222644433379,
+            "thread_cpu_seconds": 0.002487288999998505,
+            "collected": 39,
+            "uncollectable": 0
+          },
+          {
+            "thread": 135526166062912,
+            "stage": "preview.render",
+            "generation": 1,
+            "collections": 4,
+            "wall_seconds": 0.0022934318985790014,
+            "thread_cpu_seconds": 0.0022914639999993547,
+            "collected": 42,
+            "uncollectable": 0
+          },
+          {
+            "thread": 135526166062912,
+            "stage": "annotations.build",
+            "generation": 0,
+            "collections": 426,
+            "wall_seconds": 0.046853253385052085,
+            "thread_cpu_seconds": 0.04261812400000409,
+            "collected": 122862,
+            "uncollectable": 0
+          },
+          {
+            "thread": 135526166062912,
+            "stage": "annotations.build",
+            "generation": 1,
+            "collections": 39,
+            "wall_seconds": 0.025178221985697746,
+            "thread_cpu_seconds": 0.02512372699999954,
+            "collected": 16312,
+            "uncollectable": 0
+          },
+          {
+            "thread": 135526166062912,
+            "stage": "annotations.build",
+            "generation": 2,
+            "collections": 2,
+            "wall_seconds": 0.22669941536150873,
+            "thread_cpu_seconds": 0.22070107800000116,
+            "collected": 1359,
+            "uncollectable": 0
+          },
+          {
+            "thread": 135526166062912,
+            "stage": "reading.build",
+            "generation": 0,
+            "collections": 78,
+            "wall_seconds": 0.00206842552870512,
+            "thread_cpu_seconds": 0.001971947000002139,
+            "collected": 0,
+            "uncollectable": 0
+          },
+          {
+            "thread": 135526166062912,
+            "stage": "reading.build",
+            "generation": 1,
+            "collections": 6,
+            "wall_seconds": 0.0027336112689226866,
+            "thread_cpu_seconds": 0.0026358429999984168,
+            "collected": 0,
+            "uncollectable": 0
+          },
+          {
+            "thread": 135526166062912,
+            "stage": "manifest.decode",
+            "generation": 0,
+            "collections": 133,
+            "wall_seconds": 0.003477357793599367,
+            "thread_cpu_seconds": 0.003424362000005843,
+            "collected": 0,
+            "uncollectable": 0
+          },
+          {
+            "thread": 135526166062912,
+            "stage": "manifest.decode",
+            "generation": 1,
+            "collections": 13,
+            "wall_seconds": 0.0057511485647410154,
+            "thread_cpu_seconds": 0.005707250999998692,
+            "collected": 43,
+            "uncollectable": 0
+          },
+          {
+            "thread": 135526166062912,
+            "stage": "manifest.decode",
+            "generation": 2,
+            "collections": 1,
+            "wall_seconds": 0.10716149816289544,
+            "thread_cpu_seconds": 0.10668748999999966,
+            "collected": 93,
+            "uncollectable": 0
+          },
+          {
+            "thread": 135526166062912,
+            "stage": null,
+            "generation": 0,
+            "collections": 74,
+            "wall_seconds": 0.002957479562610388,
+            "thread_cpu_seconds": 0.0029410069999995514,
+            "collected": 33,
+            "uncollectable": 0
+          },
+          {
+            "thread": 135526166062912,
+            "stage": null,
+            "generation": 1,
+            "collections": 7,
+            "wall_seconds": 0.00622660992667079,
+            "thread_cpu_seconds": 0.006233417999998991,
+            "collected": 0,
+            "uncollectable": 0
+          },
+          {
+            "thread": 135525671364288,
+            "stage": "manifest.decode",
+            "generation": 0,
+            "collections": 135,
+            "wall_seconds": 0.004076238023117185,
+            "thread_cpu_seconds": 0.004035514999999948,
+            "collected": 33,
+            "uncollectable": 0
+          },
+          {
+            "thread": 135525671364288,
+            "stage": "manifest.decode",
+            "generation": 1,
+            "collections": 12,
+            "wall_seconds": 0.008040982065722346,
+            "thread_cpu_seconds": 0.008052368000000011,
+            "collected": 0,
+            "uncollectable": 0
+          },
+          {
+            "thread": 135525671364288,
+            "stage": "manifest.decode",
+            "generation": 2,
+            "collections": 2,
+            "wall_seconds": 0.23613093490712345,
+            "thread_cpu_seconds": 0.23362381200000004,
+            "collected": 0,
+            "uncollectable": 0
+          },
+          {
+            "thread": 135525679756992,
+            "stage": "manifest.decode",
+            "generation": 0,
+            "collections": 403,
+            "wall_seconds": 0.012631740886718035,
+            "thread_cpu_seconds": 0.011832674000000029,
+            "collected": 301,
+            "uncollectable": 0
+          },
+          {
+            "thread": 135525679756992,
+            "stage": "manifest.decode",
+            "generation": 1,
+            "collections": 37,
+            "wall_seconds": 0.022980043664574623,
+            "thread_cpu_seconds": 0.022965912999999998,
+            "collected": 43,
+            "uncollectable": 0
+          },
+          {
+            "thread": 135525679756992,
+            "stage": "manifest.decode",
+            "generation": 2,
+            "collections": 3,
+            "wall_seconds": 0.3004404210951179,
+            "thread_cpu_seconds": 0.298845028,
+            "collected": 212,
+            "uncollectable": 0
+          },
+          {
+            "thread": 135526166062912,
+            "stage": "snapshot.capture",
+            "generation": 0,
+            "collections": 2,
+            "wall_seconds": 0.0007636991795152426,
+            "thread_cpu_seconds": 0.0007517479999998855,
+            "collected": 62,
+            "uncollectable": 0
+          },
+          {
+            "thread": 135525671364288,
+            "stage": "unattributed",
+            "generation": 0,
+            "collections": 1,
+            "wall_seconds": 8.852710016071796e-05,
+            "thread_cpu_seconds": 8.8029e-05,
+            "collected": 0,
+            "uncollectable": 0
+          },
+          {
+            "thread": 135525679756992,
+            "stage": null,
+            "generation": 0,
+            "collections": 4,
+            "wall_seconds": 0.0004343157634139061,
+            "thread_cpu_seconds": 0.00043175200000001787,
+            "collected": 715,
+            "uncollectable": 0
+          },
+          {
+            "thread": 135526166062912,
+            "stage": "live.build",
+            "generation": 2,
+            "collections": 1,
+            "wall_seconds": 0.12052783998660743,
+            "thread_cpu_seconds": 0.12043516200000148,
+            "collected": 501,
+            "uncollectable": 0
+          }
+        ],
+        "final_peak_rss_kib": 241600
+      },
+      {
+        "event": "gc_summary",
+        "pid": 1297866,
+        "thread": 132031962851136,
+        "actor": "local_service.py",
+        "at": 1999459.560104353,
+        "rows": [
+          {
+            "thread": 132031962851136,
+            "stage": "unattributed",
+            "generation": 0,
+            "collections": 3,
+            "wall_seconds": 0.0003447351045906544,
+            "thread_cpu_seconds": 0.0003428680000000517,
+            "collected": 179,
+            "uncollectable": 0
+          },
+          {
+            "thread": 132031962851136,
+            "stage": "unattributed",
+            "generation": 1,
+            "collections": 1,
+            "wall_seconds": 0.0010647850576788187,
+            "thread_cpu_seconds": 0.00106516299999998,
+            "collected": 175,
+            "uncollectable": 0
+          },
+          {
+            "thread": 132031922104000,
+            "stage": "unattributed",
+            "generation": 0,
+            "collections": 3,
+            "wall_seconds": 0.0004718909040093422,
+            "thread_cpu_seconds": 0.00046924099999999985,
+            "collected": 132,
+            "uncollectable": 0
+          },
+          {
+            "thread": 132031905318592,
+            "stage": "source.parse_project",
+            "generation": 0,
+            "collections": 174,
+            "wall_seconds": 0.025240466697141528,
+            "thread_cpu_seconds": 0.014545918999999019,
+            "collected": 521,
+            "uncollectable": 0
+          },
+          {
+            "thread": 132031905318592,
+            "stage": "source.parse_project",
+            "generation": 1,
+            "collections": 16,
+            "wall_seconds": 0.027114094235002995,
+            "thread_cpu_seconds": 0.021109232999999908,
+            "collected": 643,
+            "uncollectable": 0
+          },
+          {
+            "thread": 132031905318592,
+            "stage": "source.parse_project",
+            "generation": 2,
+            "collections": 2,
+            "wall_seconds": 0.09597439900971949,
+            "thread_cpu_seconds": 0.09560476299999993,
+            "collected": 153,
+            "uncollectable": 0
+          },
+          {
+            "thread": 132031905318592,
+            "stage": "engine.evaluate",
+            "generation": 0,
+            "collections": 1,
+            "wall_seconds": 0.00023076706565916538,
+            "thread_cpu_seconds": 0.0002292980000000444,
+            "collected": 149,
+            "uncollectable": 0
+          },
+          {
+            "thread": 132031905318592,
+            "stage": "snapshot.identity",
+            "generation": 0,
+            "collections": 3,
+            "wall_seconds": 0.0012962149921804667,
+            "thread_cpu_seconds": 0.0012946839999999904,
+            "collected": 313,
+            "uncollectable": 0
+          },
+          {
+            "thread": 132031922104000,
+            "stage": "coordinator._fresh",
+            "generation": 0,
+            "collections": 2,
+            "wall_seconds": 0.0007900020573288202,
+            "thread_cpu_seconds": 0.0007892269999999965,
+            "collected": 949,
+            "uncollectable": 0
+          },
+          {
+            "thread": 132031905318592,
+            "stage": "snapshot.capture",
+            "generation": 0,
+            "collections": 1,
+            "wall_seconds": 0.0007387199439108372,
+            "thread_cpu_seconds": 0.0007390429999998283,
+            "collected": 62,
+            "uncollectable": 0
+          }
+        ],
+        "final_peak_rss_kib": 118048
+      },
+      {
+        "event": "gc_summary",
+        "pid": 1297826,
+        "thread": 128235656202048,
+        "actor": "benchmark_saved_checks.py",
+        "at": 1999459.742932334,
+        "rows": [
+          {
+            "thread": 128235656202048,
+            "stage": "unattributed",
+            "generation": 0,
+            "collections": 100,
+            "wall_seconds": 0.004345661029219627,
+            "thread_cpu_seconds": 0.004315912000001199,
+            "collected": 5845,
+            "uncollectable": 0
+          },
+          {
+            "thread": 128235656202048,
+            "stage": "unattributed",
+            "generation": 1,
+            "collections": 9,
+            "wall_seconds": 0.005045346217229962,
+            "thread_cpu_seconds": 0.004998287000000046,
+            "collected": 534,
+            "uncollectable": 0
+          },
+          {
+            "thread": 128235656202048,
+            "stage": "unattributed",
+            "generation": 2,
+            "collections": 1,
+            "wall_seconds": 0.036196449073031545,
+            "thread_cpu_seconds": 0.036198606999999994,
+            "collected": 0,
+            "uncollectable": 0
+          }
+        ],
+        "final_peak_rss_kib": 144040
+      }
+    ]
+  }
+}

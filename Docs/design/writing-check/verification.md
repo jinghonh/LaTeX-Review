@@ -1,12 +1,27 @@
 # 写作检查技术证据台账
 
-## 最新应用检查点：466a321（完整性能仍待验收）
+## 最新固定应用：b742583（联合相关验证通过；完整回归和 N10 待收集）
 
-固定应用源码为 `466a3213230dc59fc6405871eeb3a84c47a2d5bd`，见[新复验说明](<checkpoint-466a321.md>)。本次 exact-byte 纯结构验证回执和相同发布阶段的序列化字节验证，相关 **273 passed / 46.42s / 0 skipped，18 模块**；独立审阅及真实 Unicode/公式写入字节、HTML metadata 等价、原函数 AST、非标准解析/谓词回退、源/页面/批注写入及生命周期均已核对。仍每次读实际字节/hash、新解析完整嵌套 JSON，不缓存当前权限、来源事实或可变对象。没有提早通知、改动 800ms 默认静默期限或 0.5s 观察参数。120 文件新聚合 `de00f087600364452c93faee440e9ece9435fb19b99c1d3fd91799e6877d560b`；此前 7744314 的完整通过数不自动归给这个新版本，新完整回归及 N10 尚待执行，未宣称性能通过或整项交付 ready。
+固定应用 `b742583254a69dd7103be07b4e5f110f3c4c2c5e`，[复验说明](<checkpoint-b742583.md>)；120 文件聚合 `818b02326ecffdf402ac0387541de6ad921e1a051daad0f0e9a9d26ca3994a8e`。正文路径按需导入、原生字符串等价空白比较，仅两个生产模块局部优化；无新缓存、接口、版本、timer 或来源/权限/当前状态捷径，完整渲染及字节等价已核对。联合 **440 passed / 2 report-only skipped / 92.08s，18 模块**，独立审阅无已知发现；不把旧版本完整通过数或微基准当新保存 p95。
+
+手动 header 夹具只隔离自动任务，状态文件暂缺只于原 8s deadline 内重试；后者经实际晋升/写状态确定性交错证明，格式/字段错误不吞掉。较早探索的 349 passed / 1 failed 原状态轮询结果保留在调查记录，不以重跑绿色声称产品因果修复。standalone 原 9743.559px 托管失败原因仍待新 trace；失败诊断不改原等待/Range/<3px。产品 JS/CSS 与输出 HTML 未变，既有实际 Before/After 比较不失效。
+
+新应用完整 Linux/macOS、原边界两组 N10 和托管 CI 尚待执行/收集；**不是整项 ready 或 ≤2s 通过**。继续实施，不等待重复确认；论文/明确授权模型质量资源仍仅影响对应验收。
+
+## 前一应用：466a321 / d2fc739（测量已完成，保存性能与托管回归未通过）
+
+固定应用源码为 `466a3213230dc59fc6405871eeb3a84c47a2d5bd`，见[新复验说明](<checkpoint-466a321.md>)。本次 exact-byte 纯结构验证回执和相同发布阶段的序列化字节验证，相关 **273 passed / 46.42s / 0 skipped，18 模块**；独立审阅及真实 Unicode/公式写入字节、HTML metadata 等价、原函数 AST、非标准解析/谓词回退、源/页面/批注写入及生命周期均已核对。仍每次读实际字节/hash、新解析完整嵌套 JSON，不缓存当前权限、来源事实或可变对象。没有提早通知、改动 800ms 默认静默期限或 0.5s 观察参数。120 文件新聚合 `de00f087600364452c93faee440e9ece9435fb19b99c1d3fd91799e6877d560b`；当前已推送测量 HEAD 为 `d2fc739b819e5c4bd8079db992b7edbe4cbcf4e2`，已核对与该应用 pin 的 app/helper 无差异。此前 7744314 的通过数不自动归给新版本；本轮完整物理 Mac 回归与各平台 N=10 现已完成，但托管有真实失败、全部保存 p95 仍超标，不宣称 ready。
+
+- 请求人[本轮公开反馈](<https://github.com/jinghonh/LaTeX-Review/issues/55#issuecomment-6653186690>)（HUMAN-REPORTED）：实际物理应用 `466a321`，macOS 27.2 arm64 / Python 3.11.14 / Playwright 1.64.1 / Chromium156；完整 **1420 passed / 2 report-only skipped / 0 failed / 1422 total**，verify exit 0 / 695.610144138s，CLI/core 门槛通过。comment/prose N=10 median **1.9407115414796863 / 1.963177708501462s**，p95 **2.02685012499569 / 2.019279333006125s**，都严格 FAIL ≤2s，不舍入成绿；最大值在第 2 / 6 次，第一样本也保留。父代理独立核对 11 份私下产物/JUnit/原始证明；本代理只读公开反馈，未读、复制或链接私下文件/路径/hash 清单。物理复验及相应注意力请求已履行，不等待重复确认。
+- 同源托管 [push 41989929700](<https://github.com/jinghonh/LaTeX-Review/actions/runs/41989929700>) **1397 passed / 24 skipped / 1 failed，544.06s**：entry proxy 在 202、冻结 headers、真实 proxy/content ID 通过后，20s 等待 manual run 成为 completed/partial current 超时。[PR 41989935454](<https://github.com/jinghonh/LaTeX-Review/actions/runs/41989935454>) **1397 passed / 24 skipped / 1 failed，772.47s**：standalone resize 字符误差 **9743.559203655352px vs <3px**。两次 verify 与 saved_current 均 failure，不是“只有性能门禁失败”；物理全套中两例通过不证明托管原因、flake 或可豁免。
+- 针对 manual-ID 测试，受控真实 UI/proxy 证据支持同 content ID 自动 B 替换 A 的机制，后续仅[夹具显式 on_save=false](<../../../tests/test_check_entry_proxy.py#L17-L45>)隔离手动任务，保留 20s/精确 headers/ID 断言，相关 **26 passed / 15.02s**；不声称证明原 CI 精确排序或已有新完整 CI 绿灯。standalone 仅有一次 Linux Chromium155 有界探测（非 CI156），原三次 150ms 误差 0.1394/0.3763/0.5656px，观察 paper→window→paper 根转换，未证明托管原因。[新增失败后诊断](<../../../tests/test_reading_position.py#L103-L137>)不改等待/Range/<3px，通过路径无额外 RPC；**4 passed / 2 skipped / 16.94s** 不销项旧 9743px 失败，新 CI trace 仍待收集。产品 JS/CSS 未改，无新生产 UI 修复或截图验收声明。
+- 最新同源 Linux N=10：comment median **4.087779192952439s** / p95 **4.7473551540169865s**；prose median **4.002629752038047s** / p95 **4.444787323009223s**，均 FAIL ≤2s，最大在第 4 / 5 次、首样本保留。托管四组 comment/prose p95 为 push **5.278743875 / 3.358164417s**、PR **4.710165584 / 3.480522750s**，也全部失败。六组公开 JSON 均 10/10 权威/非 stale、120 文件起止 de00… 一致/source changes 空、拥有的服务 4 项清理成功；全部 prose 真实发布改词/5000 units、证明成本含在 timer 中。详细公开数据见[466 基线](<evidence/macos-466a321-baseline.md>)及[完整保存记录](<evidence/saved-check-latency.md>)。
+- [light7b 分析](<evidence/linux-saved-pipeline-light7b-analysis.json#L1-L20>)为 receipt 真实链路 2+2 保存诊断，不是 p95；GC 触发阶段不等于分配来源，嵌套 CPU/GC 不求和，ru_maxrss 为累计峰值而非 live heap/leak。首次外部 observer 尝试的 1 个权威保存、RuntimeError、原 180s 超时及清理原件均保留，不认定为已证明产品缺陷。修正后来源/权威/清理与 prose 证明通过，不以插桩时间替代 N=10。
+- **23 项自动化支撑 / AC-14 部分支撑**维持。后续 import-laziness/whitespace 已形成上列 b742583 局部检查点，其新 N=10 仍待重测，不挪用旧通过数；没有新增 cache/protocol、timer、0.5s 或默认 800ms 改动声明。继续可行性能与有证据回归修复，真实论文/少量明确获准模型调用/作者质量独立待资源，不再以本轮 Mac 注意力或私有资源暂停工作。
 
 ## 前一轮：7744314 / 6310822 完整复验结果（保存性能仍未达标）
 
-- 本轮固定应用源码为 `7744314e36634cdba55a306d9386b01107005336`，当前已推送 `63108221c0f1f691fa98197fb74868b2eff8cfb6` 是 docs-only 子提交，已核对 app/helper 无差异。[复验说明](<checkpoint-7744314.md>)保留完整 Git、默认 800ms 静默期限、0.5s 观察和包括首个保存的原计时边界。新 SourceMap 二分映射与原实现 oracle 等价；canonical 检查不依赖编译/未捕获 aux 标签，旧引擎/解析器结果不能继续授权当前写入，历史与知识保留。父代理报告 pin 前组合相关回归 **430 passed / 106.76s / 0 skipped**（含 SourceMap oracle 36、canonical projection 14），与下面完整回归重叠，不相加为唯一覆盖。
+- 该轮固定应用源码为 `7744314e36634cdba55a306d9386b01107005336`，当时已推送 `63108221c0f1f691fa98197fb74868b2eff8cfb6` 是 docs-only 子提交，已核对 app/helper 无差异。[复验说明](<checkpoint-7744314.md>)保留完整 Git、默认 800ms 静默期限、0.5s 观察和包括首个保存的原计时边界。新 SourceMap 二分映射与原实现 oracle 等价；canonical 检查不依赖编译/未捕获 aux 标签，旧引擎/解析器结果不能继续授权当前写入，历史与知识保留。父代理报告 pin 前组合相关回归 **430 passed / 106.76s / 0 skipped**（含 SourceMap oracle 36、canonical projection 14），与下面完整回归重叠，不相加为唯一覆盖。
 - `f563199` 的托管 macOS 功能回归两组均 **1276 passed / 24 skipped**，完整保存四组 N10 实际完成；comment/prose p95 为 push **3.349016/3.357771s**、PR **4.793702/3.767862s**，全部未达 ≤2s。源码边界、所有权威匹配、可见文本与清理核对通过。此前 F3 的 N=0 启动失败只是历史，不再代表当前已有样本数。
 - 请求人[公开的本机 Mac 复验](<https://github.com/jinghonh/LaTeX-Review/issues/55#issuecomment-6651636068>)固定 `f563199`，macOS 27.2 / Python 3.11.14：完整验证 **1298 passed / 2 report-only skipped / 0 failed，741.09s**；comment/prose N10 p95 **6.111938/35.028981s**，均未通过。私下八份产物 SHA-256、JUnit 1300 总数及两组全部身份/来源/清理/可见文本证明已复核；原始私下文件不复制进公开仓库。
 - 所有原始慢样本与旧 Linux/CI 数据分别保留，不跨平台拼接、删点或从总时长推断外部负载/单个内部阶段。其他本机用户负载未控制。详情见[macOS 基线记录](<evidence/macos-f563199-baseline.md>)与[完整保存台账](<evidence/saved-check-latency.md>)。
@@ -14,11 +29,11 @@
 - 请求人[公开的本轮物理 Mac 复验](<https://github.com/jinghonh/LaTeX-Review/issues/55#issuecomment-6652141178>)（HUMAN-REPORTED）固定 `7744314`、macOS 27.2 arm64 / Python 3.11.14：**1348 passed / 2 report-only skipped / 0 failed / 1350 total**，verify exit 0 / 790.507655859s。comment/prose N=10 median **1.95837414599 / 2.836784916988s**、p95 **2.053136207978241 / 5.056157624989282s**，均失败，不能把 2.053136 舍入成 ≤2。父代理独立复核十份私下产物 SHA/JUnit/原始证明；本代理只读公开反馈，不复制私下原始数据、hash 清单或私人路径。原 `7744314` Mac 复验请求已履行。
 - 同应用 Linux 两组 N=10 已完成：[comment](<evidence/linux-saved-performance-optimized6-comment.json#L1129-L1139>) median **4.3285965164s** / p95 **7.5897699429s**，[prose](<evidence/linux-saved-performance-optimized6-prose.json#L1256-L1266>) median **4.2752680921s** / p95 **5.301649058s**，全部 FAIL ≤2s。comment 首个最大；prose 第二个最大、首个 4.766394s 仍保留，未删点或推断 outlier 原因。
 - 六组公开 JSON 起止 120 文件 aggregate 同为 `42a8e701d215c4d937320986af55a1a987451083233d608b660a7775c1b92f31`，各 10/10 权威 current、来源不变、拥有的服务清理成功；每组 prose 10/10 真实发布文本变化/5000 units，证明成本含在计时内。全部新旧基线与物理 Mac 公开样本见[7744314 基线记录](<evidence/macos-7744314-baseline.md>)，不跨机器拼分布，不从 35.028981→5.056158s 推断单项优化因果收益。
-- 当前仍为 **23 项自动化支撑、AC-14 部分支撑**；本轮 macOS 完整功能与物理复验已完成，但保存性能全部未达标。其后 exact-byte structural-validation receipt 已形成上述 `466a321` 相关验证检查点，尚未完成新完整回归或性能测量，不归用本轮完整通过数/性能；真实论文/少量明确获准模型调用/作者质量仍独立待资源，不阻塞继续可行工作或要求重复同一 Mac 复验。下面保留先前逐项审计与历史测量，不将旧通过数归给新版本。
+- 当前仍为 **23 项自动化支撑、AC-14 部分支撑**；本轮 macOS 完整功能与物理复验已完成，但保存性能全部未达标。其后 exact-byte structural-validation receipt 形成上述 `466a321` 检查点，现已有独立完整复验/性能数据及未解决托管失败，不能归用本轮旧通过数/性能；真实论文/少量明确获准模型调用/作者质量仍独立待资源，不阻塞继续可行工作或要求重复同一 Mac 复验。下面保留先前逐项审计与历史测量，不将旧通过数归给新版本。
 
 ## 范围与结论边界（以下保留历史逐项审计）
 
-下文 F3/87f7404 的通过数、当时的 N=0 及待确认表述均绑定各自历史来源；当前 7744314/6310822 的完整复验与保存结果以上节和[新基线](<evidence/macos-7744314-baseline.md>)为准，不覆盖或重标旧 raw 数据。
+下文 F3/87f7404 的通过数、当时的 N=0 及待确认表述均绑定各自历史来源；当前 466a321/d2fc739 的完整复验、未解决托管失败与保存结果以上节和[466 基线](<evidence/macos-466a321-baseline.md>)为准；[774 旧基线](<evidence/macos-7744314-baseline.md>)仍单独保留，不覆盖或重标旧 raw 数据。
 
 本台账逐项核对[规格 AC-01–AC-24](<spec.md#L433-L456>)与**实际测试断言**，不以测试函数标题代替证明，也不将测试通过等同于作者验收。界面截图与人工阅读比较另见[验收记录](<acceptance.md>)，真实模型评估前置条件见[语义评估协议](<semantic-evaluation.md>)。本轮只补测试和文档，不改生产实现。
 
@@ -107,7 +122,7 @@ translation port 问题单独归因：父代理报告原基线定向复跑 2 次
 | AC-23 降级解析消失只能 unknown/stale | 自动化支撑 · A | [解析不完整后的比较](<../../../tests/test_check_rules.py#L78-L87>)原问题消失但 missing include 后 lifecycle=unknown，而非 resolved；[范围锚点消失](<../../../tests/test_check_knowledge_rules.py#L224-L235>)coverage incomplete，记录 scope_anchor_unavailable / stale_concept_knowledge；[无效角色](<../../../tests/test_check_knowledge_rules.py#L117-L129>)不冒充事实。 | 不完整不等于“已修好”；UI 的“没有展示 finding”不能独立作为 resolved 证据。 |
 | AC-24 审阅/转批注不是解决 | 自动化支撑 · A/C/D/O | [作者决定](<../../../tests/test_check_service.py#L383-L431>)不改 finding 的 origin/lifecycle；新增[真实转换持久化](<../../../tests/test_check_annotation.py#L50-L94>)在重载/重启/知识重检后复用一个批注、保留 current/unreviewed、源文件不变，只有实际修正文后完整重检才 resolved；[伪造/过期拒绝](<../../../tests/test_check_annotation.py#L97-L110>)不创建批注；[重复 include 锚定](<../../../tests/test_check_annotation.py#L132-L152>)保留实例；[浏览器转换](<../../../tests/test_check_annotation.py#L155-L195>)经真实 HTTP worker 与测试 dispatch 桥，两次显式转换只生成一个线程，worker 覆盖浏览器伪造输出目录，finding 仍 current。另有 `87f7404` [真实 entry 捕获](<evidence/paired-final-protocol.json#L44-L64>)与[两次转换原始观测](<evidence/after-final/measurements.json#L1431-L1470>)补 C/O 支撑：实际两次显式 POST 复用同一线程、权威当前结果仍 current/unreviewed。 | D 层测试本身替换了 entry RPC，不冒充真实 entry 全链路；新增 C/O 是单独固定合成捕获，不扩大该旧测试的测量边界。转批注不等于修复或作者接受语义判断，不把 reviewed/waived/converted 混同 resolved。 |
 
-汇总：**24 行均有已检查的相关证据，其中 23 行记为自动化支撑、1 行记为部分支撑**（AC-14）。AC-22 已因原生键盘、双视口、完整引文/无溢出及实际导航定向复跑通过升级；`87f7404` 配对浏览器捕获已完成，F3 固定源 Linux/macOS 的完整回归步骤已通过（保留跳过），旧 macOS PR 402px 失败未再复现。**这不是“24/24 已验收”，也不代表所有交付门槛或两个 macOS workflow 均通过**：当时 F3 macOS 为 N=0 启动失败；现在 7744314/6310822 的 Linux、托管与物理 Mac 均有完整 N=10，但全部 p95 仍超标，不能仍称“当前只有 N=0”。AC-14 的真实模型/作者质量结果及 [M4 少量真实调用门槛](<plan.md#L266-L272>)尚未完成；不因此阻塞可行实施、Linux/macOS 回归及性能优化，也不为 AC-22 另造 WCAG/人类辅助技术前置条件。
+汇总：**24 行均有已检查的相关证据，其中 23 行记为自动化支撑、1 行记为部分支撑**（AC-14）。AC-22 已因原生键盘、双视口、完整引文/无溢出及实际导航定向复跑通过升级；`87f7404` 配对浏览器捕获已完成，F3 固定源 Linux/macOS 的完整回归步骤已通过（保留跳过），旧 macOS PR 402px 失败未再复现。**这不是“24/24 已验收”，也不代表所有交付门槛或两个 macOS workflow 均通过**：当时 F3 macOS 为 N=0 启动失败；现在 466a321/d2fc739 的 Linux、托管与物理 Mac 均有完整 N=10，但全部 p95 仍超标，且两个托管 verify 有上述真实失败；不能仍称“当前只有 N=0”，也不能用物理全套成功豁免托管失败。AC-14 的真实模型/作者质量结果及 [M4 少量真实调用门槛](<plan.md#L266-L272>)尚未完成；不因此阻塞可行实施、Linux/macOS 回归及性能优化，也不为 AC-22 另造 WCAG/人类辅助技术前置条件。
 
 ## 性能与规模：已经测到什么
 
@@ -143,15 +158,15 @@ F3 macOS 两轮完整 regression/CLI/core 步骤 success，但后续 saved-curre
 
 父代理已提交 helper/CI 修正 `24cab90`：仅 benchmark 临时根 canonicalization、严格安全 allowlist 的脱敏/有界 stderr、owned-alias 回归，以及完整 verify / saved-current 独立 VM jobs，**生产 package 未改**。定向报告 **26 passed / 6.28s**：15 个 helper 用例（含实际 alias 下 10 units 的一次 prose 保存，仅正确性冒烟）加 11 个旧生命周期用例；不把小负载当 40 文件 / 5000 units 的性能证明。新 120 文件边界 aggregate 为 `9b6ac042d72f1111213495d55abf9b70d0e273e2d0c1ffa5ef39a023a0f1e20c`，与 F3 N=10 的 `f3044084…` 因 helper hash 不同，不覆盖历史 raw JSON，也不挪用 F3 全套计数为新 helper 提交的全套结果。
 
-该时点修正后的 macOS N=10 尚未收集，两个 F3 workflow 总状态是 failure；这些原始事实不重写。后续 f563199 与 7744314/6310822 的完整 N=10 已真实完成，原启动失败不再是当前 blocker；最新 workflow 失败仅因保存 p95 门禁，不能把旧缺 stderr 的根因推测倒填为确定结论，也不能用 core-only p95 抵消新保存失败。
+该时点修正后的 macOS N=10 尚未收集，两个 F3 workflow 总状态是 failure；这些原始事实不重写。后续 f563199 与 7744314/6310822 的完整 N=10 已真实完成，原启动失败不再是当前 blocker；774/631 当轮 workflow 仅保存 p95 失败；最新 466/d2fc739 还新增上述 verify 真实失败，不能混写。不能把旧缺 stderr 的根因推测倒填为确定结论，也不能用 core-only p95 抵消新保存失败。
 
 ## 尚未完成的验收与精确补测项
 
 1. **真实论文与作者判断**：未获得/执行私有真实论文人工验收；没有误报率、漏报率、作者确认率或审查耗时的可信结果。合成 fixture 与截图不得充当真实论文认可。
 2. **实际 provider/model / M4**：假 transport 验证了显式授权、预算预检、重试上限、候选状态和过期结果，但没有真实模型语义质量、实际计费/限流行为；[固定案例协议](<semantic-evaluation.md>)仍待授权执行。[原计划 M4 门槛](<plan.md#L272>)明确要求显式启用后少量真实调用；未执行前不得宣称真实接口或整个 M4 通过。AC-14 仍部分支撑，引文有效率不等于语义判断正确率。
-3. **macOS 与完整回归**：本机资源可用、无需 SSH；`7744314` 的请求人复验已完成 **1348 passed / 2 report-only skipped / 0 failed**，同源 docs-only `6310822` 托管两轮 verify 均 **1326 passed / 24 skipped**。当前没有 browser/history 缺失跳过，不再重复等待本轮物理 Mac 复验。F3 Linux 全套 **1269 passed / 19 skipped** 仍为历史源证据；本轮 pin 前 430 项组合选择不冒充 `7744314` 的 Linux 全仓库，新应用改变后须相应复验。
-4. **实际保存延迟 / M5**：最新 Linux comment/prose p95 **7.5897699429 / 5.301649058s**，托管 Mac push **3.599518708 / 3.720795292s**、PR **3.275192416 / 4.973879875s**，物理 Mac **2.053136207978241 / 5.056157624989282s**，每组均完整 N=10、全部 FAIL ≤2s。证明成本、首个/慢样本、默认 800ms 与 0.5s observer 均保留，不改 timer、不跨机器拼样本、不舍入成达标；完整功能通过不能替代保存性能。
-5. **剩余 AC 边界与 M0–M5 交付**：维持 **23 自动化支撑 / 1 部分支撑（AC-14）**；真实模型/作者质量与少量明确获准真实调用独立待资源，不新增 AT/WCAG 条件。历史配对捕获、各固定版本的已完成回归和完整保存数据均保留；当前 receipt 实现尚未验证/重测，下一验证后的固定 SHA 仍待父代理发布。不能称所有验收标准完成或 PR ready，也不能把已完成的本轮 Mac 功能/性能测量错列为未测。
+3. **macOS 与完整回归 / M0**：本轮物理 `466a321` 已 **1420 passed / 2 report-only skipped / 0 failed**，资源与注意力请求已履行，无需 SSH 或重复确认。托管 `d2fc739` push/PR 各 **1397 passed / 24 skipped / 1 failed**，必须保留 manual run-ID 超时与 standalone resize 9743px 失败；fixture-only 26 项通过及诊断-only 4 项通过不等于新托管全套通过，也不因物理全套通过称为 flake。F3 Linux 全套仍仅绑定历史源，273 项相关选择不冒充本轮 Linux 全仓库；新 pin 必须有相应证据。
+4. **实际保存延迟 / M5**：最新 Linux comment/prose p95 **4.7473551540169865 / 4.444787323009223s**，托管 push **5.278743875 / 3.358164417s**、PR **4.710165584 / 3.480522750s**，物理 Mac **2.02685012499569 / 2.019279333006125s**；全部完整 N=10、严格 FAIL ≤2s。证明成本、首个/慢样本、800ms 与 0.5s 保留，不舍入判绿、不从插桩 CPU/GC 或低机器耗时推断因果收益，不用功能/core-only 通过替代保存性能。
+5. **剩余 AC 边界与 M0–M5 交付**：维持 **23 自动化支撑 / 1 部分支撑（AC-14）**；真实论文/作者质量及少量明确获准真实调用独立待资源，不新增 AT/WCAG 条件。各旧基线保持不可变，当前简单 import-laziness/whitespace 实施尚未验证或 pinned N=10；下一验证后的固定 SHA 待父代理发布。继续可行工作，不再等待本轮 Mac attention；不能称 PR ready 或全部标准完成，也不将已完成物理复验错列为未测。
 
 私有真实论文、付费模型配置/预算及真实作者质量评价只影响对应资源性验收项，**不阻塞继续可行实现、性能优化、Linux/macOS 测试或最终界面复验**。
 
