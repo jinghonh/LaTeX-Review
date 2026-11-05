@@ -102,17 +102,54 @@ def test_bibliography_unreadable_or_malformed_no_missing_claim(tmp_path):
     assert 'refs.bib' in report['input']['files']
 
 
-def test_canonical_fixture_raw_rules_survive_preview_blindspots(tmp_path):
+@pytest.mark.parametrize('hide_tex_resolver', [False, True])
+def test_canonical_fixture_raw_rules_survive_preview_blindspots(tmp_path, monkeypatch, hide_tex_resolver):
     from pathlib import Path
     import shutil
+    import json
+    if hide_tex_resolver:
+        original = shutil.which
+        monkeypatch.setattr(shutil, 'which', lambda name: None if name == 'kpsewhich' else original(name))
     root = tmp_path / 'paper'
     shutil.copytree(Path(__file__).parent / 'fixtures' / 'writing_checks' / 'paper', root)
     snapshot = capture_snapshot('main.tex', root=root, include_title=True)
     report = evaluate_current(build_check_document(snapshot))
-    assert {f['rule_id'] for f in report['findings']} == {'bibliography_key_unresolved', 'unresolved_reference', 'figure_unreferenced', 'table_unreferenced'}
+    # Keep all four expected rules. Failure details deliberately contain only
+    # synthetic capture metadata, never source text, home config or providers.
+    actual = {f['rule_id'] for f in report['findings']}
+    details = {
+        'status': report['status'], 'rule_ids': sorted(actual),
+        'files': {name: len(raw) for name, raw in sorted(snapshot.files.items())},
+        'enabled_rules': sorted(report['input']['rules']),
+        'coverage': [{key: value for key, value in row.items() if key != 'blind_spots'} |
+                     {'blind_spots': [{key: spot.get(key) for key in ('code', 'file')} for spot in row['blind_spots']]}
+                     for row in report['coverage']],
+        'expansion_diagnostics': [{key: getattr(issue, key) for key in ('code', 'certainty', 'file')}
+                                  for issue in snapshot.parsed.expanded.diagnostics],
+        'parse_diagnostic_codes': [issue.code for issue in snapshot.parsed.diagnostics],
+    }
+    assert actual == {'bibliography_key_unresolved', 'unresolved_reference', 'figure_unreferenced', 'table_unreferenced'}, json.dumps(details, indent=2)
     assert all('verbatim-only' != f['target'] and 'comment-only' != f['target'] for f in report['findings'])
     assert any(c['rule_id'] == 'source_rendering' and c['blind_spots'] for c in report['coverage'])
     assert all(c['complete'] for c in report['coverage'] if c['rule_id'] in report['input']['rules'])
+    assert not any(issue.code == 'tex_style_unverified' for issue in snapshot.parsed.expanded.diagnostics)
+    assert 'fixture.bst' in snapshot.files
+
+
+def test_absent_fixture_style_without_tex_remains_conservative(tmp_path, monkeypatch):
+    from pathlib import Path
+    import shutil
+    root = tmp_path / 'paper'
+    shutil.copytree(Path(__file__).parent / 'fixtures' / 'writing_checks' / 'paper', root,
+                    ignore=shutil.ignore_patterns('fixture.bst'))
+    original = shutil.which
+    monkeypatch.setattr(shutil, 'which', lambda name: None if name == 'kpsewhich' else original(name))
+    snapshot = capture_snapshot('main.tex', root=root, include_title=True)
+    report = evaluate_current(build_check_document(snapshot))
+    assert any(issue.code == 'tex_style_unverified' for issue in snapshot.parsed.expanded.diagnostics)
+    assert report['status'] == 'partial' and report['findings'] == []
+    assert all(not row['complete'] and 'source_incomplete' in row['reasons']
+               for row in report['coverage'] if row['rule_id'] in report['input']['rules'])
 
 
 def test_current_figure_table_and_escaped_comments(tmp_path):

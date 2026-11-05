@@ -4,11 +4,14 @@ All text is synthetic and distributable. No private paper or production service 
 
 - [Main entry](<paper/main.tex>): abstract, body, methods, results, appendix and bibliography.
 - [Supplement](<paper/supplement.tex>): independent entry sharing a source dependency.
+- [Synthetic bibliography style](<paper/fixture.bst>): valid minimal article style, executable by BibTeX; no external `plain.bst` or `kpsewhich` is required for complete static checks.
 - [Repeated observation](<paper/shared/observation.tex>): included twice in the main entry; distinct include instances must survive mapping.
 - [UTF-8/CRLF source](<paper/shared/crlf.tex>): exactly two CRLF line endings, café/中文/🧪; retain bytes, not text-mode normalized newlines.
 - [External read-only profile](<read-only.toml>): register only against a temporary manuscript copy; real read-only permissions are not implied by the stored fixture.
 
 Intentional issues: missing bibliography key `missing2026`, missing cross-reference `sec:missing`, unreferenced labeled figure/table, inconsistent name `adaptive estimation method`, implementation identifier `fast_estimator`, and a scope-sensitive reuse of `$s$`. The latter three are **not** baseline deterministic findings without registered author knowledge. Verbatim/commented missing references are negative controls. The fixture has a simple tagged equation and a complex align expression; neither demonstrates arbitrary TeX or mathematical correctness.
+
+Portability revision after the frozen captures: the current paper tree has **10 files / 3,854 bytes**, with main-entry SHA-256 `794e5ec784dff7b10f723e6b28ea782f5687c3ac5bdf668d0fa7caa44c2e8d71`. It uses the included synthetic style instead of the externally supplied standard `plain` style. Existing Before/After artifacts retain their original 9-file inputs and immutable SHA maps; this revision does not retroactively change those measurements. New paired captures must use the same current fixture revision for both phases; do not compare a new fixture capture against an old one. The separately approved semantic-quality manuscript is unchanged.
 
 The reproducible capture harness [capture_reading.py](<../../../Docs/design/writing-check/evidence/capture_reading.py>) copies this tree outside the repository. For the old version it changes only `improves reproducibility` → `supports reproducibility` and removes ` and the unregistered source \\cite{missing2026}` from the introduction. The current/live copy is byte-identical to this fixture. Do not edit this scenario between Before and After; measurement metadata stores each file's SHA-256.
 

@@ -113,11 +113,11 @@ class ProjectEvents:
                     changes = watcher.watch(300, 100, 1000, self.stop)
                     if isinstance(changes, set):
                         paths = [path for _, path in changes if self.relevant(path)]
-                        if any(Path(os.path.abspath(path)) != self.root for path in paths):
-                            self._changed()
-                            previous = self.snapshot()
-                        elif paths:
-                            # macOS can aggregate excluded-child notices at the root.
+                        if paths:
+                            # Native batches may repeat or aggregate notices at
+                            # any directory, not just the root. Confirm changes
+                            # using the same metadata-only fence as the audit;
+                            # excluded output writes must not cause rebuilds.
                             current = self.snapshot()
                             if current != previous:
                                 self._changed()

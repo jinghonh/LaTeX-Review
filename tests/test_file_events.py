@@ -1,4 +1,5 @@
 from pathlib import Path
+import json
 import time
 
 import pytest
@@ -60,15 +61,47 @@ def test_idle_never_reads_contents_and_outputs_do_not_trigger(tmp_path, monkeypa
         pytest.fail('idle watcher read file contents')
     monkeypatch.setattr(Path, 'read_bytes', forbidden)
     monkeypatch.setattr(Path, 'read_text', forbidden)
+    # Capture bounded metadata-only backend evidence if a native platform
+    # reports an unexpected generation; never dump file contents or home paths.
+    notices = []
+    if not polling:
+        import watchfiles._rust_notify
+        original = watchfiles._rust_notify.RustNotify
+        class TracedNative:
+            def __init__(self, *args, **kwargs):
+                self.backend = original(*args, **kwargs)
+            def __enter__(self):
+                self.backend.__enter__()
+                return self
+            def __exit__(self, *args):
+                return self.backend.__exit__(*args)
+            def watch(self, *args, **kwargs):
+                changes = self.backend.watch(*args, **kwargs)
+                if isinstance(changes, set) and len(notices) < 20:
+                    batch = []
+                    for kind, path in sorted(changes)[:100]:
+                        resolved = Path(path).resolve()
+                        label = resolved.relative_to(tmp_path.resolve()).as_posix() if resolved.is_relative_to(tmp_path.resolve()) else '<outside-project>'
+                        batch.append({'kind': int(kind), 'path': label})
+                    notices.append({'total': len(changes), 'events': batch})
+                return changes
+        monkeypatch.setattr(watchfiles._rust_notify, 'RustNotify', TracedNative)
     with ProjectEvents(tmp_path, output, cache, force_polling=polling, audit_interval=0.2) as events:
         previous = events.generation
+        before = events.snapshot()
         (output / 'report.html').write_text('generated')
         (cache / 'translation.json').write_text('generated')
         hidden = tmp_path / '.latex-review'
         hidden.mkdir()
         (hidden / 'annotations.json').write_text('generated')
         time.sleep(1.5)
-        assert events.generation == previous
+        after = events.snapshot()
+        changed = {Path(name).relative_to(tmp_path.resolve()).as_posix() if name != 'extra_files' else name:
+                   {'before': before.get(name), 'after': after.get(name)}
+                   for name in before.keys() | after.keys() if before.get(name) != after.get(name)}
+        assert events.generation == previous, json.dumps({
+            'generation_before': previous, 'generation_after': events.generation,
+            'warning': events.warning, 'native_notices': notices, 'metadata_changes': changed}, indent=2)
 
 
 def test_events_preserve_saves_during_build_and_symlink_target(tmp_path):
@@ -176,17 +209,19 @@ def test_metadata_audit_recovers_an_undelivered_event(tmp_path, monkeypatch):
         assert not events.warning
 
 
-def test_root_only_native_notice_distinguishes_output_and_source(tmp_path, monkeypatch):
+@pytest.mark.parametrize('notice_path', ['.', 'main.tex', 'chapters'])
+def test_aggregated_native_notice_distinguishes_output_and_source(tmp_path, monkeypatch, notice_path):
     import watchfiles._rust_notify
     output=tmp_path/'output';output.mkdir()
     cache=tmp_path/'cache';cache.mkdir()
     entry=tmp_path/'main.tex';entry.write_text('original')
+    (tmp_path / 'chapters').mkdir()
     class RootNotice:
         def __init__(self,*args): pass
         def __enter__(self): return self
         def __exit__(self,*args): pass
         def watch(self,debounce,step,timeout,stop):
-            return set() if stop.wait(.05) else {(2,str(tmp_path.resolve()))}
+            return set() if stop.wait(.05) else {(2,str((tmp_path / notice_path).resolve()))}
     monkeypatch.setattr(watchfiles._rust_notify,'RustNotify',RootNotice)
     with ProjectEvents(tmp_path,output,cache) as events:
         previous=events.generation
