@@ -6,6 +6,30 @@ from latex_review.checks import capture_snapshot, build_check_document, snapshot
 from latex_review.sources import SourceError
 
 
+@pytest.mark.parametrize('filename,content', [
+    ('plot.pdf', b'%PDF-1.5\n%\x81\x82\x83\x84\n'),
+    ('plot.png', b'\x89PNG\r\n\x1a\n\x00\xff'),
+])
+def test_binary_graphics_preserve_source_evidence_and_snapshot_identity(tmp_path, filename, content):
+    from latex_review.checks import evaluate_current
+    source = ('\\begin{document}\n中文 figure.\n'
+              '\\begin{figure}\\includegraphics{' + filename + '}'
+              '\\caption{A figure.}\\end{figure}\n\\end{document}')
+    (tmp_path / 'main.tex').write_text(source, encoding='utf-8')
+    graphic = tmp_path / filename
+    graphic.write_bytes(content)
+    snapshot = capture_snapshot('main.tex', root=tmp_path)
+    assert snapshot.files[filename] == content
+    document = build_check_document(snapshot)
+    evidence = [item for unit in document.units for item in unit['evidence']]
+    assert evidence
+    assert all(item['file'] == 'main.tex' and
+               item['quote'] == source[item['start']:item['end']] for item in evidence)
+    evaluate_current(document)
+    graphic.write_bytes(content + b'changed')
+    assert capture_snapshot('main.tex', root=tmp_path).content_id != snapshot.content_id
+
+
 @pytest.mark.parametrize('text', [
     'ordinary 中文 prose ' * 50 + '\r\n% comment \\input{hidden}\r\n' + r'\input{visible}\% text \\input{escaped} \\\input{third}',
     r'\begin{verbatim}\input{hidden}\end{verbatim}\begin{lstlisting}\include{hidden}\end{lstlisting}\verb|\input{hidden}|\input{visible}',

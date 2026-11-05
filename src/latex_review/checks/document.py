@@ -14,7 +14,8 @@ class CheckDocument:
 
     @cached_property
     def _texts(self):
-        return {name: raw.decode('utf-8') for name, raw in self.snapshot.files.items()}
+        return {name: self.snapshot.files[name].decode('utf-8')
+                for name in self.parsed.expanded.source_map.files}
 
     @cached_property
     def _hashes(self):
