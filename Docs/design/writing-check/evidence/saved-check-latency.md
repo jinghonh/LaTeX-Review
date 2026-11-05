@@ -110,9 +110,9 @@ The latest profile also times actual generated-manifest validation **after disab
 
 A first attempt at this latest inclusive run was deliberately interrupted during baseline settlement to check a newly reported CI correctness failure. [The interruption artifact](<linux-saved-performance-optimized2.json>) is `complete: false`, has **zero saved samples and no p95**, and records successful owned entry/worker/endpoint cleanup. The requested canonical raw-rules test passed on current Linux (**1 passed in 0.62 s**) before restarting the clean remeasurement; this does not claim that macOS CI passed.
 
-## Latest complete inclusive remeasurement — still fails the goal
+## Pre-memoization complete inclusive remeasurement — still fails the goal
 
-[Latest complete N=10 evidence](<linux-saved-performance-optimized3.json>) includes all narrow optimizations above and the accepted-watcher-event quiet-period deadline. The default remains 800 ms; the complete rebuild/publication is measured, and notifications still cannot run before successful publication. Initial fixture size, the actual private native-watcher/notifier/coordinator/HTTP chain, and the 500 ms observer sleep are unchanged.
+[Pre-memoization complete N=10 evidence](<linux-saved-performance-optimized3.json>) includes all narrow optimizations above and the accepted-watcher-event quiet-period deadline. The default remains 800 ms; the complete rebuild/publication is measured, and notifications still cannot run before successful publication. Initial fixture size, the actual private native-watcher/notifier/coordinator/HTTP chain, and the 500 ms observer sleep are unchanged.
 
 | Result | Seconds |
 | --- | ---: |
@@ -125,7 +125,7 @@ Individual samples: 6.904089, 6.566726, 6.704336, 6.642616, 6.632992, 6.858653, 
 
 First-observed publication occurs 4.740–5.562 s after saving. Publication-to-first-new-run observations span 0.469–1.285 s, new-run-to-completed-status approximately 0.570–0.575 s, and final export verification 0.138–0.205 s. These are **observer intervals**, with overlapping work and quantization, not isolated internal stage timings. Even the observed publication boundary is well above two seconds, so reducing coordinator execution or observer load alone does not establish the requested target.
 
-**Final measured conclusion: p95 improved from the first complete optimized run's 10.795668 s to 6.904089 s, but the inclusive ≤2 s saved-hot goal is still unmet.** Neither the original 77.207815 s N=1 diagnostic nor profiler elapsed is used as a comparison p95. Further progress likely needs verified incremental preview/manifest work, not excluding rendering, weakening input freshness, reducing the configured quiet period, or substituting core-only timings.
+**Conclusion at that checkpoint: comment-only p95 improved from the first complete optimized run's 10.795668 s to 6.904089 s, but the inclusive ≤2 s saved-hot goal was still unmet.** Neither the original 77.207815 s N=1 diagnostic nor profiler elapsed is used as a comparison p95. Further progress likely needs verified incremental preview/manifest work, not excluding rendering, weakening input freshness, reducing the configured quiet period, or substituting core-only timings.
 
 ## Immutable reuse added after that measurement
 
@@ -133,4 +133,47 @@ First-observed publication occurs 4.740–5.562 s after saving. Publication-to-f
 - Sentence segmentation now reuses only raw immutable source strings and tuples of frozen sentence offset/text values. Storage is limited to 8,192 entries and at most 4 KiB UTF-8 per key; large strings and string subclasses take the existing scanner path. Scanner differential tests explicitly call the uncached implementation, so memoization cannot hide a faulty fast path.
 - A frozen pre-memoization annotation extraction oracle proves complete output equivalence on cold and hot paths, including Unicode, math/formula atoms, captions, table cells, lists, unsupported constructs and newlines. Additional cases cover changed saved bytes/read-only configuration with identical HTML; fresh parent/labels/section/raw/change metadata; rendered owner/type/HTML invalidation; project roots and macros; mutation isolation; concurrent hits; size/entry bounds; and mid-enrichment configuration changes.
 
-The larger combined annotation/snapshot/coordinator/HTTP-page/translation/scanner/memo/benchmark-edit regression suite passed **189 tests in 16.89 s**. A disjoint saved-notifier/live/dependency/translation-publication selection passed **23 tests in 4.03 s**. The [tiny two-save prose smoke](<linux-saved-prose-smoke.json>) proves the new publication-text checks and cleanup only; its 2-file / 10-paragraph workload is **not** reference-fixture performance acceptance. The [first warm-cache profile](<linux-saved-build-optimized4-warm.json>) confirms zero HTML extraction/parser calls on the saved rebuild, but shared-host contention makes its elapsed time incomparable to the earlier cold profiles. Separate source-pinned quiet full-size comment and visible-prose remeasurements are still required.
+The larger combined annotation/snapshot/coordinator/HTTP-page/translation/scanner/memo/benchmark-edit regression suite passed **189 tests in 16.89 s**. A disjoint saved-notifier/live/dependency/translation-publication selection passed **23 tests in 4.03 s**. The [tiny two-save prose smoke](<linux-saved-prose-smoke.json>) proves the new publication-text checks and cleanup only; its 2-file / 10-paragraph workload is **not** reference-fixture performance acceptance. The [first warm-cache profile](<linux-saved-build-optimized4-warm.json>) confirms zero HTML extraction/parser calls on the saved rebuild, but shared-host contention makes its elapsed time incomparable to the earlier cold profiles. The separate source-pinned quiet full-size comment and visible-prose remeasurements are recorded below.
+
+## Pinned paired N=10 remeasurement — both workloads still fail the goal
+
+Both sequential runs used committed source **`87f740489ae31a8b998f240ff8308615be0c306d`**, verified against actual Git HEAD and an unchanged package/helper working tree before/after measurement. Both have the identical 118-file package-plus-harness source aggregate SHA-256 **`32dfe568ac8ed4db7a826fd6809d6f258a477e984267d98d7711138054fcfc51`**. The new hash guard includes package resources/CSS as well as Python/JavaScript; runtime bytecode is excluded. Initial fixture: 40 files, 5,000 paragraphs, 1,479,521 bytes. The configured quiet deadline is still 800 ms and both use observer sleep **0.5 s plus actual HTTP work**. No other local pytest/browser/profile/capture job overlapped either run; this remains a shared two-CPU host, not an exclusive hardware claim.
+
+| Inclusive saved edit → verified current | [Comment-only](<linux-saved-performance-optimized4-comment.json>) | [Visible prose](<linux-saved-performance-optimized4-prose.json>) |
+| --- | ---: | ---: |
+| Completed authoritative samples | 10 | 10 |
+| Median, seconds | 4.756490 | 5.710073 |
+| p95 nearest rank, seconds | **6.692495** | **7.626229** |
+| Minimum, seconds | 4.253798 | 5.281424 |
+| Maximum, seconds | 6.692495 | 7.626229 |
+| Inclusive ≤2 s p95 target | **FAIL** | **FAIL** |
+
+The first sample is the maximum in each run and is **retained**, not dropped as an outlier or relabeled startup. An authoritative settled baseline precedes every saved-edit sequence. Comment samples (seconds): 6.692495, 4.586595, 4.253798, 4.681410, 4.730086, 4.710714, 4.803680, 4.816215, 4.782894, 4.788168. Prose samples: 7.626229, 5.497418, 5.384268, 5.990222, 5.774737, 6.199775, 5.645409, 5.281424, 5.403891, 6.803150.
+
+All **20** samples passed actual saved-file SHA-256, changed run/input identity, non-stale current status, exported report identity and current published-capture agreement. All requested changed-scope runs correctly used full evaluation for global rules. Both runs have `source_paths_changed_during_measurement: []`; both owned entries exited with code 0, owned workers exited, and isolated endpoints were removed. All **10 prose** samples additionally prove the new visible paragraph prefix, absence of its preceding revision, and exactly **5,000 published text units** from the current bound annotation manifest. The extra proof's actual read/JSON/verification cost is measured inside the prose interval: median **0.061619 s**, range **0.053291–0.106502 s**. It is not subtracted to improve the result.
+
+| First-observed interval, seconds (not isolated CPU stages) | Comment range | Prose range |
+| --- | ---: | ---: |
+| Save → matching preview publication | 2.735048–4.894357 | 3.499223–5.938043 |
+| Publication → first new run | 0.310982–1.123546 | 0.343978–1.288045 |
+| First new run → completed-status observation | 0.571249–0.578405 | 0.571057–0.575071 |
+| Completed-status observation → final export/proof verification | 0.138363–0.230042 | 0.192475–0.322509 |
+
+**Final measured conclusion: the latest comment-only p95 is 6.692495 s and visible-prose p95 is 7.626229 s; neither meets ≤2 s.** Comment median improved relative to the earlier 6.721270 s median, but that is not visible-writing acceptance or a controlled causal speedup guarantee. Full rendering/publication and all configured/default/freshness boundaries remain in the measurements; no core-only/profile number replaces these failed-target results.
+
+## Actual saved-pipeline diagnostic — cache behavior and CPU attribution only
+
+After preserving those uninstrumented N=10 measurements, a private external `sitecustomize` instrumented the **actual** entry/native-watcher/default-notifier/HTTP pipeline for two comment and two prose saves. Package and benchmark helper sources remained unchanged at the same pin and aggregate. All state/cache variables were private **before imports**. Per-build/entry-thread cProfile, wall/thread-CPU timings, actual extractor-call counts and sentence-cache deltas are retained in the [analysis](<linux-saved-pipeline-profile-analysis.json>), [raw reproducible instrumentation/profile archive](<linux-saved-pipeline-profile-raw.zip>), and diagnostic [comment](<linux-saved-pipeline-profile-comment.json>) / [prose](<linux-saved-pipeline-profile-prose.json>) traces. All four saves were authoritative; prose publication checks passed; all owned service cleanup checks passed and measured source changes are empty. These instrumented N=2 timings are **not acceptance/p95 evidence** and must not be compared to uninstrumented latency as a speedup.
+
+| Actual serving-worker saved build | HTML extraction cache | Sentence hits / misses | Instrumented build thread CPU, s |
+| --- | --- | ---: | ---: |
+| First comment save | Miss | 5,000 / 5,000 | 9.557227 |
+| Second comment save | Hit (zero extraction calls) | 10,000 / 0 | 5.159138 |
+| First prose save | Miss | 5,000 / 5,000 | 8.025127 |
+| Second prose save | Miss | 9,999 / 1 | 7.203248 |
+
+**Important lifecycle finding:** the initial preparation build and the serving live worker have different PIDs in both real runs. The serving worker starts from an already published preview without running the initial build in its own process, so its first real saved edit has cold process-local caches despite a settled authoritative baseline. That is a real first-save cost, not permission to discard or relabel the first saved sample. The earlier same-process warm-build profile therefore does **not** represent this first actual save.
+
+On the second visible edit, annotation extraction still executes fully: `_extract_html_units` is 2.959 s cumulative profile wall time within a 4.215 s `build_content`; the corresponding hot comment `build_content` is 1.475 s. These are overlapping **profile wall** costs, not isolated CPU or a controlled speedup ratio. Precise stage thread-CPU observations put status freshness at roughly 0.060–0.098 s median per call, source expansion at 0.049–0.058 s, final identity verification at 0.136–0.137 s, full snapshot capture around 1.15–1.22 s, coordinator execution around 1.47–1.56 s, and the saved notifier around 0.78–0.80 s. Stages are nested and must not be summed as an end-to-end CPU budget.
+
+This evidence favors safe renderer-owned fragment extraction reuse for visible edits over a transitive source/topology identity cache: full HTML extraction is larger, while identity reuse would require substantially more closure/freshness proof for a smaller gain. Separately, any startup-cache handoff or lifecycle change must retain the first measured save and never move changed-input work outside its timer.

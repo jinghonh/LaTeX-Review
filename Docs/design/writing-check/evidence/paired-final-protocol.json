@@ -1,0 +1,88 @@
+{
+  "classification": "completed_portable_fixture_browser_comparison_not_whole_delivery_acceptance",
+  "before_application_revision": "fe82620af8bbbb028809d59ceeaaad7085427880",
+  "after_application_revision": "87f740489ae31a8b998f240ff8308615be0c306d",
+  "after_ui_revision": "99cb34fc9a712eb0744ab55dd2770dfbaf1d8789",
+  "before_measurements": "before-final/measurements.json",
+  "after_measurements": "after-final/measurements.json",
+  "both_capture_complete": true,
+  "fixture": {
+    "files": 10,
+    "bytes": 3854,
+    "main_sha256": "794e5ec784dff7b10f723e6b28ea782f5687c3ac5bdf668d0fa7caa44c2e8d71",
+    "paired_fixture_maps_identical": true,
+    "copied_manuscript_equals_fixture": true,
+    "fixture_and_manuscript_begin_end_maps_identical": true,
+    "includes_local_bibtex_style": true
+  },
+  "application_sources": {
+    "before_tracked_src_files": 89,
+    "after_tracked_src_files": 116,
+    "tracked_git_tree_paths_exactly_equal_recorded_hash_paths": true,
+    "begin_end_maps_identical_both_phases": true,
+    "after_git_src_clean_at_start_and_verification": true,
+    "after_disk_hashes_match_recorded_end_map": true,
+    "scope": "Every tracked file under src. The corresponding saved benchmark records these 116 package files plus its two checked-in benchmark scripts (118 hashes total)."
+  },
+  "browser": {
+    "version": "156.0.8078.4",
+    "desktop_viewport": {"width": 1440, "height": 1000},
+    "after_narrow_viewport": {"width": 390, "height": 844},
+    "color_scheme": "light",
+    "locale": "en-US",
+    "timezone": "UTC",
+    "device_scale_factor": 1,
+    "normal_pointer_clicks": true,
+    "forced_click_or_dispatch_used": false,
+    "before_frozen_code_actually_imported": true,
+    "external_browser_requests_aborted": true,
+    "model_invoked": false,
+    "tex_compilation_invoked": false,
+    "page_errors": 0,
+    "narrow_visual_caveat": "Navigation screenshots caught the existing 150ms background/color transition. Panel state and normal navigation passed; images are not a settled-color contrast measurement."
+  },
+  "assertions": {
+    "both_real_entry_live_and_diff_run_input_ids_authoritative": true,
+    "both_real_post_headers_match_frozen_content_and_sidecar": true,
+    "secret_headers_omitted_from_diagnostics": true,
+    "basic_deterministic_findings_each": 4,
+    "unified_live_rows_including_preview_only": 8,
+    "unified_diff_rows_including_preview_only": 9,
+    "diff_primary_changes": 5,
+    "diff_added_words": 49,
+    "diff_removed_words": 45,
+    "knowledge_registration_stales_then_recheck_adds_one_exact_term_finding": true,
+    "semantic_fixed_response_valid": 1,
+    "semantic_fixed_response_invalid": 1,
+    "semantic_remains_candidate_unreviewed": true,
+    "native_confirmation_conversion_calls": 2,
+    "annotation_reused_sequence": [false, true],
+    "same_annotation_thread_both_calls": true,
+    "annotation_thread_count_before": 0,
+    "annotation_thread_count_after": 1,
+    "persisted_default_current_finding_current_unreviewed": true,
+    "all_ten_manuscript_files_unchanged": true
+  },
+  "jobs": [
+    {"id": "bash-fe95122830a144e5", "collected": true, "exit_code": 1, "meaning": "Before completed; first After reached two successful conversions but the helper's final Locator.evaluate callback mistook DOM element for finding-key argument."},
+    {"id": "bash-277e49bdaf5240d7", "collected": true, "exit_code": 0, "meaning": "Fresh isolated After recapture after helper-only callback correction; default-current endpoint retained, not replaced with historical run lookup."}
+  ],
+  "helper_sha256": {
+    "capture_reading.py_both_phases": "5332575d5cee64fa1c697fdba315b2859deab78aace05ce8ad44d404ba33b97f",
+    "validate_offline_panels.py_first_attempt": "fe04b7123cf94ed21594af94224d2fa2904ea684278c3f343d1a48acc3d4e082",
+    "validate_offline_panels.py_successful_after": "e81468cb76a0cf73049bb2cac57bd769a3630a4579e37b32c2d2beefa8676aea"
+  },
+  "cleanup": {
+    "all_jobs_collected": true,
+    "all_owned_browsers_and_daemons_stopped": true,
+    "owned_python_processes_at_verification": 0,
+    "all_owned_entry_ports_connection_refused_errno": 111,
+    "owned_ports": [46913, 47239, 37591],
+    "late_shutdown_registry_remnants": "Each stopped private daemon recreated only state/registry.json after TemporaryDirectory cleanup. Resolved absolute owned paths, process absence and refused ports were verified before removing those three remnants.",
+    "removed_owned_temporary_roots": ["/tmp/writing-check-capture-k4df5x1f", "/tmp/writing-check-capture-iy9rhzj1", "/tmp/writing-check-capture-z08m3az1"],
+    "all_owned_temporary_roots_absent_at_finish": true,
+    "resident_user_service_touched": false,
+    "production_source_written": false
+  },
+  "delivery_status": "NOT READY: authoritative saved-hot latency remains above the specified 2-second p95 target; separate macOS/real-paper/provider/human-quality evidence remains uncompleted. These screenshots establish only the scoped synthetic browser comparison."
+}

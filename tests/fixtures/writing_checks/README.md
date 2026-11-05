@@ -16,11 +16,10 @@ Portability revision after the frozen captures: the current paper tree has **10 
 The reproducible capture harness [capture_reading.py](<../../../Docs/design/writing-check/evidence/capture_reading.py>) copies this tree outside the repository. For the old version it changes only `improves reproducibility` → `supports reproducibility` and removes ` and the unregistered source \\cite{missing2026}` from the introduction. The current/live copy is byte-identical to this fixture. Do not edit this scenario between Before and After; measurement metadata stores each file's SHA-256.
 
 ```sh
-.venv/bin/python Docs/design/writing-check/evidence/capture_reading.py --phase before
-# After implementing the workspace, with the same fixture/browser settings:
-.venv/bin/python Docs/design/writing-check/evidence/capture_reading.py --phase after --validate-workspace
-# Optional: after baseline screenshots, register author knowledge and validate fixed AI responses offline.
-.venv/bin/python Docs/design/writing-check/evidence/capture_reading.py --phase after --validate-workspace --validate-offline-panels
+# Preserve the historical nine-file captures; create a matched portable-fixture pair.
+.venv/bin/python Docs/design/writing-check/evidence/capture_reading.py --phase before --output-dir Docs/design/writing-check/evidence/before-final
+# After implementing the workspace, with exactly the same fixture/browser settings:
+.venv/bin/python Docs/design/writing-check/evidence/capture_reading.py --phase after --output-dir Docs/design/writing-check/evidence/after-final --validate-workspace --validate-offline-panels
 ```
 
 The optional [offline-panel probe](<../../../Docs/design/writing-check/evidence/validate_offline_panels.py>) runs only after both baseline four-finding captures. It registers a forbidden-name policy in the temporary copy, verifies knowledge staleness and a new exact-source finding, exports a local semantic request, imports one fixed valid plus one deliberately invalid candidate, then explicitly converts the deterministic term finding into the existing annotation system twice: one created thread, then the same reused thread, finding still current/unreviewed. Before/after manuscript SHA maps are retained. It never invokes a provider and cannot establish model usefulness. The original manuscript bytes must remain unchanged. After measurements distinguish partial captures (`capture_complete: false`) from fully completed runs, identify the Git revision when production sources are clean independently of dirty docs/evidence, and record initial/end application-source hashes/mutation. Actual POST diagnostics retain only non-secret headers, scope, frozen report keys/content ID and the bound sidecar; they verify the real entry→worker proxy rather than substituting direct worker requests.

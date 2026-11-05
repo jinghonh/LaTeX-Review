@@ -92,7 +92,7 @@ def _exercise(page, frame, evidence, manuscript):
     assert conversions[0]['reused'] is False and conversions[1]['reused'] is True, conversions
     thread_count_after = frame.locator('body').evaluate('() => window.reviewAnnotations.getSnapshot().threads.length')
     assert thread_count_after == thread_count_before + 1, (thread_count_before, thread_count_after)
-    persisted = frame.locator('body').evaluate('async key => (await window.reviewWorkspace.api("findings?limit=100")).findings.find(item => item.finding_key === key)', terms[0]['finding_key'])
+    persisted = frame.locator('body').evaluate('async (_node, key) => (await window.reviewWorkspace.api("findings?limit=100")).findings.find(item => item.finding_key === key)', terms[0]['finding_key'])
     assert persisted['lifecycle'] == 'current' and persisted['review_state'] == 'unreviewed', persisted
     after = {str(p.relative_to(manuscript)): sha256(p.read_bytes()).hexdigest() for p in sorted(manuscript.rglob('*')) if p.suffix in {'.tex', '.bib', '.bst'}}
     unchanged = before == after
