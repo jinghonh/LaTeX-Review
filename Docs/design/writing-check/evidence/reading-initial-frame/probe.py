@@ -42,7 +42,7 @@ def main():
     }
     init = Path(__file__).with_name('fifo-delay.js').read_text()
     with tempfile.TemporaryDirectory(prefix='reading-initial-frame-') as temporary:
-        _, path = target.long_preview.__wrapped__(SimpleNamespace(param='live'), Path(temporary))
+        _, path = target.long_preview.__wrapped__(SimpleNamespace(param='live'), Path(temporary).resolve())
         with sync_playwright() as api:
             browser = api.chromium.launch(executable_path=os.environ.get('LATEX_REVIEW_BROWSER'))
             result['browser_version'] = browser.version

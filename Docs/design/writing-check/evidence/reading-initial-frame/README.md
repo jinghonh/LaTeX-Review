@@ -56,6 +56,14 @@ The [existing reading tests](../../../../../tests/test_reading_position.py) reta
 
 One targeted run, with all results retained: **11 passed / 2 report-only skipped / 25.04s**. See the [raw test output](targeted-tests.log). That selection is not a full-suite or macOS result. Subsequently, the same pinned UI script passed the full Linux mandatory-browser suite (1562 passed / 19 skipped, 696.89s) and both macOS functional workflows at documentation HEAD `48221a0` (1557 passed / 24 skipped each, PR 733.37s / push 744.85s). The controlled pair and successful runs do not explain or close the historical hosted failures; the requester's independent physical-Mac comparison is separate.
 
+## Independent physical macOS acceptance
+
+The requester [reported](https://github.com/jinghonh/LaTeX-Review/issues/55#issuecomment-6655215384) fixed `bdc2104` on macOS 27.2 arm64 / Python3.11.14 / Playwright1.64.1 / Chromium156.0.8078.4: **1579 passed / 2 report-only skipped / 0 failed**, plus all five CLI smoke calls, 587.46s. No core or saved-performance benchmark ran. The worker privately checked all 21 evidence-manifest entries, unique JUnit cases and paired source/script identities; no raw private files or paths are published here.
+
+The same Mac compared actual `b742583` and `bdc2104`, once each, using the published probe and original waits/expressions. Both held errors were **40.008938547486025px**. At 150ms after FIFO release, Before remained **40.008938547486025px**, After was **0.008938547486025072px**; the same `w` at offset11798, ratio0.33340782122905027, and no page errors were retained. This independently supports the controlled defect class, without establishing historical CI event ordering.
+
+The first default macOS probe startup failed before a browser or valid measurement because `/var` temporary-root aliases did not match canonical project roots. That zero-observation failure is retained privately. The probe now resolves **only its own temporary fixture root** before calling the unchanged fixture; product containment checks remain unchanged. A local symlink-root reproduction confirmed the original rejection and successful canonical fixture build without launching a browser. No repeated full UI suite is required for this tool-only fix; a default macOS startup check can validate its platform behavior.
+
 ## Portable reproduction
 
 [Probe](probe.py) · [FIFO delay instrumentation](fifo-delay.js)
