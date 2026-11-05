@@ -18,6 +18,8 @@ jobs:
       - run: ./scripts/verify-macos.sh
         env:
           LATEX_REVIEW_REQUIRE_BROWSER: '1'
+          # Run UI/full functional validation without either timing benchmark.
+          LATEX_REVIEW_FUNCTIONAL_ONLY: '1'
   saved_current:
     # Owner stopped performance work on 2026-11-05 (issue #55, comment 6654282319).
     # Keep the strict <=2s checks and historical evidence; do not launch new

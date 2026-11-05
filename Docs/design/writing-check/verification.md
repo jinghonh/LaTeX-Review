@@ -8,11 +8,11 @@
 
 ## 当前 UI 修正：bdc2104（仅处理已授权阅读位置问题）
 
-固定 UI 应用 `bdc210440520c9880a6b31869199756969d26cfa` 只保护延后的初始 animation frame：尺寸已变或正在恢复时，不以新捕获覆盖用户原阅读锚点，而复用现有布局调度。立即捕获、load 处理、滚动政策、恢复几何和默认参数未改。独立审阅无已知发现；七模块相关回归 **73 passed / 2 report-only skipped / 64.60s**。完整新 UI 回归与 macOS CI 仍待收集，不挪用 b742583 完整通过数。
+固定 UI 应用 `bdc210440520c9880a6b31869199756969d26cfa` 只保护延后的初始 animation frame：尺寸已变或正在恢复时，不以新捕获覆盖用户原阅读锚点，而复用现有布局调度。立即捕获、load 处理、滚动政策、恢复几何和默认参数未改。独立审阅无已知发现；七模块相关回归 **73 passed / 2 report-only skipped / 64.60s**。同一 UI 应用完整 Linux mandatory-browser 回归 **1562 passed / 19 skipped / 1581 total，696.89s**，exit 0；托管 [PR 42004076578](<https://github.com/jinghonh/LaTeX-Review/actions/runs/42004076578>) 与 [push 42004067220](<https://github.com/jinghonh/LaTeX-Review/actions/runs/42004067220>) 均 **1557 passed / 24 skipped / 1581 total**，分别 733.37s / 744.85s，无失败。两次 `saved_current` 均 skipped、无步骤执行；不是 4 个实际运行任务均通过。旧托管失败不能因这一轮通过而消除或叫作 flake；请求人同源本机功能与 FIFO 对照结果另待回传。
 
 [真实 Before/After 和完整来源](<evidence/reading-initial-frame/README.md>)：实际 b742583 / 应用相同 becf726 基线，与精确同场景的新脚本（现由 bdc2104 固定），1040×780、相同主题/正文/保存字符，控制延后的原 FIFO 回调但不改变顺序。原 150ms 之后同一字符误差 **292.973219273743px → 0.026780726257px**，<3px 原阈值保留；两侧初始被暂停帧误差及 page errors 均保留。父代理已实际读取两张截图并核对代码/资产来源。此证据修复受控的 late-initial-frame 类，**不证明历史 407px / 9743px 的精确原因或宣称它们为 flake**。失败专用完整 JSON/BEGIN-END 输出保留原误差和其后状态，正常通过路径无额外浏览器调用。
 
-为执行请求人停止指示，CI `saved_current` 任务暂停，不再因 UI 推送自动追加保存性能基准；其中原 ≤2s 判定与全部步骤原样保留，功能 `verify` 继续启用。跳过性能任务不是目标通过。没有恢复任何性能优化、剖析或基准，不合并、不部署。
+为执行请求人停止指示，CI `saved_current` 任务暂停，不再因 UI 推送自动追加保存性能基准；其中原 ≤2s 判定与全部步骤原样保留，功能 `verify` 继续启用。上述 48221a0 CI 仍使用旧完整脚本，包含原有核心小基准，不能写成完全没有运行计时。其后增加 `LATEX_REVIEW_FUNCTIONAL_ONLY=1`：在相同完整 pytest 与五项 CLI smoke 后结束，CI 设置此标志，后续界面验证不运行任一性能基准；默认脚本的基准与验收判定不变。shell 语法及进程调用探针核对了六次功能调用和零计时调用。跳过性能任务不是目标通过，不恢复性能优化或剖析，不合并、不部署。
 
 ## 最近性能固定应用：b742583 / becf726（已有完整证据，性能停止且未通过）
 

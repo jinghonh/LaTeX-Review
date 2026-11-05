@@ -10,6 +10,12 @@ latex-review --version >/dev/null
 latex-review-check --help >/dev/null
 latex-review-check query --help >/dev/null
 latex-review-check semantic export --help >/dev/null
+# Functional-only validation honors an explicit performance-work hold without
+# changing the default benchmark or its acceptance criteria.
+if [ "${LATEX_REVIEW_FUNCTIONAL_ONLY:-0}" = "1" ]; then
+  echo 'Functional verification complete; performance benchmarks were not run.'
+  exit 0
+fi
 # Synthetic core timing only; no provider, TeX compilation, or private paper.
 performance_json=$(mktemp "${TMPDIR:-/tmp}/latex-review-check-performance.XXXXXX")
 python3 Docs/design/writing-check/evidence/benchmark_checks.py --output "$performance_json"

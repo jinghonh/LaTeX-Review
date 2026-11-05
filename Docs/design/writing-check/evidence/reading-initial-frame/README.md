@@ -54,7 +54,7 @@ Only the queued initial capture in [the reader script](../../../../../src/latex_
 
 The [existing reading tests](../../../../../tests/test_reading_position.py) retain their original 150/100ms waits, capture/error expressions, three viewport sizes, native sidebar interactions and strict <3px assertions. Their failure-only diagnostics now print full JSON with distinct original-error and later-context timing rather than relying on pytest's truncated dictionary representation.
 
-One targeted run, with all results retained: **11 passed / 2 report-only skipped / 25.04s**. See the [raw test output](targeted-tests.log). This is not a full-suite or macOS validation result, and the controlled pair does not close the historical hosted CI failures.
+One targeted run, with all results retained: **11 passed / 2 report-only skipped / 25.04s**. See the [raw test output](targeted-tests.log). That selection is not a full-suite or macOS result. Subsequently, the same pinned UI script passed the full Linux mandatory-browser suite (1562 passed / 19 skipped, 696.89s) and both macOS functional workflows at documentation HEAD `48221a0` (1557 passed / 24 skipped each, PR 733.37s / push 744.85s). The controlled pair and successful runs do not explain or close the historical hosted failures; the requester's independent physical-Mac comparison is separate.
 
 ## Portable reproduction
 
