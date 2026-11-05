@@ -31,7 +31,7 @@ PATH="$PWD/.test-venv/bin:$PATH" PYTHONPATH="/tmp:$PWD/src" \
 
 报告、源码目录、磁盘状态、服务令牌和端口保持逐例独立。未复用可变报告：其项目身份、来源、检查快照和重建配方包含真实路径，直接复制会串写来源。服务生命周期、进程所有权、文件监听与计时敏感测试保持原执行方式；HTTP 服务器轮询、防抖和所有固定观察窗口保持原值。
 
-评估有限并行后，本次默认仍为 **1 个 pytest 执行进程**。本机只有 2 CPU，完整测试已有多客户端/进程池压力场景；低于 0.1s 的测试总时间很小，粗暴分片会增加准备成本并让生命周期、监听和阅读计时场景争用资源。模块内浏览器复用已是有测量支持的局部方案，本次不引入 xdist 或隐藏串行清单。
+本轮加入显式分片入口 `scripts/run-test-shards.py`。`LATEX_REVIEW_TEST_SHARDS=auto` 在少于 4 个 CPU 的主机上保持一个完整串行进程；在至少 4 个 CPU 的主机上并行启动两个明确分组：包含浏览器、文件监听、服务生命周期、进程所有权和计时敏感场景的 serial lane，以及只包含私有 `tmp_path`、无浏览器/常驻服务/原生 watcher/固定外部产物的 pure lane。新文件默认进入 serial lane。启动前生成完整 collection manifest，合并后用 `Counter` 校验全部 nodeid 及参数重数；每个 lane 使用独立 evidence、配置、状态和端口命名空间，并保留各自进程清理审计。当前 2 CPU 本机自动回退串行；`LATEX_REVIEW_TEST_SHARDS=0` 是子进程和诊断的显式串行回退。没有引入 xdist，避免浏览器、监听器和本地服务在通用 worker 中争用资源。
 
 ## 回归与完整验收入口
 
@@ -71,7 +71,7 @@ LATEX_REVIEW_BROWSER_SCOPE=function LATEX_REVIEW_REQUIRE_BROWSER=1 \
 
 ## 可比的完整测量
 
-[测量入口](../scripts/measure-tests.py) 默认运行完整 pytest，随后运行同样的五项 CLI smoke，保留每项结果与耗时。`wall_seconds` 包含 pytest、CLI smoke 和末尾进程审计，`pytest_wall_seconds` 另列；用例 setup/call/teardown 与模块汇总单独记录，差值为收集、pytest 管理和其他开销。输出目录必须是新目录，以免覆盖慢样本或失败样本。
+[测量入口](../scripts/measure-tests.py) 在 `LATEX_REVIEW_TEST_SHARDS=auto` 下调用显式分片 runner：CPU不足时为一个完整串行 lane，CPU足够时为 serial + pure 两个 lane；随后只在父 runner 运行同样的五项 CLI smoke，保留每项结果与耗时。`wall_seconds` 包含 collection、所有 lane、CLI smoke 和证据合并，`pytest_wall_seconds` 记录最长 lane 的 pytest 时间；每个 lane 的 setup/call/teardown、nodeid和进程审计单独保留。输出目录必须是新目录，以免覆盖慢样本或失败样本。设置 `LATEX_REVIEW_TEST_SHARDS=0` 可强制旧的单进程路径。
 
 ```sh
 LATEX_REVIEW_REQUIRE_BROWSER=1 python3 scripts/measure-tests.py --output /absolute/new-evidence-directory

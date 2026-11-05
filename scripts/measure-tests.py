@@ -145,6 +145,11 @@ def main():
     parser.add_argument('pytest_args', nargs=argparse.REMAINDER,
                         help='Arguments after -- go to pytest; no filtering by default')
     args = parser.parse_args()
+    if os.environ.get('LATEX_REVIEW_TEST_SHARDS') == 'auto':
+        command = [sys.executable, str(Path(__file__).with_name('run-test-shards.py')),
+                   '--output', str(args.output.resolve()), '--workers', 'auto']
+        result = subprocess.run(command, cwd=Path.cwd(), env=os.environ.copy())
+        return result.returncode
     pytest_args = args.pytest_args
     if pytest_args[:1] == ['--']:
         pytest_args = pytest_args[1:]
@@ -195,23 +200,24 @@ def main():
                 metadata['pytest_wall_seconds'] = time.perf_counter() - started
                 metadata['pytest_exitstatus'] = int(status)
                 metadata['cli_smoke'] = []
-                for name, options in (
-                    ('latex-review', ['--help']), ('latex-review', ['--version']),
-                    ('latex-review-check', ['--help']),
-                    ('latex-review-check', ['query', '--help']),
-                    ('latex-review-check', ['semantic', 'export', '--help']),
-                ):
-                    command = [str(Path(sys.executable).with_name(name)), *options]
-                    smoke_started = time.perf_counter()
-                    result = subprocess.run(command, capture_output=True, text=True)
-                    metadata['cli_smoke'].append({
-                        'command': command, 'exitstatus': result.returncode,
-                        'seconds': time.perf_counter() - smoke_started,
-                        'stdout': result.stdout, 'stderr': result.stderr,
-                    })
-                    if result.returncode:
-                        print(result.stdout, result.stderr, file=sys.stderr)
-                        status = status or 1
+                if os.environ.get('LATEX_REVIEW_SKIP_CLI_SMOKE') != '1':
+                    for name, options in (
+                        ('latex-review', ['--help']), ('latex-review', ['--version']),
+                        ('latex-review-check', ['--help']),
+                        ('latex-review-check', ['query', '--help']),
+                        ('latex-review-check', ['semantic', 'export', '--help']),
+                    ):
+                        command = [str(Path(sys.executable).with_name(name)), *options]
+                        smoke_started = time.perf_counter()
+                        result = subprocess.run(command, capture_output=True, text=True)
+                        metadata['cli_smoke'].append({
+                            'command': command, 'exitstatus': result.returncode,
+                            'seconds': time.perf_counter() - smoke_started,
+                            'stdout': result.stdout, 'stderr': result.stderr,
+                        })
+                        if result.returncode:
+                            print(result.stdout, result.stderr, file=sys.stderr)
+                            status = status or 1
     except BaseException as error:
         status = 130 if isinstance(error, KeyboardInterrupt) else 3
         metadata['runner_error'] = f'{type(error).__name__}: {error}'

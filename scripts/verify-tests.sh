@@ -3,7 +3,8 @@
 set -eu
 case "${1:-full}" in
   full)
-    python3 -m pytest -q -ra
+    shard_output="${TMPDIR:-/tmp}/latex-review-test-shards.$$"
+    LATEX_REVIEW_SKIP_CLI_SMOKE=1 python3 scripts/run-test-shards.py --output "$shard_output"
     ;;
   browser)
     python3 -m pytest -q -ra \

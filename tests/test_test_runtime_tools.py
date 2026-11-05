@@ -208,7 +208,8 @@ def _measure(tmp_path, output, source):
     tiny_test.write_text(source, encoding="utf-8")
     config = tmp_path / "pytest.ini"
     config.write_text("[pytest]\n", encoding="utf-8")
-    env = dict(os.environ, PYTEST_DISABLE_PLUGIN_AUTOLOAD="1")
+    env = dict(os.environ, PYTEST_DISABLE_PLUGIN_AUTOLOAD="1",
+               LATEX_REVIEW_TEST_SHARDS="0", LATEX_REVIEW_SKIP_CLI_SMOKE="1")
     env.pop("PYTEST_ADDOPTS", None)
     env.pop("PYTEST_PLUGINS", None)
     return subprocess.run(
