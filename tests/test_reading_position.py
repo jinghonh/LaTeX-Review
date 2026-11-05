@@ -1,4 +1,7 @@
 """Resize keeps the same text line in live, report and independently scrolled panels."""
+import json
+import time
+
 import pytest
 
 from latex_review import compare_projects, parse_project, render_preview, resolve_sources, write_report
@@ -100,13 +103,26 @@ FAILURE_CONTEXT = '''(side) => {
 }'''
 
 
-def assert_position_preserved(page, mode, side, action):
-    error = page.evaluate(ERROR, side)
-    assert error < 3, {
+def _position_failure_json(page, mode, side, action, error):
+    # Failure-only: this host timestamp follows the original ERROR evaluation.
+    # sampledAt in the later browser context uses a DIFFERENT clock.
+    context_requested_host_ns = time.monotonic_ns()
+    detail = {
         'mode': mode, 'side': side, 'action': action, 'original_error_px': error,
+        'original_error_timing': 'original ERROR evaluation; browser timestamp not recorded',
         'context_timing': 'separate evaluation AFTER the original failed error sample',
+        'context_requested_host_monotonic_ns': context_requested_host_ns,
         'after_error_context': page.evaluate(FAILURE_CONTEXT, side),
     }
+    serialized = json.dumps(detail, ensure_ascii=False, indent=2)
+    print('READING_POSITION_FAILURE_JSON_BEGIN\n' + serialized
+          + '\nREADING_POSITION_FAILURE_JSON_END', flush=True)
+    return serialized  # String bypasses pytest's truncated safe repr of a dict.
+
+
+def assert_position_preserved(page, mode, side, action):
+    error = page.evaluate(ERROR, side)
+    assert error < 3, _position_failure_json(page, mode, side, action, error)
 
 
 def test_window_and_sidebar_resize_preserve_character(long_preview, browser_page):

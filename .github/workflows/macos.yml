@@ -19,8 +19,11 @@ jobs:
         env:
           LATEX_REVIEW_REQUIRE_BROWSER: '1'
   saved_current:
-    # A separate runner isolates timing from browser/test processes and permits
-    # retrying a startup failure without rerunning an already-passed full suite.
+    # Owner stopped performance work on 2026-11-05 (issue #55, comment 6654282319).
+    # Keep the strict <=2s checks and historical evidence; do not launch new
+    # benchmark rounds unless the owner explicitly lifts that hold. UI/full
+    # functional verification above remains enabled. This is not a target pass.
+    if: ${{ false }}
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
