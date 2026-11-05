@@ -14,6 +14,7 @@ import os
 from pathlib import Path
 import platform
 import socket
+import stat
 import statistics
 import subprocess
 import sys
@@ -35,6 +36,66 @@ def code_boundary():
     hashes = {str(p.relative_to(REPOSITORY)): digest(p.read_bytes()) for p in paths}
     return {'utc': datetime.now(timezone.utc).isoformat(), 'files': hashes,
             'aggregate_sha256': digest(json.dumps(hashes, sort_keys=True).encode())}
+
+
+def canonical_private_root(folder):
+    """Resolve only our newly allocated workspace, never a user's state path.
+
+    macOS temporary roots may be lexical /var aliases for /private/var. Derive
+    every owned state/cache/paper/report path from the canonical root so the
+    production state-directory anti-symlink guard remains unchanged.
+    """
+    return Path(folder).resolve()
+
+
+_STARTUP_STDERR_MAX_BYTES = 64 * 1024
+_STARTUP_CONDITIONS = {
+    'state_directory_symlink_ancestor': '本地状态目录不可含符号链接',
+    'state_directory_not_absolute': '本地状态目录必须是绝对路径',
+    'entry_operation_failed': '本地入口操作失败',
+    'entry_port_invalid': '入口端口无效',
+    'address_in_use': 'Address already in use',
+    'permission_denied': 'Permission denied',
+    'python_module_missing': 'No module named',
+    'python_fatal_error': 'Fatal Python error',
+}
+_STARTUP_EXCEPTIONS = ('ValueError', 'RuntimeError', 'OSError', 'PermissionError',
+                       'FileNotFoundError', 'ModuleNotFoundError', 'ImportError',
+                       'SyntaxError', 'TypeError', 'AttributeError', 'LocalError',
+                       'TimeoutError', 'ConnectionRefusedError', 'BrokenPipeError')
+
+
+def entry_startup_diagnostic(private):
+    """Bounded, allowlisted summary of ONLY the owned child stderr/stdout file.
+
+    Do not preserve a raw tail: credentials can be unlabeled, multiline or split
+    by truncation/ANSI escapes. Unknown text is always omitted, not heuristically
+    redacted. In particular never open entry-state/entry.log or recipe files,
+    which may contain capabilities/nonces. The fixed summary has bounded size.
+    """
+    summary = {'source': 'owned entry-subprocess.log only', 'raw_text_omitted': True}
+    path = Path(private) / 'entry-subprocess.log'
+    try:
+        if path.is_symlink():
+            return {**summary, 'read_status': 'symlink_refused'}
+        flags = os.O_RDONLY | getattr(os, 'O_NOFOLLOW', 0) | getattr(os, 'O_NONBLOCK', 0)
+        descriptor = os.open(path, flags)
+        try:
+            info = os.fstat(descriptor)
+            if not stat.S_ISREG(info.st_mode):
+                return {**summary, 'read_status': 'non_regular_file_refused'}
+            os.lseek(descriptor, max(0, info.st_size - _STARTUP_STDERR_MAX_BYTES), os.SEEK_SET)
+            raw = os.read(descriptor, _STARTUP_STDERR_MAX_BYTES)
+        finally:
+            os.close(descriptor)
+    except OSError:
+        return {**summary, 'read_status': 'unavailable'}
+    text = raw.decode('utf-8', errors='replace')
+    return {**summary, 'read_status': 'read', 'observed_log_size_bytes': info.st_size,
+            'read_bytes': len(raw), 'tail_truncated': info.st_size > len(raw),
+            'recognized_conditions': [name for name, message in _STARTUP_CONDITIONS.items() if message in text],
+            'recognized_exception_classes': [name for name in _STARTUP_EXCEPTIONS
+                                              if name + ':' in text or name + '：' in text]}
 
 
 def host_sample():
@@ -245,7 +306,7 @@ def main():
     checkpoint()
     failed = False
     with tempfile.TemporaryDirectory(prefix='writing-check-saved-benchmark-') as folder:
-        private = Path(folder)
+        private = canonical_private_root(folder)
         root, output = private / 'paper', private / 'report'
         root.mkdir()
         os.environ.update({'LATEX_REVIEW_STATE_HOME': str(private / 'entry-state'),
@@ -260,6 +321,8 @@ def main():
             reservation.bind(('127.0.0.1', 0))
             port = reservation.getsockname()[1]
         entry = None
+        startup_complete = False
+        startup_returncode = None
         worker_pid = None
         with (private / 'entry-subprocess.log').open('wb') as log:
             try:
@@ -288,6 +351,7 @@ def main():
                 paper = next(p for p in papers if p['paper_id'] == recipe['paper_id'])
                 slot = paper['slots']['live']
                 worker_pid = slot['pid']
+                startup_complete = True
                 observer = Observer(f"http://127.0.0.1:{slot['port']}", output, args.poll_seconds, args.settle_timeout)
                 baseline_started = time.perf_counter()
                 baseline = observer.settle(baseline_started, digest((root / 'part0.tex').read_bytes()))
@@ -326,6 +390,8 @@ def main():
                                'saved_hot_p95_target_met': durations[math.ceil(.95 * len(durations)) - 1] <= 2})
             except Exception as error:
                 failed = True
+                if not startup_complete:
+                    startup_returncode = entry.poll() if entry is not None else None
                 result['error'] = {'type': type(error).__name__, 'message': str(error)}
                 if isinstance(error, SettleTimeout) and 'failed_save' not in result:
                     result['baseline_failure'] = error.metrics
@@ -359,6 +425,12 @@ def main():
                         result['cleanup'] = {'forced_owned_entry_cleanup': True, 'message': str(error),
                                              'owned_entry_exit_code': entry.returncode}
                         failed = True
+                if not startup_complete:
+                    result['startup_diagnostic'] = {
+                        **entry_startup_diagnostic(private),
+                        'phase': 'entry' if 'entry_start_seconds' not in result else 'worker_ready',
+                        'entry_return_code_at_failure': startup_returncode,
+                        'entry_return_code_after_cleanup': entry.returncode if entry is not None else None}
                 result['source_boundary_end'] = code_boundary()
                 first, last = result['source_boundary_begin']['files'], result['source_boundary_end']['files']
                 result['source_paths_changed_during_measurement'] = [p for p in sorted(set(first) | set(last)) if first.get(p) != last.get(p)]
@@ -366,7 +438,7 @@ def main():
                 checkpoint()
     print(json.dumps({key: value for key, value in result.items()
                       if key in ('complete', 'error', 'saved_median_seconds', 'saved_p95_nearest_rank_seconds',
-                                 'cleanup', 'source_paths_changed_during_measurement')}, indent=2), flush=True)
+                                 'cleanup', 'source_paths_changed_during_measurement', 'startup_diagnostic')}, indent=2), flush=True)
     return 1 if failed else 0
 
 
