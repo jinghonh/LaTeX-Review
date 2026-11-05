@@ -1,0 +1,231 @@
+{
+  "historical_only": true,
+  "classification": "capture_helper_callback_argument_bug_not_product_failure",
+  "application_revision": "87f740489ae31a8b998f240ff8308615be0c306d",
+  "explanation": "Locator.evaluate supplies its DOM element as first callback parameter and the provided value as second. The original async key callback compared finding_key to BODY rather than the intended finding-key argument. The helper alone was corrected to async (_node, key); Before remained complete and only After was recaptured. Two actual conversions had already produced one thread and reused it before this helper assertion failed.",
+  "error": "'NoneType' object is not subscriptable",
+  "visible_text": "阅读与变更\n问题检查\n概念与符号\nAI 审查\n规则与覆盖\n↔\n论文修改审阅\n版本对照报告\nmain\n\n入口 main.tex\n\n修改前\n目录 · old\n修改后\n目录 · paper\n新增 2\n删除 2\n修改 1\n移动 0\n译文 0 / 6 段\n5\n项主变更\n正文变更词数\n+49\n/\n−45\n词\n报告说明\n章节\n☷\n变更目录\n5\n阅读范围\n完整文档\n变更上下文\n对照方式\n新稿阅读\n双稿对照\n译文显示\n英文原文\n英中对照\n翻译全部变更\n导出译文报告\n尚未选择变更\n↑\n上一处\n下一处\n↓\n请在全局或项目配置中设置 [translation] 的接口地址和模型，然后重新启动本机预览服务。\n搜索与审阅记录 已审阅 0 / 5 · 待处理 0\n批注\n关闭\n全部批注 · 1\n\n1 条批注\n\n筛选与排序\n审阅者（写作检查转入）\n用户\n11/05 05:19\n未解决\n问题\n用户将当前写作检查转入批注；这不表示问题已解决，也不修改论文。\n规则：term.forbidden_name\n问题：term.forbidden_name: concept-df276bbd-2cd3-445a-b86d-e98fb904c7c1:adaptive estimation method:project\n检查输入：6d0b6948a241f6fddb36891b68556fc51adb9d5544dad08bf4f6cbceb09d8eb1\n问题键：9a574df7df74b305d69cbea068a3c790858cb396626c9051850811c95bb1e17a\n\n精确源码证据：\nmain.tex / sections/results.tex:2:5\nadaptive estimation method\n编辑\n回复\n标记为已解决\n删除批注\n关联记录\n上一条\n1 / 1\n下一条\n导入与导出\n修改后\nA Synthetic Writing Check Study\n摘要\n\nA compact synthetic manuscript studies the adaptive estimator (AE). Its terminology, references, and repeated source occurrences exercise writing checks.\n\n1 Introduction\n\nThe adaptive estimator improves reproducibility across chapters. We call its implementation fast_estimator in this paragraph. The method follows [known2026] and the unregistered source [missing2026] . A reader can compare Equation (1) and Section ?? (sec:missing) .\n\n修改 · 01\n2 处改动\n\nOur synthetic claim is deliberately modest: the method reduces variance in this small example. No text in this fixture is drawn from a private or real research paper.\n\n2 Method\n\nThe adaptive estimator (AE) uses the symbol s for a score.\n\n\\begin{equation}\ns = x + y.\n\\tag{1}\\end{equation}\n\nAn intentionally complex expression preserves nested mathematical evidence.\n\n\\begin{align}\n\\mathcal{L}(\\theta) &= \\sum_{i=1}^{n}\\left\\|f_{\\theta}(x_i)-y_i\\right\\|_2^2 \\tag{1}\\\\\n&\\quad + \\lambda \\int_0^1 \\frac{\\partial f_{\\theta}(t)}{\\partial t}\\,dt.\n\\tag{2}\\end{align}\n\nThe derivation does not establish general mathematical correctness.\n\n3 Repeated observations\n\nRepeated observation: the adaptive estimator uses the same source file twice. Its two reading occurrences must not collapse to one source occurrence.\n\n新增 · 02\n2 处改动\n\nRepeated observation: the adaptive estimator uses the same source file twice. Its two reading occurrences must not collapse to one source occurrence.\n\n新增 · 03\n2 处改动\n4 Results\n\nThe adaptive estimation method is an intentionally inconsistent name. The synthetic example reports three observations, without claiming empirical validation.\n\nFigure 1 A synthetic overview without external image dependencies.\n\n此处暂无法预览\n\nTable 1 Synthetic scores.\n\nMethod\tScore\nAdaptive estimator\t3\n\nA documented limitation is retained for inspection rather than silently corrected.\n\nA Additional details\n\nThe appendix reuses s for a size, a deliberate scope-sensitive example. UTF-8 evidence includes naïve, café, 中文 and an astral character 🧪. CRLF source: café 中文 🧪. A second CRLF line retains Unicode character offsets.\n\n此处暂无法预览\n\n参考文献\nknown2026\n− 删除 · 04\n删除 · 04\n2 处改动\n− 删除 · 05\n删除 · 05\n2 处改动\n报告诊断\n12 条诊断",
+  "checks_status": {
+    "available": true,
+    "read_only": false,
+    "paper_id": "792c6a0091b5eacb96820d2097d5fc5282bc495d4f77a24ef7d792a8419b92b6",
+    "configuration_hash": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+    "capabilities": {
+      "run": true,
+      "cancel": true,
+      "knowledge": true,
+      "decisions": true,
+      "annotation_conversion": true,
+      "semantic_import": true,
+      "export": true
+    },
+    "state": "partial",
+    "current_input_id": "6d0b6948a241f6fddb36891b68556fc51adb9d5544dad08bf4f6cbceb09d8eb1",
+    "current_run": {
+      "run_id": "99b372499f4c4bceadbe6eb3ba2966e5",
+      "paper_id": "792c6a0091b5eacb96820d2097d5fc5282bc495d4f77a24ef7d792a8419b92b6",
+      "state": "partial",
+      "scope": "all",
+      "page_version": "955fee46a418bc2353db8fb0b6869cf1ecde9491ec2ce173ab7fd2b6df5f3339",
+      "input_id": "6d0b6948a241f6fddb36891b68556fc51adb9d5544dad08bf4f6cbceb09d8eb1",
+      "error": null
+    },
+    "stale": false,
+    "coverage": [
+      {
+        "applicable_count": 2,
+        "blind_spots": [],
+        "complete": true,
+        "entry": "main.tex",
+        "reasons": [],
+        "rule_id": "bibliography_key_unresolved",
+        "rule_version": "1.0",
+        "scope": "all",
+        "status": "executed"
+      },
+      {
+        "applicable_count": 7,
+        "blind_spots": [],
+        "complete": true,
+        "entry": "main.tex",
+        "reasons": [],
+        "rule_id": "duplicate_label",
+        "rule_version": "1.0",
+        "scope": "all",
+        "status": "executed"
+      },
+      {
+        "applicable_count": 1,
+        "blind_spots": [],
+        "complete": true,
+        "entry": "main.tex",
+        "reasons": [],
+        "rule_id": "figure_unreferenced",
+        "rule_version": "1.0",
+        "scope": "all",
+        "status": "executed"
+      },
+      {
+        "applicable_count": 1,
+        "blind_spots": [],
+        "complete": true,
+        "entry": "main.tex",
+        "reasons": [],
+        "rule_id": "table_unreferenced",
+        "rule_version": "1.0",
+        "scope": "all",
+        "status": "executed"
+      },
+      {
+        "applicable_count": 2,
+        "blind_spots": [],
+        "complete": true,
+        "entry": "main.tex",
+        "reasons": [],
+        "rule_id": "unresolved_reference",
+        "rule_version": "1.0",
+        "scope": "all",
+        "status": "executed"
+      },
+      {
+        "applicable_count": null,
+        "blind_spots": [
+          {
+            "code": "unknown_latex",
+            "file": "sections/results.tex",
+            "message": "未知或无法解析的 LaTeX 已保留原文"
+          },
+          {
+            "code": "low_confidence_source",
+            "file": null,
+            "message": "结构来源位置不确定；已保留全部原文片段"
+          },
+          {
+            "code": "unknown_latex",
+            "file": "sections/appendix.tex",
+            "message": "未知或无法解析的 LaTeX 已保留原文"
+          }
+        ],
+        "complete": false,
+        "entry": "main.tex",
+        "reasons": [
+          "preview_rendering_incomplete"
+        ],
+        "rule_id": "source_rendering",
+        "rule_version": "1.0",
+        "scope": "all",
+        "status": "unsupported"
+      },
+      {
+        "applicable_count": null,
+        "blind_spots": [],
+        "complete": false,
+        "entry": "main.tex",
+        "reasons": [
+          "requires_two_versions"
+        ],
+        "rule_id": "equation_number_changed",
+        "rule_version": "1.0",
+        "scope": "all",
+        "status": "prerequisite_missing"
+      },
+      {
+        "applicable_count": 1,
+        "blind_spots": [
+          {
+            "code": "unsupported_prose_macro",
+            "file": null,
+            "message": "No prose adapter for \\fbox"
+          },
+          {
+            "code": "unknown_latex",
+            "file": "sections/results.tex",
+            "message": "未知或无法解析的 LaTeX 已保留原文"
+          },
+          {
+            "code": "low_confidence_source",
+            "file": null,
+            "message": "结构来源位置不确定；已保留全部原文片段"
+          },
+          {
+            "code": "unknown_latex",
+            "file": "sections/appendix.tex",
+            "message": "未知或无法解析的 LaTeX 已保留原文"
+          }
+        ],
+        "complete": false,
+        "entry": "main.tex",
+        "reasons": [
+          "unsupported_prose_macro"
+        ],
+        "rule_id": "term.forbidden_name",
+        "rule_version": "1.0",
+        "scope": "all",
+        "status": "unsupported"
+      },
+      {
+        "applicable_count": 0,
+        "blind_spots": [],
+        "complete": true,
+        "entry": "main.tex",
+        "reasons": [],
+        "rule_id": "term.code_identifier_in_prose",
+        "rule_version": "1.0",
+        "scope": "all",
+        "status": "no_applicable_objects"
+      },
+      {
+        "applicable_count": 0,
+        "blind_spots": [],
+        "complete": true,
+        "entry": "main.tex",
+        "reasons": [],
+        "rule_id": "acronym.first_use",
+        "rule_version": "1.0",
+        "scope": "all",
+        "status": "no_applicable_objects"
+      },
+      {
+        "applicable_count": 0,
+        "blind_spots": [],
+        "complete": true,
+        "entry": "main.tex",
+        "reasons": [],
+        "rule_id": "concept.use_before_definition",
+        "rule_version": "1.0",
+        "scope": "all",
+        "status": "no_applicable_objects"
+      },
+      {
+        "applicable_count": 0,
+        "blind_spots": [],
+        "complete": true,
+        "entry": "main.tex",
+        "reasons": [],
+        "rule_id": "concept.dependency_order",
+        "rule_version": "1.0",
+        "scope": "all",
+        "status": "no_applicable_objects"
+      },
+      {
+        "applicable_count": 0,
+        "blind_spots": [],
+        "complete": true,
+        "entry": "main.tex",
+        "reasons": [],
+        "rule_id": "symbol.binding_conflict",
+        "rule_version": "1.0",
+        "scope": "all",
+        "status": "no_applicable_objects"
+      }
+    ],
+    "summary": {
+      "candidate_count": 0,
+      "coverage_complete": false,
+      "finding_count": 5,
+      "occurrence_count": 5
+    },
+    "message": "规则检查不会自动调用 AI。",
+    "page_version": "955fee46a418bc2353db8fb0b6869cf1ecde9491ec2ce173ab7fd2b6df5f3339"
+  }
+}

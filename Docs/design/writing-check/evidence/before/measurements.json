@@ -1,0 +1,620 @@
+{
+  "phase": "before",
+  "head": "fe82620af8bbbb028809d59ceeaaad7085427880",
+  "platform": "Linux-6.8.0-138-generic-x86_64-with-glibc2.39",
+  "python": "3.11.17 (main, Oct 14 2026, 01:05:33) [Clang 23.1.3 ]",
+  "logical_cpus": 2,
+  "memory_bytes": 3904782336,
+  "fixture_file_count": 9,
+  "fixture_bytes": 3115,
+  "dependencies": {
+    "latex-review": "0.1.0",
+    "plasTeX": "3.1",
+    "jsonschema": "4.26.0",
+    "watchfiles": "1.3.0",
+    "playwright": "1.64.1",
+    "pytest": "9.2.0"
+  },
+  "viewport": {
+    "width": 1440,
+    "height": 1000
+  },
+  "color_scheme": "light",
+  "locale": "en-US",
+  "timezone": "UTC",
+  "network_policy": "Abort non-loopback requests; MathJax unavailable by design, no LLM calls",
+  "fixture_sha256": {
+    "main.tex": "044245ae3b335fc44674c4ccc1dbc30fddfbeed420b0f14bf0509b28d00b0f53",
+    "references.bib": "92393070298961a198a76ec5d53ac003ae9fc5ee5a1bd04a91c804b284feab77",
+    "sections/appendix.tex": "7b47a5da307024dc993490c2ca1f419675e632350c5b4766a7db8c9a23c597f3",
+    "sections/introduction.tex": "3e84061654f0afc1328ecffd055538f15fed826056c6bcbd3104ab258d050874",
+    "sections/method.tex": "c6210f9e9f80a7b6489c432a342b61941ca79b565fcdaab2daf7bbb154910c6b",
+    "sections/results.tex": "146f7d4cdbd1e63d83a36f9e3d41c76a7c0cfd7660c46593e6e631fba01eba47",
+    "shared/crlf.tex": "10c81656ebc714f6ca1f7bc9568e074a3ed8784fc8bca77ba4aa291724767464",
+    "shared/observation.tex": "5def2b5e7bde27c3c6776363cae3b8fbd7c83b07e00fcc631085ca664c050e04",
+    "supplement.tex": "2e75230dcdcb4cca6601fac0e282267532d255dc2631ff2309d77ff4352ad27a"
+  },
+  "tools": {
+    "latexmk": "/usr/bin/latexmk",
+    "pdflatex": "/usr/bin/pdflatex",
+    "xelatex": "/usr/bin/xelatex",
+    "lualatex": "/usr/bin/lualatex"
+  },
+  "application_revision": "fe82620af8bbbb028809d59ceeaaad7085427880",
+  "expand_parse_seconds": [
+    0.11462,
+    0.108765,
+    0.116017,
+    0.10573,
+    0.10779
+  ],
+  "expand_parse_median_seconds": 0.108765,
+  "parsed_node_count": 34,
+  "parse_diagnostics": [
+    {
+      "code": "unknown_latex",
+      "severity": "warning",
+      "message": "未知或无法解析的 LaTeX 已保留原文",
+      "source_old": null,
+      "source_new": {
+        "file": "sections/results.tex",
+        "start_line": 5,
+        "end_line": 5,
+        "start_column": 11,
+        "end_column": 46,
+        "confidence": 1.0,
+        "uncertainty_reason": null
+      },
+      "rule_status": null,
+      "evidence": [],
+      "related_sources_old": [],
+      "related_sources_new": []
+    },
+    {
+      "code": "low_confidence_source",
+      "severity": "warning",
+      "message": "结构来源位置不确定；已保留全部原文片段",
+      "source_old": null,
+      "source_new": {
+        "file": null,
+        "start_line": null,
+        "end_line": null,
+        "start_column": null,
+        "end_column": null,
+        "confidence": 0.3,
+        "uncertainty_reason": "结构跨越多个原文片段；完整片段见 origins"
+      },
+      "rule_status": null,
+      "evidence": [],
+      "related_sources_old": [],
+      "related_sources_new": []
+    },
+    {
+      "code": "unknown_latex",
+      "severity": "warning",
+      "message": "未知或无法解析的 LaTeX 已保留原文",
+      "source_old": null,
+      "source_new": {
+        "file": "sections/appendix.tex",
+        "start_line": 6,
+        "end_line": 8,
+        "start_column": 1,
+        "end_column": 15,
+        "confidence": 1.0,
+        "uncertainty_reason": null
+      },
+      "rule_status": null,
+      "evidence": [],
+      "related_sources_old": [],
+      "related_sources_new": []
+    },
+    {
+      "code": "tex_distribution_style",
+      "severity": "info",
+      "message": "样式 plain 由 TeX 发行版提供，项目无需包含此文件",
+      "source_old": null,
+      "source_new": {
+        "file": "main.tex",
+        "start_line": 19,
+        "end_line": 19,
+        "start_column": 1,
+        "end_column": 26,
+        "confidence": 0.3,
+        "uncertainty_reason": null
+      },
+      "rule_status": null,
+      "evidence": [],
+      "related_sources_old": [],
+      "related_sources_new": []
+    }
+  ],
+  "repeated_include_dependencies": [
+    {
+      "kind": "include",
+      "file": "shared/observation.tex",
+      "referenced_from": "main.tex",
+      "include_instance": "new:1",
+      "argument": "shared/observation",
+      "source_start": 410,
+      "source_end": 436
+    },
+    {
+      "kind": "include",
+      "file": "shared/observation.tex",
+      "referenced_from": "main.tex",
+      "include_instance": "new:1",
+      "argument": "shared/observation",
+      "source_start": 437,
+      "source_end": 463
+    }
+  ],
+  "repeated_include_source_segments": [
+    {
+      "expanded_start": 1338,
+      "expanded_end": 1488,
+      "file": "shared/observation.tex",
+      "source_start": 0,
+      "source_end": 150,
+      "include_instance": "new:4",
+      "confidence": "exact"
+    },
+    {
+      "expanded_start": 1489,
+      "expanded_end": 1639,
+      "file": "shared/observation.tex",
+      "source_start": 0,
+      "source_end": 150,
+      "include_instance": "new:5",
+      "confidence": "exact"
+    }
+  ],
+  "current_vs_self_rule_codes": {
+    "bibliography_key_unresolved": 1,
+    "figure_unreferenced": 1,
+    "table_unreferenced": 1,
+    "unresolved_reference": 1
+  },
+  "crlf_bytes": 2,
+  "diff_builds": [
+    {
+      "command": [
+        "/home/ubuntu/.dsh/state/superagent/work/writing-check-delivery-6277b05259b6/.venv/bin/python",
+        "-m",
+        "latex_review.cli",
+        "--old-dir",
+        "/tmp/writing-check-capture-tnnoy_zy/old",
+        "--new-dir",
+        "/tmp/writing-check-capture-tnnoy_zy/paper",
+        "--entry",
+        "main.tex",
+        "--output",
+        "/tmp/writing-check-capture-tnnoy_zy/diff",
+        "--no-cache"
+      ],
+      "exit_code": 2,
+      "wall_seconds": 1.001929,
+      "stdout": "/tmp/writing-check-capture-tnnoy_zy/diff/report.html\n",
+      "stderr": "latex-review: 正在读取比较来源\nlatex-review: 正在展开两版来源\nlatex-review: 正在解析旧稿\nlatex-review: 正在解析新稿\nlatex-review: 正在比较结构化内容\nlatex-review: 正在生成内容预览并写入报告\nlatex-review: 生成完成：5 项主变更；报告：/tmp/writing-check-capture-tnnoy_zy/diff/report.html\nlatex-review: 需要检查 9 条诊断；详情：/tmp/writing-check-capture-tnnoy_zy/diff/diagnostics.json\n"
+    },
+    {
+      "command": [
+        "/home/ubuntu/.dsh/state/superagent/work/writing-check-delivery-6277b05259b6/.venv/bin/python",
+        "-m",
+        "latex_review.cli",
+        "--old-dir",
+        "/tmp/writing-check-capture-tnnoy_zy/old",
+        "--new-dir",
+        "/tmp/writing-check-capture-tnnoy_zy/paper",
+        "--entry",
+        "main.tex",
+        "--output",
+        "/tmp/writing-check-capture-tnnoy_zy/diff",
+        "--no-cache"
+      ],
+      "exit_code": 2,
+      "wall_seconds": 0.96046,
+      "stdout": "/tmp/writing-check-capture-tnnoy_zy/diff/report.html\n",
+      "stderr": "latex-review: 正在读取比较来源\nlatex-review: 正在展开两版来源\nlatex-review: 正在解析旧稿\nlatex-review: 正在解析新稿\nlatex-review: 正在比较结构化内容\nlatex-review: 正在生成内容预览并写入报告\nlatex-review: 生成完成：5 项主变更；报告：/tmp/writing-check-capture-tnnoy_zy/diff/report.html\nlatex-review: 需要检查 9 条诊断；详情：/tmp/writing-check-capture-tnnoy_zy/diff/diagnostics.json\n"
+    },
+    {
+      "command": [
+        "/home/ubuntu/.dsh/state/superagent/work/writing-check-delivery-6277b05259b6/.venv/bin/python",
+        "-m",
+        "latex_review.cli",
+        "--old-dir",
+        "/tmp/writing-check-capture-tnnoy_zy/old",
+        "--new-dir",
+        "/tmp/writing-check-capture-tnnoy_zy/paper",
+        "--entry",
+        "main.tex",
+        "--output",
+        "/tmp/writing-check-capture-tnnoy_zy/diff",
+        "--no-cache"
+      ],
+      "exit_code": 2,
+      "wall_seconds": 0.934706,
+      "stdout": "/tmp/writing-check-capture-tnnoy_zy/diff/report.html\n",
+      "stderr": "latex-review: 正在读取比较来源\nlatex-review: 正在展开两版来源\nlatex-review: 正在解析旧稿\nlatex-review: 正在解析新稿\nlatex-review: 正在比较结构化内容\nlatex-review: 正在生成内容预览并写入报告\nlatex-review: 生成完成：5 项主变更；报告：/tmp/writing-check-capture-tnnoy_zy/diff/report.html\nlatex-review: 需要检查 9 条诊断；详情：/tmp/writing-check-capture-tnnoy_zy/diff/diagnostics.json\n"
+    }
+  ],
+  "diff_build_median_seconds": 0.96046,
+  "diff_summary": {
+    "added_words": 49,
+    "category_hits": {
+      "citation": 1,
+      "text": 5
+    },
+    "changes": 5,
+    "removed_words": 45
+  },
+  "diff_diagnostics": {
+    "diagnostics": [
+      {
+        "code": "bibliography_key_unresolved",
+        "evidence": [
+          "键：missing2026",
+          "在已读取的参考文献条目及手写文献键中未找到该键",
+          "新侧第 1 处：sections/introduction.tex:4:65"
+        ],
+        "message": "新增：引用键无法解析（missing2026）",
+        "related_sources_new": [
+          {
+            "confidence": 1.0,
+            "end_column": 83,
+            "end_line": 4,
+            "file": "sections/introduction.tex",
+            "start_column": 65,
+            "start_line": 4,
+            "uncertainty_reason": null
+          }
+        ],
+        "related_sources_old": [],
+        "rule_status": "new",
+        "severity": "warning",
+        "source_new": {
+          "confidence": 1.0,
+          "end_column": 83,
+          "end_line": 4,
+          "file": "sections/introduction.tex",
+          "start_column": 65,
+          "start_line": 4,
+          "uncertainty_reason": null
+        },
+        "source_old": null
+      },
+      {
+        "code": "figure_unreferenced",
+        "evidence": [
+          "键：fig:overview",
+          "唯一图标签未见受支持的交叉引用",
+          "旧侧第 1 处：sections/results.tex:6:68",
+          "新侧第 1 处：sections/results.tex:6:68"
+        ],
+        "message": "既有：图未被引用（fig:overview）",
+        "related_sources_new": [
+          {
+            "confidence": 1.0,
+            "end_column": 88,
+            "end_line": 6,
+            "file": "sections/results.tex",
+            "start_column": 68,
+            "start_line": 6,
+            "uncertainty_reason": null
+          }
+        ],
+        "related_sources_old": [
+          {
+            "confidence": 1.0,
+            "end_column": 88,
+            "end_line": 6,
+            "file": "sections/results.tex",
+            "start_column": 68,
+            "start_line": 6,
+            "uncertainty_reason": null
+          }
+        ],
+        "rule_status": "existing",
+        "severity": "info",
+        "source_new": {
+          "confidence": 1.0,
+          "end_column": 88,
+          "end_line": 6,
+          "file": "sections/results.tex",
+          "start_column": 68,
+          "start_line": 6,
+          "uncertainty_reason": null
+        },
+        "source_old": {
+          "confidence": 1.0,
+          "end_column": 88,
+          "end_line": 6,
+          "file": "sections/results.tex",
+          "start_column": 68,
+          "start_line": 6,
+          "uncertainty_reason": null
+        }
+      },
+      {
+        "code": "low_confidence_match",
+        "message": "节点未可靠配对；按删除与新增处理：候选存在歧义或置信度不足，按删除和新增处理",
+        "severity": "warning",
+        "source_new": null,
+        "source_old": {
+          "confidence": 1.0,
+          "end_column": 72,
+          "end_line": 2,
+          "file": "shared/observation.tex",
+          "start_column": 1,
+          "start_line": 1,
+          "uncertainty_reason": null
+        }
+      },
+      {
+        "code": "low_confidence_match",
+        "message": "节点未可靠配对；按删除与新增处理：候选存在歧义或置信度不足，按删除和新增处理",
+        "severity": "warning",
+        "source_new": {
+          "confidence": 1.0,
+          "end_column": 72,
+          "end_line": 2,
+          "file": "shared/observation.tex",
+          "start_column": 1,
+          "start_line": 1,
+          "uncertainty_reason": null
+        },
+        "source_old": null
+      },
+      {
+        "code": "low_confidence_source",
+        "message": "结构来源位置不确定；已保留全部原文片段",
+        "severity": "warning",
+        "source_new": null,
+        "source_old": {
+          "confidence": 0.3,
+          "end_column": null,
+          "end_line": null,
+          "file": null,
+          "start_column": null,
+          "start_line": null,
+          "uncertainty_reason": "结构跨越多个原文片段；完整片段见 origins"
+        }
+      },
+      {
+        "code": "low_confidence_source",
+        "message": "结构来源位置不确定；已保留全部原文片段",
+        "severity": "warning",
+        "source_new": {
+          "confidence": 0.3,
+          "end_column": null,
+          "end_line": null,
+          "file": null,
+          "start_column": null,
+          "start_line": null,
+          "uncertainty_reason": "结构跨越多个原文片段；完整片段见 origins"
+        },
+        "source_old": null
+      },
+      {
+        "code": "table_unreferenced",
+        "evidence": [
+          "键：tab:scores",
+          "唯一表标签未见受支持的交叉引用",
+          "旧侧第 1 处：sections/results.tex:14:28",
+          "新侧第 1 处：sections/results.tex:14:28"
+        ],
+        "message": "既有：表未被引用（tab:scores）",
+        "related_sources_new": [
+          {
+            "confidence": 1.0,
+            "end_column": 46,
+            "end_line": 14,
+            "file": "sections/results.tex",
+            "start_column": 28,
+            "start_line": 14,
+            "uncertainty_reason": null
+          }
+        ],
+        "related_sources_old": [
+          {
+            "confidence": 1.0,
+            "end_column": 46,
+            "end_line": 14,
+            "file": "sections/results.tex",
+            "start_column": 28,
+            "start_line": 14,
+            "uncertainty_reason": null
+          }
+        ],
+        "rule_status": "existing",
+        "severity": "info",
+        "source_new": {
+          "confidence": 1.0,
+          "end_column": 46,
+          "end_line": 14,
+          "file": "sections/results.tex",
+          "start_column": 28,
+          "start_line": 14,
+          "uncertainty_reason": null
+        },
+        "source_old": {
+          "confidence": 1.0,
+          "end_column": 46,
+          "end_line": 14,
+          "file": "sections/results.tex",
+          "start_column": 28,
+          "start_line": 14,
+          "uncertainty_reason": null
+        }
+      },
+      {
+        "code": "tex_distribution_style",
+        "message": "样式 plain 由 TeX 发行版提供，项目无需包含此文件",
+        "severity": "info",
+        "source_new": null,
+        "source_old": {
+          "confidence": 0.3,
+          "end_column": 26,
+          "end_line": 19,
+          "file": "main.tex",
+          "start_column": 1,
+          "start_line": 19,
+          "uncertainty_reason": null
+        }
+      },
+      {
+        "code": "tex_distribution_style",
+        "message": "样式 plain 由 TeX 发行版提供，项目无需包含此文件",
+        "severity": "info",
+        "source_new": {
+          "confidence": 0.3,
+          "end_column": 26,
+          "end_line": 19,
+          "file": "main.tex",
+          "start_column": 1,
+          "start_line": 19,
+          "uncertainty_reason": null
+        },
+        "source_old": null
+      },
+      {
+        "code": "unknown_latex",
+        "message": "未知或无法解析的 LaTeX 已保留原文",
+        "severity": "warning",
+        "source_new": null,
+        "source_old": {
+          "confidence": 1.0,
+          "end_column": 46,
+          "end_line": 5,
+          "file": "sections/results.tex",
+          "start_column": 11,
+          "start_line": 5,
+          "uncertainty_reason": null
+        }
+      },
+      {
+        "code": "unknown_latex",
+        "message": "未知或无法解析的 LaTeX 已保留原文",
+        "severity": "warning",
+        "source_new": null,
+        "source_old": {
+          "confidence": 1.0,
+          "end_column": 15,
+          "end_line": 8,
+          "file": "sections/appendix.tex",
+          "start_column": 1,
+          "start_line": 6,
+          "uncertainty_reason": null
+        }
+      },
+      {
+        "code": "unknown_latex",
+        "message": "未知或无法解析的 LaTeX 已保留原文",
+        "severity": "warning",
+        "source_new": {
+          "confidence": 1.0,
+          "end_column": 46,
+          "end_line": 5,
+          "file": "sections/results.tex",
+          "start_column": 11,
+          "start_line": 5,
+          "uncertainty_reason": null
+        },
+        "source_old": null
+      },
+      {
+        "code": "unknown_latex",
+        "message": "未知或无法解析的 LaTeX 已保留原文",
+        "severity": "warning",
+        "source_new": {
+          "confidence": 1.0,
+          "end_column": 15,
+          "end_line": 8,
+          "file": "sections/appendix.tex",
+          "start_column": 1,
+          "start_line": 6,
+          "uncertainty_reason": null
+        },
+        "source_old": null
+      },
+      {
+        "code": "unresolved_reference",
+        "evidence": [
+          "键：sec:missing",
+          "在该侧正文标签定义中未找到该键",
+          "旧侧第 1 处：sections/introduction.tex:5:60",
+          "新侧第 1 处：sections/introduction.tex:5:60"
+        ],
+        "message": "既有：交叉引用目标不存在（sec:missing）",
+        "related_sources_new": [
+          {
+            "confidence": 1.0,
+            "end_column": 77,
+            "end_line": 5,
+            "file": "sections/introduction.tex",
+            "start_column": 60,
+            "start_line": 5,
+            "uncertainty_reason": null
+          }
+        ],
+        "related_sources_old": [
+          {
+            "confidence": 1.0,
+            "end_column": 77,
+            "end_line": 5,
+            "file": "sections/introduction.tex",
+            "start_column": 60,
+            "start_line": 5,
+            "uncertainty_reason": null
+          }
+        ],
+        "rule_status": "existing",
+        "severity": "info",
+        "source_new": {
+          "confidence": 1.0,
+          "end_column": 77,
+          "end_line": 5,
+          "file": "sections/introduction.tex",
+          "start_column": 60,
+          "start_line": 5,
+          "uncertainty_reason": null
+        },
+        "source_old": {
+          "confidence": 1.0,
+          "end_column": 77,
+          "end_line": 5,
+          "file": "sections/introduction.tex",
+          "start_column": 60,
+          "start_line": 5,
+          "uncertainty_reason": null
+        }
+      }
+    ],
+    "schema_version": "1.1"
+  },
+  "live_service_ready_seconds": 1.618763,
+  "browser_version": "156.0.8078.4",
+  "pages": {
+    "live": {
+      "url": "http://127.0.0.1:42113/papers/6033fb0b65e1f5bafb6d011e0873c74fc7cb7026429eb6e1e919304c5bef8901/live",
+      "ready_and_screenshot_seconds": 1.107198,
+      "page_errors": [],
+      "blocked_external_requests": [
+        "https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-chtml.js"
+      ],
+      "title": "持续预览 · LaTeX Review",
+      "preview_sides": 1,
+      "visible_text": "LaTeX\n论文内容预览\n持续预览\n\nmain.tex\n\n来源\n当前磁盘论文\n预览说明\n搜索\n预览诊断 · 7\n译文显示\n英中对照\n英文原文\n翻译全文\n导出英中对照 HTML\n\n请在全局或项目配置中设置 [translation] 的接口地址和模型，然后重新启动本机预览服务。\n\n批注\n章节目录\n收起\n1 Introduction\n2 Method\n3 Repeated observations\n4 Results\nA Additional details\n当前论文\nA Synthetic Writing Check Study\n翻译此处\n尚未翻译\n摘要\n\nA compact synthetic manuscript studies the adaptive estimator (AE). Its terminology, references, and repeated source occurrences exercise writing checks.\n\n翻译此处\n尚未翻译\n1 Introduction\n翻译此处\n尚未翻译\n\nThe adaptive estimator improves reproducibility across chapters. We call its implementation fast_estimator in this paragraph. The method follows [known2026] and the unregistered source [missing2026] . A reader can compare Equation (1) and Section ?? (sec:missing) .\n\n翻译此处\n尚未翻译\n\nOur synthetic claim is deliberately modest: the method reduces variance in this small example. No text in this fixture is drawn from a private or real research paper.\n\n翻译此处\n尚未翻译\n2 Method\n翻译此处\n尚未翻译\n\nThe adaptive estimator (AE) uses the symbol s for a score.\n\n翻译此处\n尚未翻译\n\\begin{equation}\ns = x + y.\n\\tag{1}\\end{equation}\n\nAn intentionally complex expression preserves nested mathematical evidence.\n\n翻译此处\n尚未翻译\n\\begin{align}\n\\mathcal{L}(\\theta) &= \\sum_{i=1}^{n}\\left\\|f_{\\theta}(x_i)-y_i\\right\\|_2^2 \\tag{1}\\\\\n&\\quad + \\lambda \\int_0^1 \\frac{\\partial f_{\\theta}(t)}{\\partial t}\\,dt.\n\\tag{2}\\end{align}\n\nThe derivation does not establish general mathematical correctness.\n\n翻译此处\n尚未翻译\n3 Repeated observations\n翻译此处\n尚未翻译\n\nRepeated observation: the adaptive estimator uses the same source file twice. Its two reading occurrences must not collapse to one source occurrence.\n\n翻译此处\n尚未翻译\n\nRepeated observation: the adaptive estimator uses the same source file twice. Its two reading occurrences must not collapse to one source occurrence.\n\n翻译此处\n尚未翻译\n4 Results\n翻译此处\n尚未翻译\n\nThe adaptive estimation method is an intentionally inconsistent name. The synthetic example reports three observations, without claiming empirical validation.\n\n翻译此处\n尚未翻译\nFigure 1 A synthetic overview without external image dependencies.\n翻译此处\n尚未翻译\n\n此处暂无法预览\n\nTable 1 Synthetic scores.\n\nMethod\tScore\nAdaptive estimator\t3\n\nA documented limitation is retained for inspection rather than silently corrected.\n\n翻译此处\n尚未翻译\nA Additional details\n翻译此处\n尚未翻译\n\nThe appendix reuses s for a size, a deliberate scope-sensitive example. UTF-8 evidence includes naïve, café, 中文 and an astral character 🧪. CRLF source: café 中文 🧪. A second CRLF line retains Unicode character offsets.\n\n翻译此处\n尚未翻译\n\n此处暂无法预览\n\n参考文献\nknown2026\n预览诊断 · 7"
+    },
+    "diff": {
+      "url": "http://127.0.0.1:42113/papers/6033fb0b65e1f5bafb6d011e0873c74fc7cb7026429eb6e1e919304c5bef8901/diff",
+      "ready_and_screenshot_seconds": 0.885152,
+      "page_errors": [],
+      "blocked_external_requests": [
+        "https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-chtml.js"
+      ],
+      "title": "差异报告 · LaTeX Review",
+      "preview_sides": 2,
+      "visible_text": "↔\n论文修改审阅\n版本对照报告\nmain\n\n入口 main.tex\n\n修改前\n目录 · old\n修改后\n目录 · paper\n新增 2\n删除 2\n修改 1\n移动 0\n译文 0 / 6 段\n5\n项主变更\n正文变更词数\n+49\n/\n−45\n词\n报告说明\n章节\n☷\n变更目录\n5\n阅读范围\n完整文档\n变更上下文\n对照方式\n新稿阅读\n双稿对照\n译文显示\n英文原文\n英中对照\n翻译全部变更\n导出译文报告\n尚未选择变更\n↑\n上一处\n下一处\n↓\n请在全局或项目配置中设置 [translation] 的接口地址和模型，然后重新启动本机预览服务。\n章节目录\n收起\n\n变更总数 · 未审阅\n\n1 Introduction\n1 · 1\n2 Method\n0 · 0\n3 Repeated observations\n4 · 4\n4 Results\n0 · 0\nA Additional details\n0 · 0\n搜索与审阅记录 已审阅 0 / 5 · 待处理 0\n批注\n修改后\nA Synthetic Writing Check Study\n摘要\n\nA compact synthetic manuscript studies the adaptive estimator (AE). Its terminology, references, and repeated source occurrences exercise writing checks.\n\n1 Introduction\n\nThe adaptive estimator improves reproducibility across chapters. We call its implementation fast_estimator in this paragraph. The method follows [known2026] and the unregistered source [missing2026] . A reader can compare Equation (1) and Section ?? (sec:missing) .\n\n修改 · 01\n2 处改动\n\nOur synthetic claim is deliberately modest: the method reduces variance in this small example. No text in this fixture is drawn from a private or real research paper.\n\n2 Method\n\nThe adaptive estimator (AE) uses the symbol s for a score.\n\n\\begin{equation}\ns = x + y.\n\\tag{1}\\end{equation}\n\nAn intentionally complex expression preserves nested mathematical evidence.\n\n\\begin{align}\n\\mathcal{L}(\\theta) &= \\sum_{i=1}^{n}\\left\\|f_{\\theta}(x_i)-y_i\\right\\|_2^2 \\tag{1}\\\\\n&\\quad + \\lambda \\int_0^1 \\frac{\\partial f_{\\theta}(t)}{\\partial t}\\,dt.\n\\tag{2}\\end{align}\n\nThe derivation does not establish general mathematical correctness.\n\n3 Repeated observations\n\nRepeated observation: the adaptive estimator uses the same source file twice. Its two reading occurrences must not collapse to one source occurrence.\n\n新增 · 02\n2 处改动\n\nRepeated observation: the adaptive estimator uses the same source file twice. Its two reading occurrences must not collapse to one source occurrence.\n\n新增 · 03\n2 处改动\n4 Results\n\nThe adaptive estimation method is an intentionally inconsistent name. The synthetic example reports three observations, without claiming empirical validation.\n\nFigure 1 A synthetic overview without external image dependencies.\n\n此处暂无法预览\n\nTable 1 Synthetic scores.\n\nMethod\tScore\nAdaptive estimator\t3\n\nA documented limitation is retained for inspection rather than silently corrected.\n\nA Additional details\n\nThe appendix reuses s for a size, a deliberate scope-sensitive example. UTF-8 evidence includes naïve, café, 中文 and an astral character 🧪. CRLF source: café 中文 🧪. A second CRLF line retains Unicode character offsets.\n\n此处暂无法预览\n\n参考文献\nknown2026\n− 删除 · 04\n删除 · 04\n2 处改动\n− 删除 · 05\n删除 · 05\n2 处改动\n报告诊断\n14 条诊断"
+    }
+  }
+}

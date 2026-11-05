@@ -43,6 +43,8 @@ def output(root, entry, kind):
 
 
 def validate(data):
+    from .check_configuration import validate_check_configuration
+    validate_check_configuration(data)
     if not isinstance(data.get("compile", {}), dict):
         raise ValueError("配置 [compile] 必须是表")
     source = data.get('source', {})

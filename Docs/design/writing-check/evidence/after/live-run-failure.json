@@ -1,0 +1,224 @@
+{
+  "run_response": {
+    "code": "page_changed",
+    "message": "页面检查输入已更新或缺少输入绑定，请刷新或重建预览",
+    "action": "reload"
+  },
+  "page_errors": [],
+  "page_snapshot": {
+    "paper_id": "a2b23f03769fe9713b4bf8d98d58ea89028ba46470d20cf77e5f7fbd535c9e21",
+    "entry": "main.tex",
+    "content_id": "e37c8e229ecddbcb1f440938a12d332166858575e64b52696f00f65e3d026fb4",
+    "parser_version": "writing-check-document-1/3.1",
+    "files": {
+      "main.tex": "044245ae3b335fc44674c4ccc1dbc30fddfbeed420b0f14bf0509b28d00b0f53",
+      "references.bib": "92393070298961a198a76ec5d53ac003ae9fc5ee5a1bd04a91c804b284feab77",
+      "sections/appendix.tex": "7b47a5da307024dc993490c2ca1f419675e632350c5b4766a7db8c9a23c597f3",
+      "sections/introduction.tex": "3e84061654f0afc1328ecffd055538f15fed826056c6bcbd3104ab258d050874",
+      "sections/method.tex": "c6210f9e9f80a7b6489c432a342b61941ca79b565fcdaab2daf7bbb154910c6b",
+      "sections/results.tex": "146f7d4cdbd1e63d83a36f9e3d41c76a7c0cfd7660c46593e6e631fba01eba47",
+      "shared/crlf.tex": "10c81656ebc714f6ca1f7bc9568e074a3ed8784fc8bca77ba4aa291724767464",
+      "shared/observation.tex": "5def2b5e7bde27c3c6776363cae3b8fbd7c83b07e00fcc631085ca664c050e04"
+    },
+    "page_version": "69fa81a7f4c5b527ba64b86918f1342d5bc8dc95655fe6bde199b23ebb0bae8c",
+    "configuration_hash": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a"
+  },
+  "direct_entry_status": {
+    "available": true,
+    "read_only": false,
+    "paper_id": "a2b23f03769fe9713b4bf8d98d58ea89028ba46470d20cf77e5f7fbd535c9e21",
+    "configuration_hash": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+    "capabilities": {
+      "run": true,
+      "cancel": true,
+      "knowledge": true,
+      "decisions": true,
+      "semantic_import": true,
+      "export": true
+    },
+    "state": "completed",
+    "current_input_id": "6a7d30840dbc390a1f31da163907fdfbb904849018b5fa6d8741fd8576a905ba",
+    "current_run": {
+      "run_id": "5c9a54bc35c24a6cb958e0a9f187fb1e",
+      "paper_id": "a2b23f03769fe9713b4bf8d98d58ea89028ba46470d20cf77e5f7fbd535c9e21",
+      "state": "completed",
+      "scope": "changed",
+      "page_version": "69fa81a7f4c5b527ba64b86918f1342d5bc8dc95655fe6bde199b23ebb0bae8c",
+      "input_id": "6a7d30840dbc390a1f31da163907fdfbb904849018b5fa6d8741fd8576a905ba",
+      "error": null
+    },
+    "stale": false,
+    "coverage": [
+      {
+        "applicable_count": 2,
+        "blind_spots": [],
+        "complete": true,
+        "entry": "main.tex",
+        "reasons": [],
+        "rule_id": "bibliography_key_unresolved",
+        "rule_version": "1.0",
+        "scope": "all",
+        "status": "executed"
+      },
+      {
+        "applicable_count": 7,
+        "blind_spots": [],
+        "complete": true,
+        "entry": "main.tex",
+        "reasons": [],
+        "rule_id": "duplicate_label",
+        "rule_version": "1.0",
+        "scope": "all",
+        "status": "executed"
+      },
+      {
+        "applicable_count": 1,
+        "blind_spots": [],
+        "complete": true,
+        "entry": "main.tex",
+        "reasons": [],
+        "rule_id": "figure_unreferenced",
+        "rule_version": "1.0",
+        "scope": "all",
+        "status": "executed"
+      },
+      {
+        "applicable_count": 1,
+        "blind_spots": [],
+        "complete": true,
+        "entry": "main.tex",
+        "reasons": [],
+        "rule_id": "table_unreferenced",
+        "rule_version": "1.0",
+        "scope": "all",
+        "status": "executed"
+      },
+      {
+        "applicable_count": 2,
+        "blind_spots": [],
+        "complete": true,
+        "entry": "main.tex",
+        "reasons": [],
+        "rule_id": "unresolved_reference",
+        "rule_version": "1.0",
+        "scope": "all",
+        "status": "executed"
+      },
+      {
+        "applicable_count": null,
+        "blind_spots": [
+          {
+            "code": "unknown_latex",
+            "file": "sections/results.tex",
+            "message": "未知或无法解析的 LaTeX 已保留原文"
+          },
+          {
+            "code": "low_confidence_source",
+            "file": null,
+            "message": "结构来源位置不确定；已保留全部原文片段"
+          },
+          {
+            "code": "unknown_latex",
+            "file": "sections/appendix.tex",
+            "message": "未知或无法解析的 LaTeX 已保留原文"
+          }
+        ],
+        "complete": false,
+        "entry": "main.tex",
+        "reasons": [
+          "preview_rendering_incomplete"
+        ],
+        "rule_id": "source_rendering",
+        "rule_version": "1.0",
+        "scope": "all",
+        "status": "unsupported"
+      },
+      {
+        "applicable_count": null,
+        "blind_spots": [],
+        "complete": false,
+        "entry": "main.tex",
+        "reasons": [
+          "requires_two_versions"
+        ],
+        "rule_id": "equation_number_changed",
+        "rule_version": "1.0",
+        "scope": "all",
+        "status": "prerequisite_missing"
+      },
+      {
+        "applicable_count": 0,
+        "blind_spots": [],
+        "complete": true,
+        "entry": "main.tex",
+        "reasons": [],
+        "rule_id": "term.forbidden_name",
+        "rule_version": "1.0",
+        "scope": "all",
+        "status": "no_applicable_objects"
+      },
+      {
+        "applicable_count": 0,
+        "blind_spots": [],
+        "complete": true,
+        "entry": "main.tex",
+        "reasons": [],
+        "rule_id": "term.code_identifier_in_prose",
+        "rule_version": "1.0",
+        "scope": "all",
+        "status": "no_applicable_objects"
+      },
+      {
+        "applicable_count": 0,
+        "blind_spots": [],
+        "complete": true,
+        "entry": "main.tex",
+        "reasons": [],
+        "rule_id": "acronym.first_use",
+        "rule_version": "1.0",
+        "scope": "all",
+        "status": "no_applicable_objects"
+      },
+      {
+        "applicable_count": 0,
+        "blind_spots": [],
+        "complete": true,
+        "entry": "main.tex",
+        "reasons": [],
+        "rule_id": "concept.use_before_definition",
+        "rule_version": "1.0",
+        "scope": "all",
+        "status": "no_applicable_objects"
+      },
+      {
+        "applicable_count": 0,
+        "blind_spots": [],
+        "complete": true,
+        "entry": "main.tex",
+        "reasons": [],
+        "rule_id": "concept.dependency_order",
+        "rule_version": "1.0",
+        "scope": "all",
+        "status": "no_applicable_objects"
+      },
+      {
+        "applicable_count": 0,
+        "blind_spots": [],
+        "complete": true,
+        "entry": "main.tex",
+        "reasons": [],
+        "rule_id": "symbol.binding_conflict",
+        "rule_version": "1.0",
+        "scope": "all",
+        "status": "no_applicable_objects"
+      }
+    ],
+    "summary": {
+      "candidate_count": 0,
+      "coverage_complete": true,
+      "finding_count": 4,
+      "occurrence_count": 4
+    },
+    "message": "规则检查不会自动调用 AI。"
+  }
+}

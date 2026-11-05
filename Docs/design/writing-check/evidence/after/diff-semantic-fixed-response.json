@@ -1,0 +1,35 @@
+{
+  "schema_version": "1.0",
+  "request_id": "0ef7e60b085945c1a9d11862c1552d8e",
+  "task": "concept_definition",
+  "candidates": [
+    {
+      "kind": "concept",
+      "hypothesis": "Synthetic candidate only: inspect this passage.",
+      "evidence": [
+        {
+          "unit_id": "u0",
+          "quote": "\\title{A Synthetic Writing Check Study}"
+        }
+      ],
+      "rationale": "Fixed-response provenance exercise, not semantic quality evidence.",
+      "missing_context": [
+        "Author judgment is still required."
+      ]
+    },
+    {
+      "kind": "concept",
+      "hypothesis": "Synthetic candidate only: inspect this passage.",
+      "evidence": [
+        {
+          "unit_id": "invented-unit-do-not-trust",
+          "quote": "\\title{A Synthetic Writing Check Study}"
+        }
+      ],
+      "rationale": "Fixed-response provenance exercise, not semantic quality evidence.",
+      "missing_context": [
+        "Author judgment is still required."
+      ]
+    }
+  ]
+}

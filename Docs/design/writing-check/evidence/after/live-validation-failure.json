@@ -1,0 +1,265 @@
+{
+  "page_errors": [],
+  "visible_text": "阅读与变更\n问题检查\n概念与符号\nAI 审查\n规则与覆盖\n问题检查\n\n已检查范围内未发现规则问题 · 部分范围未检查\n\n检查当前论文\n检查本次修改\n取消检查\n导出冻结检查结果\n\n问题条目数 0 · 命中位置数 0",
+  "checks_status": {
+    "available": true,
+    "read_only": false,
+    "paper_id": "f8426b2e2bc82c73797615efc8bb0ca3b476c88d5afd8df8e16b79293e7445fe",
+    "configuration_hash": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+    "capabilities": {
+      "run": true,
+      "cancel": true,
+      "knowledge": true,
+      "decisions": true,
+      "semantic_import": true,
+      "export": true
+    },
+    "state": "partial",
+    "current_input_id": "1ac1282488a7ec257ec098ab5843a689b56ffdd87922220d5f8af4222b9cba9d",
+    "current_run": {
+      "run_id": "d48b9e01b353478bb791bc7f8bd1ec69",
+      "paper_id": "f8426b2e2bc82c73797615efc8bb0ca3b476c88d5afd8df8e16b79293e7445fe",
+      "state": "partial",
+      "scope": "all",
+      "page_version": "69fa81a7f4c5b527ba64b86918f1342d5bc8dc95655fe6bde199b23ebb0bae8c",
+      "input_id": "1ac1282488a7ec257ec098ab5843a689b56ffdd87922220d5f8af4222b9cba9d",
+      "error": null
+    },
+    "stale": false,
+    "coverage": [
+      {
+        "applicable_count": null,
+        "blind_spots": [
+          {
+            "code": "low_confidence_source",
+            "file": null,
+            "message": "结构来源位置不确定；已保留全部原文片段"
+          },
+          {
+            "code": "unknown_latex",
+            "file": "sections/appendix.tex",
+            "message": "未知或无法解析的 LaTeX 已保留原文"
+          },
+          {
+            "code": "unknown_latex",
+            "file": "sections/results.tex",
+            "message": "未知或无法解析的 LaTeX 已保留原文"
+          }
+        ],
+        "complete": false,
+        "entry": "main.tex",
+        "reasons": [
+          "source_incomplete"
+        ],
+        "rule_id": "bibliography_key_unresolved",
+        "rule_version": "1.0",
+        "scope": "all",
+        "status": "unsupported"
+      },
+      {
+        "applicable_count": null,
+        "blind_spots": [
+          {
+            "code": "low_confidence_source",
+            "file": null,
+            "message": "结构来源位置不确定；已保留全部原文片段"
+          },
+          {
+            "code": "unknown_latex",
+            "file": "sections/appendix.tex",
+            "message": "未知或无法解析的 LaTeX 已保留原文"
+          },
+          {
+            "code": "unknown_latex",
+            "file": "sections/results.tex",
+            "message": "未知或无法解析的 LaTeX 已保留原文"
+          }
+        ],
+        "complete": false,
+        "entry": "main.tex",
+        "reasons": [
+          "source_incomplete"
+        ],
+        "rule_id": "duplicate_label",
+        "rule_version": "1.0",
+        "scope": "all",
+        "status": "unsupported"
+      },
+      {
+        "applicable_count": null,
+        "blind_spots": [
+          {
+            "code": "low_confidence_source",
+            "file": null,
+            "message": "结构来源位置不确定；已保留全部原文片段"
+          },
+          {
+            "code": "unknown_latex",
+            "file": "sections/appendix.tex",
+            "message": "未知或无法解析的 LaTeX 已保留原文"
+          },
+          {
+            "code": "unknown_latex",
+            "file": "sections/results.tex",
+            "message": "未知或无法解析的 LaTeX 已保留原文"
+          }
+        ],
+        "complete": false,
+        "entry": "main.tex",
+        "reasons": [
+          "source_incomplete"
+        ],
+        "rule_id": "figure_unreferenced",
+        "rule_version": "1.0",
+        "scope": "all",
+        "status": "unsupported"
+      },
+      {
+        "applicable_count": null,
+        "blind_spots": [
+          {
+            "code": "low_confidence_source",
+            "file": null,
+            "message": "结构来源位置不确定；已保留全部原文片段"
+          },
+          {
+            "code": "unknown_latex",
+            "file": "sections/appendix.tex",
+            "message": "未知或无法解析的 LaTeX 已保留原文"
+          },
+          {
+            "code": "unknown_latex",
+            "file": "sections/results.tex",
+            "message": "未知或无法解析的 LaTeX 已保留原文"
+          }
+        ],
+        "complete": false,
+        "entry": "main.tex",
+        "reasons": [
+          "source_incomplete"
+        ],
+        "rule_id": "table_unreferenced",
+        "rule_version": "1.0",
+        "scope": "all",
+        "status": "unsupported"
+      },
+      {
+        "applicable_count": null,
+        "blind_spots": [
+          {
+            "code": "low_confidence_source",
+            "file": null,
+            "message": "结构来源位置不确定；已保留全部原文片段"
+          },
+          {
+            "code": "unknown_latex",
+            "file": "sections/appendix.tex",
+            "message": "未知或无法解析的 LaTeX 已保留原文"
+          },
+          {
+            "code": "unknown_latex",
+            "file": "sections/results.tex",
+            "message": "未知或无法解析的 LaTeX 已保留原文"
+          }
+        ],
+        "complete": false,
+        "entry": "main.tex",
+        "reasons": [
+          "source_incomplete"
+        ],
+        "rule_id": "unresolved_reference",
+        "rule_version": "1.0",
+        "scope": "all",
+        "status": "unsupported"
+      },
+      {
+        "applicable_count": null,
+        "blind_spots": [],
+        "complete": false,
+        "entry": "main.tex",
+        "reasons": [
+          "requires_two_versions"
+        ],
+        "rule_id": "equation_number_changed",
+        "rule_version": "1.0",
+        "scope": "all",
+        "status": "prerequisite_missing"
+      },
+      {
+        "applicable_count": 0,
+        "blind_spots": [],
+        "complete": true,
+        "entry": "main.tex",
+        "reasons": [],
+        "rule_id": "term.forbidden_name",
+        "rule_version": "1.0",
+        "scope": "all",
+        "status": "no_applicable_objects"
+      },
+      {
+        "applicable_count": 0,
+        "blind_spots": [],
+        "complete": true,
+        "entry": "main.tex",
+        "reasons": [],
+        "rule_id": "term.code_identifier_in_prose",
+        "rule_version": "1.0",
+        "scope": "all",
+        "status": "no_applicable_objects"
+      },
+      {
+        "applicable_count": 0,
+        "blind_spots": [],
+        "complete": true,
+        "entry": "main.tex",
+        "reasons": [],
+        "rule_id": "acronym.first_use",
+        "rule_version": "1.0",
+        "scope": "all",
+        "status": "no_applicable_objects"
+      },
+      {
+        "applicable_count": 0,
+        "blind_spots": [],
+        "complete": true,
+        "entry": "main.tex",
+        "reasons": [],
+        "rule_id": "concept.use_before_definition",
+        "rule_version": "1.0",
+        "scope": "all",
+        "status": "no_applicable_objects"
+      },
+      {
+        "applicable_count": 0,
+        "blind_spots": [],
+        "complete": true,
+        "entry": "main.tex",
+        "reasons": [],
+        "rule_id": "concept.dependency_order",
+        "rule_version": "1.0",
+        "scope": "all",
+        "status": "no_applicable_objects"
+      },
+      {
+        "applicable_count": 0,
+        "blind_spots": [],
+        "complete": true,
+        "entry": "main.tex",
+        "reasons": [],
+        "rule_id": "symbol.binding_conflict",
+        "rule_version": "1.0",
+        "scope": "all",
+        "status": "no_applicable_objects"
+      }
+    ],
+    "summary": {
+      "candidate_count": 0,
+      "coverage_complete": false,
+      "finding_count": 0,
+      "occurrence_count": 0
+    },
+    "message": "规则检查不会自动调用 AI。",
+    "page_version": "69fa81a7f4c5b527ba64b86918f1342d5bc8dc95655fe6bde199b23ebb0bae8c",
+    "token": "[redacted owned temporary service token]"
+  }
+}

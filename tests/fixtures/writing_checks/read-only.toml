@@ -1,0 +1,5 @@
+# Register this external profile against a temporary COPY of paper/.
+# The fixture itself is not a runtime output directory.
+[project]
+read_only = true
+entries = ["main.tex", "supplement.tex"]

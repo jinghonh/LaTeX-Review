@@ -83,6 +83,41 @@ def test_live_navigation_and_refresh_preserve_reading_state(tmp_path):
                 errors = []
                 page.on('pageerror', lambda error: errors.append(str(error)))
                 page.route('https://**', lambda route: route.abort())
+                reload_diagnostics = []
+
+                def reading_state(index):
+                    return page.evaluate('''index => {
+                        const rect = node => node ? {top: node.getBoundingClientRect().top,
+                            bottom: node.getBoundingClientRect().bottom} : null;
+                        return {ready: document.readyState, scroll: scrollY, width: innerWidth,
+                            resizing: window.reviewReadingPosition?.isResizing(), fonts: document.fonts.status,
+                            toolbar: rect(document.querySelector('.report-controls')),
+                            navigation: rect(document.querySelector('#review-workspace > [role="tablist"]')),
+                            inset: document.querySelector('#review-workspace')?.style.getPropertyValue('--workspace-heading-inset'),
+                            saved: sessionStorage.getItem('latex-live:' + location.pathname),
+                            sections: [...document.querySelectorAll('.node-section')].map((node, position) => ({
+                                id: node.id, text: node.querySelector('h2')?.textContent,
+                                top: node.getBoundingClientRect().top, target: position === index}))};
+                    }''', index)
+
+                def wait_for_reading_layout():
+                    # load does not drain ResizeObserver/requestAnimationFrame restoration.
+                    page.wait_for_load_state('load')
+                    page.evaluate('() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))')
+                    page.wait_for_function('() => !window.reviewReadingPosition?.isResizing()')
+
+                def assert_restored(index, revision):
+                    state = {'revision': revision, 'before': reading_state(index)}
+                    reload_diagnostics.append(state)
+                    try:
+                        wait_for_reading_layout()
+                    except api.TimeoutError as error:
+                        raise AssertionError({'layout_settlement_timeout': True, 'reloads': reload_diagnostics}) from error
+                    finally:
+                        state['settled'] = reading_state(index)
+                    assert abs(page.locator('.node-section').nth(index).bounding_box()['y'] - offset) < 3, {
+                        'expected_offset': offset, 'reloads': reload_diagnostics}
+
                 page.goto(f'http://127.0.0.1:{server.server_port}/report.html')
                 paper = page.locator('.preview-side')
                 assert paper.count() == 1
@@ -111,6 +146,7 @@ def test_live_navigation_and_refresh_preserve_reading_state(tmp_path):
                 page.locator('#live-search').fill('Target passage')
                 assert page.locator('#live-results button').count() == 1
                 page.locator('#live-results button').click()
+                wait_for_reading_layout()
                 assert page.evaluate('scrollY') > 0
                 second = page.locator('.node-section').nth(1)
                 offset = second.bounding_box()['y']
@@ -118,26 +154,24 @@ def test_live_navigation_and_refresh_preserve_reading_state(tmp_path):
                 build(source, output, 2)
                 (output / 'live-status.json').write_text(json.dumps({'revision': 2, 'message': 'Updated'}))
                 page.wait_for_function('document.querySelector(".preview-side").textContent.includes("Target passage updated.")')
-                page.wait_for_load_state('load')
+                assert_restored(1, 2)
                 assert page.locator('#live-search').input_value() == 'Target passage'
                 assert page.locator('#live-navigation').get_attribute('open') is not None
-                assert abs(page.locator('.node-section').nth(1).bounding_box()['y'] - offset) < 3
                 # The saved section name survives earlier insertions that change node IDs.
                 entry.write_text(entry.read_text().replace('\\section{First}', '\\section{Inserted}\nNew material.\n\\section{First}'))
                 build(source, output, 3)
                 (output / 'live-status.json').write_text(json.dumps({'revision': 3, 'message': 'Inserted'}))
                 page.wait_for_function('document.querySelectorAll(".node-section").length === 4')
-                page.wait_for_load_state('load')
-                assert abs(page.locator('.node-section').nth(2).bounding_box()['y'] - offset) < 3
+                assert_restored(2, 3)
                 # If the current section is deleted, fall back to the nearest remaining section.
                 entry.write_text(entry.read_text().replace('\\section{Second}', '\\section{Replacement}'))
                 build(source, output, 4)
                 (output / 'live-status.json').write_text(json.dumps({'revision': 4, 'message': 'Replaced'}))
                 page.wait_for_function('document.querySelector(".preview-side").textContent.includes("Replacement")')
-                page.wait_for_load_state('load')
-                assert abs(page.locator('.node-section').nth(2).bounding_box()['y'] - offset) < 3
+                assert_restored(2, 4)
                 for width in (1280, 390):
                     page.set_viewport_size({'width': width, 'height': 900})
+                    wait_for_reading_layout()
                     page.evaluate('window.scrollTo(0,0)')
                     if not page.locator('#sections-side').is_visible():
                         page.locator('#toggle-sections').click()
@@ -216,8 +250,86 @@ def test_live_section_tree_restores_expansion(tmp_path):
         api.expect(page.locator('#sections-side')).to_be_hidden()
         page.set_viewport_size({'width': 390, 'height': 900})
         page.locator('#toggle-sections').click()
+        page.evaluate('() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))')
+        page.wait_for_function('() => !window.reviewReadingPosition?.isResizing()')
         page.get_by_role('button', name='1.1 Second', exact=True).click()
+        page.evaluate('() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))')
         api.expect(page.locator('#sections-side')).to_be_hidden()
         api.expect(page.get_by_role('button', name='1.1 Second', exact=True, include_hidden=True)).to_have_attribute('aria-current', 'location')
+        assert page.evaluate('scrollY >= document.documentElement.scrollHeight - innerHeight - 1')
+        heading = page.locator('.preview-side[data-side="new"] h3').filter(has_text='Second')
+        assert heading.evaluate('node => node.getBoundingClientRect().top >= document.querySelector(".report-controls").getBoundingClientRect().bottom && node.getBoundingClientRect().bottom <= innerHeight')
+        # A subsequent native jump must replace the bottom-clamped selection.
+        page.locator('#toggle-sections').click()
+        page.get_by_role('button', name='1 First', exact=True).click()
+        page.evaluate('() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))')
+        api.expect(page.get_by_role('button', name='1 First', exact=True, include_hidden=True)).to_have_attribute('aria-current', 'location')
+        heading = page.locator('.preview-side[data-side="new"] .node-section > h2').first
+        assert heading.evaluate('node => node.getBoundingClientRect().top >= document.querySelector(".report-controls").getBoundingClientRect().bottom && node.getBoundingClientRect().bottom <= innerHeight')
         assert not errors
         browser.close()
+
+
+def test_saved_check_notifier_coalesces_cancels_and_honors_effective_profile(tmp_path, monkeypatch):
+    from threading import Event
+    import latex_review.live as live
+    from latex_review.project_profile import directory, settings
+    monkeypatch.setenv('XDG_CACHE_HOME', str(tmp_path / 'external-cache'))
+    root = tmp_path / 'paper'
+    root.mkdir()
+    (root / 'main.tex').write_text('Paper')
+    profile = directory(root) / 'project.toml'
+    profile.parent.mkdir(parents=True)
+    profile.write_text('[checks]\ndebounce_ms=1350\non_save=false\n')
+    source = ProjectSource('new', root, 'main.tex', ComparisonSource('directory', str(root)))
+    timers, sent = [], []
+    class FakeTimer:
+        def __init__(self, delay, callback, args):
+            self.delay, self.callback, self.args = delay, callback, args
+            self.cancelled = self.started = False
+            timers.append(self)
+        def start(self):
+            self.started = True
+        def cancel(self):
+            self.cancelled = True
+        def fire(self):
+            self.callback(*self.args)
+    monkeypatch.setattr(live, 'Timer', FakeTimer)
+    monkeypatch.setattr(live, '_check_saved_recipe', lambda recipe, config: sent.append((recipe, config)))
+    stop = Event()
+    notifier = live._SavedCheckNotifier({'paper_id': 'owned'}, stop)
+    notifier.schedule(settings(source))
+    assert timers == []  # External profile disables default on-save checks.
+    from dataclasses import replace
+    source = replace(source, configuration={'checks': {'on_save': True}})
+    effective = settings(source)
+    notifier.schedule(effective)
+    assert timers[-1].delay == 1.35 and timers[-1].started and timers[-1].daemon
+    first = timers[-1]
+    notifier.schedule(effective)
+    assert first.cancelled
+    first.fire()  # Already-fired cancelled timers also cannot send stale work.
+    assert sent == []
+    timers[-1].fire()
+    assert sent == [({'paper_id': 'owned'}, effective)]
+    notifier.schedule({})
+    assert timers[-1].delay == .8
+    last = timers[-1]
+    notifier.schedule({'checks': {'enabled': False}})
+    assert last.cancelled
+    last.fire()
+    assert len(sent) == 1
+    notifier.schedule({})
+    pending = timers[-1]
+    notifier.cancel_pending()  # A failed next rebuild must not send old success.
+    pending.fire()
+    assert pending.cancelled and len(sent) == 1
+    notifier.schedule({})  # Cancel is reusable, unlike permanent worker close.
+    stopped = timers[-1]
+    stop.set()
+    stopped.fire()
+    assert len(sent) == 1
+    notifier.close()
+    assert stopped.cancelled
+    notifier.schedule({})
+    assert timers[-1] is stopped

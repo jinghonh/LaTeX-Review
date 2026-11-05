@@ -85,9 +85,15 @@ class TranslationConfig:
         return address if address.endswith("/chat/completions") else address + "/chat/completions"
 
 
-def _protected_sentence(raw: str, render, *, token_start: int = 0) -> dict:
-    from .structure import _argument, _masked
+def _plain_sentence_text(raw: str) -> str | None:
+    # With no commands, math or active nonbreaking spaces, the token walker
+    # only folds whitespace and rejoins unchanged text. Keep all special cases.
+    if any(char in raw for char in ('\\', '$', '~')):
+        return None
+    return ' '.join(raw.split())
 
+
+def _protected_sentence(raw: str, render, *, token_start: int = 0) -> dict:
     protected: list[dict] = []
 
     def add(latex: str, html: str, kind: str, **metadata) -> str:
@@ -139,20 +145,29 @@ def _protected_sentence(raw: str, render, *, token_start: int = 0) -> dict:
     clean = _without_comments(raw)[0]
     if _TOKEN.search(clean):
         raise TranslationError("原文包含保留的翻译占位符，无法可靠翻译")
-    return {"text": walk(clean), "protected": protected}
+    plain = _plain_sentence_text(clean)
+    if plain is None:
+        from .structure import _argument, _masked
+        text = walk(clean)
+    else:
+        text = _NUMBER.sub(lambda m: add(m[0], escape(m[0]), 'number'), plain)
+    return {"text": text, "protected": protected}
 
 
 def _build_unit(project, node, side: str, change_id: str, changed: set[int], *,
                 diagnostics: list | None = None, highlight_structure: bool = True) -> dict | None:
-    from .preview import _inline_html
-    from .structure import _argument, _masked
-    from .structured_diff import _caption
-
     kind, node_id = node.review.type, node.review.id
     raw = node.review.raw_latex
+    inline_html = None
+    # Bind TeX renderers before caption/heading/sentence callbacks, as before.
+    # Literal prose never renders, so it needs no preview import at all.
+    if kind != "paragraph" or type(raw) is not str or any(char in raw for char in ('\\', '$', '~')):
+        from .preview import _inline_html as inline_html
     if kind == "figure":
+        from .structured_diff import _caption
         raw = _caption(raw) or ""
     elif kind in _HEADINGS:
+        from .structure import _argument, _masked
         command = re.match(r"\\[A-Za-z@]+", raw)
         arg = _argument(_masked(raw), command.end()) if command else None
         raw = raw[arg[2]:arg[0] - 1] if arg else node.review.plain_text or ""
@@ -161,10 +176,13 @@ def _build_unit(project, node, side: str, change_id: str, changed: set[int], *,
             "kind": kind, "change_id": change_id,
             "rule_version": RULE_VERSION, "sentences": []}
     sentences = []
+    def render(text):
+        nonlocal inline_html
+        if inline_html is None:
+            from .preview import _inline_html as inline_html
+        return inline_html(text, project, side, [], source=node.review.source)
     try:
         for number, sentence in enumerate(split_sentences(raw), 1):
-            def render(text):
-                return _inline_html(text, project, side, [], source=node.review.source)
             protected = _protected_sentence(sentence.text, render,
                                             token_start=sum(len(s["protected"]) for s in sentences))
             if not protected["text"].strip():

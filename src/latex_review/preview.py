@@ -42,6 +42,7 @@ class PreviewResult:
     _style: str = field(default="", repr=False, compare=False)
     _content: str | None = field(default=None, repr=False, compare=False)
     _math_scripts: str = field(default="", repr=False, compare=False)
+    _fragment_plan: object = field(default=None, repr=False, compare=False)
 
     def compose(self, *, title: str = "LaTeX 内容预览", style: str = "",
                 head: str = "", body_class: str = "", before_main: str | None = None,
@@ -111,6 +112,13 @@ def render_sentence_copy(raw: str | None, project: ParsedProject, side: str,
 
 def _e(value: object) -> str:
     return escape(str(value), quote=True)
+
+
+def _normalized_whitespace(value) -> str:
+    """Normalize comparison text only; emitted markup remains untouched."""
+    if type(value) is str:
+        return ' '.join(value.split())
+    return re.sub(r'\s+', ' ', value).strip()
 
 
 def _anchor(side: str, node_id: str) -> str:
@@ -358,10 +366,28 @@ def _dom_html(node: object, project: ParsedProject, side: str, inline: list[Pars
     return children
 
 
+def _literal_inline_html(raw: str) -> str | None:
+    """Render only unambiguous literal ASCII, preserving plasTeX's padding.
+
+    TeX syntax, typography shortcuts and non-ASCII/control characters retain the
+    existing parser. This avoids constructing a whole TeX context per plain
+    prose/sentence fragment without changing formula/macro or anchor handling.
+    """
+    if ('\\' in raw or re.search(r"[{}$%&#_^~`]|[^\x20-\x7e\t\r\n]", raw)
+            or '--' in raw or "''" in raw):
+        return None
+    text = ' '.join(raw.split())
+    return ' ' + _e(text) + ' ' if text else ''
+
+
 def _inline_html(raw: str, project: ParsedProject, side: str, inline: list[ParsedNode] | None = None,
                  diagnostics: list[Diagnostic] | None = None, source: SourceLocation | None = None,
                  base_start: int | None = None) -> str:
     inline = inline or []
+    if not inline:
+        literal = _literal_inline_html(raw)
+        if literal is not None:
+            return literal
     heading = re.match(r"^(\s*)\\(?:paragraph|subparagraph)\*?\s*\{([^{}]*)\}", raw)
     if heading:
         remainder = heading.end()
@@ -624,7 +650,7 @@ def _body(node: ParsedNode, project: ParsedProject, side: str, by_id: dict[str, 
             canonical = _inline_html(raw, project, side, children, diagnostics, node.review.source, node.expanded_start)
             # Sentence fragments can change plasTeX context or inline-node matching.
             # Keep the canonical rendering when marking sentences would change it.
-            if re.sub(r'\s+', ' ', ''.join(original_pieces)).strip() != re.sub(r'\s+', ' ', canonical).strip():
+            if _normalized_whitespace(''.join(original_pieces)) != _normalized_whitespace(canonical):
                 return f'<p>{canonical}</p>'
             return f'<p>{"".join(pieces)}</p>'
         return f'<p>{_inline_html(node.review.raw_latex, project, side, children, diagnostics, node.review.source, node.expanded_start)}</p>'
@@ -685,7 +711,7 @@ def _body(node: ParsedNode, project: ParsedProject, side: str, by_id: dict[str, 
                 suffix = _e(_without_comments(caption[0][cursor:])[0])
                 pieces.append(suffix)
                 original_pieces.append(suffix)
-                if re.sub(r'\s+', ' ', ''.join(original_pieces)).strip() == re.sub(r'\s+', ' ', caption_html).strip():
+                if _normalized_whitespace(''.join(original_pieces)) == _normalized_whitespace(caption_html):
                     caption_html = "".join(pieces)
         return assets + missing + (f'<figcaption>{_number_prefix(node, project, "Figure ")}{caption_html}</figcaption>' if caption else "") + _embedded_fallbacks(children, side)
     if kind == "table":
@@ -752,10 +778,16 @@ def _render_node(node: ParsedNode, project: ParsedProject, side: str, by_id: dic
 def _side(project: ParsedProject, side: str, title: str, diagnostics: list[Diagnostic],
           figure_assets: Mapping[tuple[str, str], str] | None = None,
           extra_nodes: tuple[ReviewNode, ...] = (),
-          sentence_highlights: Mapping[tuple[str, str], frozenset[int]] | None = None) -> str:
+          sentence_highlights: Mapping[tuple[str, str], frozenset[int]] | None = None,
+          *, _fragments=None) -> str:
     by_id = project.by_id()
     roots = [node for node in project.nodes if node.review.parent_id is None]
-    content = "".join(_render_node(node, project, side, by_id, diagnostics, figure_assets, sentence_highlights) for node in roots)
+    parts = [(node.review.id, _render_node(node, project, side, by_id, diagnostics, figure_assets, sentence_highlights))
+             for node in roots]
+    content = "".join(html for _, html in parts)
+    if _fragments is not None:
+        from .preview_fragments import RootFragment
+        _fragments.extend(RootFragment(id, html) for id, html in parts)
     if extra_nodes:
         comments = [node for node in extra_nodes if node.type == "comment"]
         bibliography = [node for node in extra_nodes if node.type == "bibliography_change"]
@@ -824,10 +856,17 @@ figcaption,.table-caption{{font-style:italic}}.asset,.fallback-label{{color:#755
 .macro-placeholder{{background:#edf4ed;border-bottom:1px dotted #48734b}}
 @media(max-width:800px){{main{{grid-template-columns:1fr}}.preview-side{{max-height:none}}}}
 '''
-    content = f'''{_side(old, "old", "修改前", diagnostics, figure_assets, extra.get("old", ()), sentence_highlights) if old else ""}{_side(new, "new", "修改后" if old else "当前论文", diagnostics, figure_assets, extra.get("new", ()), sentence_highlights)}'''
+    root_fragments = [] if old is None and not extra.get('new') else None
+    old_side = _side(old, "old", "修改前", diagnostics, figure_assets, extra.get("old", ()), sentence_highlights) if old else ""
+    new_side = _side(new, "new", "修改后" if old else "当前论文", diagnostics, figure_assets,
+                     extra.get("new", ()), sentence_highlights, _fragments=root_fragments)
+    content = f'{old_side}{new_side}'
     from importlib.resources import files
     math_script = files("latex_review").joinpath("math_render.js").read_text(encoding="utf-8")
     math_scripts = ('<script>\n' + math_script + '\n</script>\n'
                     + f'<script async src="{_MATHJAX_URL}" onload="mathDependencyReady()" onerror="mathDependencyFailed()"></script>')
     result = PreviewResult("", tuple(diagnostics), style, content, math_scripts)
-    return replace(result, html=result.compose())
+    composed = result.compose()
+    from .preview_fragments import bind_fragments
+    plan = bind_fragments(composed, root_fragments) if root_fragments is not None else None
+    return replace(result, html=composed, _fragment_plan=plan)

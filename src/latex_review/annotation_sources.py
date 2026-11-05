@@ -39,7 +39,7 @@ def _continuous(project, start: int, end: int):
     return first, origins[-1].origin
 
 
-def _span(project, start: int, end: int) -> tuple[dict, dict | None]:
+def _span(project, start: int, end: int, *, read_only=None, file_hashes=None) -> tuple[dict, dict | None]:
     mapped = _continuous(project, start, end)
     if mapped is None:
         return _unavailable('源码区间不是可靠、连续、单文件的原始区间'), None
@@ -48,11 +48,18 @@ def _span(project, start: int, end: int) -> tuple[dict, dict | None]:
     chunk = full_text[first.start:last.end]
     if chunk != project.expanded.text[start:end]:
         return _unavailable('展开内容与原始源码不一致'), None
-    from .project_profile import settings
-    read_only = settings(project.expanded.source).get('project', {}).get('read_only', False)
+    if read_only is None:
+        from .project_profile import settings
+        read_only = settings(project.expanded.source).get('project', {}).get('read_only', False)
+    if file_hashes is None:
+        file_hash = sha256(full_text.encode('utf-8')).hexdigest()
+    else:
+        if first.file not in file_hashes:
+            file_hashes[first.file] = sha256(full_text.encode('utf-8')).hexdigest()
+        file_hash = file_hashes[first.file]
     writable = project.expanded.source.identity.kind != 'git' and not read_only
     span = {'file': first.file, 'start': first.start, 'end': last.end,
-            'sha256': sha256(full_text.encode('utf-8')).hexdigest(),
+            'sha256': file_hash,
             'original_chunk': chunk, 'reliable': True, 'writable': writable,
             'reason': None if writable else ('论文项目为只读' if read_only else 'Git 历史比较版本只读')}
     location = {'file': first.file, 'start_line': first.start_line,
@@ -86,6 +93,13 @@ def enrich_content(project, units: list[dict], project_root: Path | None = None)
     First-row cells use the header identity; this is a structural convention,
     not an assertion that the author declared a semantic table header.
     """
+    from .project_profile import settings
+    source = project.expanded.source
+    configuration = settings(source)
+    read_only = configuration.get('project', {}).get('read_only', False)
+    # Strings belong to this captured parse, not mutable disk. Reuse hashes only
+    # during this invocation, never across source versions or publications.
+    file_hashes = {}
     nodes = project.by_id()
     counts = Counter(unit['node_id'] for unit in units if unit['kind'] == 'text')
     for unit in units:
@@ -130,8 +144,14 @@ def enrich_content(project, units: list[dict], project_root: Path | None = None)
             unit['source_span'] = _unavailable(reason)
             continue
         start, end = interval
-        span, location = _span(project, owner.expanded_start + start, owner.expanded_start + end)
+        span, location = _span(project, owner.expanded_start + start, owner.expanded_start + end,
+                               read_only=read_only, file_hashes=file_hashes)
         unit['source_span'] = span
         if location is not None:
             unit['source'] = location
             unit['raw_latex'] = raw[start:end]
+    # Do not publish a mixed-permission/configuration enrichment if the profile
+    # changed while processing units. Normal source/write fences remain intact.
+    if settings(source) != configuration:
+        from .sources import SourceError
+        raise SourceError('source_changed', source.side, '批注映射期间项目配置已变化', source.entry)

@@ -305,6 +305,11 @@ main {
   margin-inline:auto;
 }
 
+/* MathJax clips this screen-reader-only MathML to one pixel, but its native
+   font metrics can still enlarge the ancestor's scrollable overflow. Bound
+   its layout height as well; keep the complete accessible MathML in the DOM. */
+.node-equation mjx-assistive-mml {height:1px!important;}
+
 .node-section,.node-subsection,.node-subsubsection {
   margin-top:1.8rem;
 }

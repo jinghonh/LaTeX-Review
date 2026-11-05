@@ -84,11 +84,30 @@ def test_sections_hierarchy_deleted_and_mobile(tmp_path, browser_page):
         heading = panel.locator('h2').filter(has_text='Last').first
         assert heading.bounding_box()['y'] >= panel.bounding_box()['y']
     page.locator('#layout-mode').select_option('reading')
+    page.evaluate('() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))')
+    page.wait_for_function('() => !window.reviewReadingPosition?.isResizing()')
+    last = page.get_by_role('button', name='Last', exact=False)
+    last.click()
+    page.evaluate('() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))')
+    expect(last).to_have_attribute('aria-current', 'location')
+    heading = page.locator('.preview-side[data-side="new"] h2').filter(has_text='Last').first
+    assert heading.bounding_box()['y'] >= page.locator('.report-controls').bounding_box()['y'] + page.locator('.report-controls').bounding_box()['height']
+    assert heading.bounding_box()['y'] + heading.bounding_box()['height'] <= page.evaluate('innerHeight')
+    # Exercise passive scroll tracking independently of the explicit chapter click.
+    page.evaluate('window.scrollTo(0, 0)')
+    page.evaluate('() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))')
     page.evaluate('''() => {
       const headings = [...document.querySelectorAll('.preview-side[data-side="new"] h2')];
       headings.find(node => node.textContent.trim().endsWith('Last')).scrollIntoView({block: 'start'});
     }''')
     expect(page.get_by_role('button', name='Last', exact=False)).to_have_attribute('aria-current', 'location')
+    assert heading.bounding_box()['y'] >= page.locator('.report-controls').bounding_box()['y'] + page.locator('.report-controls').bounding_box()['height']
     page.set_viewport_size({'width': 600, 'height': 800})
+    page.evaluate('() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))')
+    page.wait_for_function('() => !window.reviewReadingPosition?.isResizing()')
     page.get_by_role('button', name='First', exact=False).click()
+    page.evaluate('() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))')
     expect(page.locator('#sections-side')).to_be_hidden()
+    expect(page.get_by_role('button', name='First', exact=False, include_hidden=True)).to_have_attribute('aria-current', 'location')
+    heading = page.locator('.preview-side[data-side="new"] .node-section > h2').first
+    assert heading.evaluate('node => node.getBoundingClientRect().top >= document.querySelector(".report-controls").getBoundingClientRect().bottom && node.getBoundingClientRect().bottom <= innerHeight')

@@ -160,5 +160,9 @@
   window.addEventListener('review-math-ready', schedule);
   document.addEventListener('review-translations-updated', schedule);
   remember();
-  requestAnimationFrame(remember);
+  requestAnimationFrame(() => {
+    // A delayed first frame must not replace the pre-resize reading anchor.
+    if (!restoring && signature() === dimensions) remember();
+    else schedule();
+  });
 })();

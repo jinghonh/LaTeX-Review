@@ -1,0 +1,763 @@
+{
+  "scope": "ONE controlled all-initial-rAF FIFO delay, actual live fixture, native scroll/resize; not historical CI reproduction",
+  "head": "becf726dafeba0700ad41db1f0d342b636357e9d",
+  "screenshot": "after.png",
+  "observations": [
+    {
+      "stage": "initial-original-150ms-callbacks-held",
+      "t": 777.4000000953674,
+      "width": 1280,
+      "height": 900,
+      "scrollY": 0,
+      "resizing": false,
+      "paper": {
+        "width": 876,
+        "height": 76952,
+        "scrollTop": 0,
+        "scrollHeight": 76952,
+        "overflowY": "visible"
+      },
+      "savedRange": null
+    },
+    {
+      "stage": "after-original-CAPTURE-100ms-SAVE",
+      "t": 892.4000000953674,
+      "width": 1280,
+      "height": 900,
+      "scrollY": 36066,
+      "resizing": false,
+      "paper": {
+        "width": 876,
+        "height": 76952,
+        "scrollTop": 0,
+        "scrollHeight": 76952,
+        "overflowY": "visible"
+      },
+      "savedRange": {
+        "top": 433.828125,
+        "bottom": 453.828125,
+        "ratio": 0.33329608938547484,
+        "character": "g",
+        "offset": 11809
+      }
+    },
+    {
+      "stage": "after-native-resize-original-150ms-still-held",
+      "t": 1077.0999999046326,
+      "width": 1040,
+      "height": 780,
+      "scrollY": 36066,
+      "resizing": true,
+      "paper": {
+        "width": 944,
+        "height": 76619,
+        "scrollTop": 0,
+        "scrollHeight": 76619,
+        "overflowY": "visible"
+      },
+      "savedRange": {
+        "top": 100.859375,
+        "bottom": 120.859375,
+        "ratio": 0.33329608938547484,
+        "character": "g",
+        "offset": 11809
+      },
+      "error_px": 292.973219273743,
+      "strict_pass": false
+    },
+    {
+      "stage": "original-150ms-after-original-FIFO-release",
+      "t": 1238.2000000476837,
+      "width": 1040,
+      "height": 780,
+      "scrollY": 35773,
+      "resizing": false,
+      "paper": {
+        "width": 944,
+        "height": 76619,
+        "scrollTop": 0,
+        "scrollHeight": 76619,
+        "overflowY": "visible"
+      },
+      "savedRange": {
+        "top": 393.859375,
+        "bottom": 413.859375,
+        "ratio": 0.33329608938547484,
+        "character": "g",
+        "offset": 11809
+      },
+      "error_px": 0.026780726256987464,
+      "strict_pass": true
+    }
+  ],
+  "pageerrors": [],
+  "asset_sha256": {
+    "reading_position.js": "6593383a67d10e5a47f9c8f0e045c92ccb1ef21b42928d3b65470b3976ff0aa4",
+    "report.css": "087f4f500f7487e84520a27479802c9f405f9368f23303a4ca0c8628b96641db",
+    "review_workspace.js": "feb55803b5f78c7c8cc18f39c7bee741fe2572f5778c0b13934f023fad7ce6b4",
+    "report_sections.js": "fb5034b1fecf03defc68566a31309510a0b56a32c7350216b289f743cd1c6a96"
+  },
+  "browser_version": "155.0.8059.39",
+  "saved_character": "g",
+  "pending_before_resize": [
+    {
+      "id": 1,
+      "name": "",
+      "source": "() => {\n    // A delayed first frame must not replace the pre-resize reading anchor.\n    if (!restoring && signature() === dimensions) remember();\n    else sche"
+    },
+    {
+      "id": 2,
+      "name": "",
+      "source": "() => { frame = 0; layout(); }"
+    },
+    {
+      "id": 3,
+      "name": "reserveHeadingInset",
+      "source": "function reserveHeadingInset() {\n    const root = document.getElementById('review-workspace');\n    const toolbar = document.querySelector('.report-controls');\n "
+    },
+    {
+      "id": 4,
+      "name": "",
+      "source": "() => {\n      scheduled = false;\n      const compare = document.getElementById('layout-mode')?.value === 'compare';\n      const side = document.querySelector('."
+    }
+  ],
+  "pending_before_release": [
+    {
+      "id": 1,
+      "name": "",
+      "source": "() => {\n    // A delayed first frame must not replace the pre-resize reading anchor.\n    if (!restoring && signature() === dimensions) remember();\n    else sche"
+    },
+    {
+      "id": 2,
+      "name": "",
+      "source": "() => { frame = 0; layout(); }"
+    },
+    {
+      "id": 3,
+      "name": "reserveHeadingInset",
+      "source": "function reserveHeadingInset() {\n    const root = document.getElementById('review-workspace');\n    const toolbar = document.querySelector('.report-controls');\n "
+    },
+    {
+      "id": 4,
+      "name": "",
+      "source": "() => {\n      scheduled = false;\n      const compare = document.getElementById('layout-mode')?.value === 'compare';\n      const side = document.querySelector('."
+    }
+  ],
+  "failure_context_after_original_sample": {
+    "sampledAt": 1241,
+    "readyState": "complete",
+    "viewport": {
+      "width": 1040,
+      "height": 780
+    },
+    "publishedReadingPosition": {
+      "present": true,
+      "type": "object",
+      "keys": [
+        "isResizing"
+      ],
+      "isResizing": false
+    },
+    "currentScroller": "window",
+    "overflowY": "visible",
+    "windowY": 35773,
+    "paperScrollTop": 0,
+    "paperClientWidth": 944,
+    "paperClientHeight": 76619,
+    "paperScrollHeight": 76619,
+    "paperRect": {
+      "top": -35385.03125,
+      "bottom": 41234.046875,
+      "left": 48,
+      "right": 992,
+      "width": 944,
+      "height": 76619.078125
+    },
+    "rangeRect": {
+      "top": 393.859375,
+      "bottom": 413.859375,
+      "left": 435,
+      "right": 444.015625,
+      "width": 9.015625,
+      "height": 20
+    },
+    "rangeConnected": true,
+    "savedCharacter": "g",
+    "rangeStartOffset": 11809,
+    "expectedRatio": 0.33329608938547484,
+    "viewTop": 200.78125,
+    "viewBottom": 780,
+    "expectedTop": 393.832594273743
+  },
+  "trace": [
+    {
+      "kind": "registered",
+      "id": 1,
+      "name": "",
+      "source": "() => {\n    // A delayed first frame must not replace the pre-resize reading anchor.\n    if (!restoring && signature() === dimensions) remember();\n    else sche",
+      "t": 396.90000009536743
+    },
+    {
+      "kind": "registered",
+      "id": 2,
+      "name": "",
+      "source": "() => { frame = 0; layout(); }",
+      "t": 397.40000009536743
+    },
+    {
+      "kind": "native-event",
+      "type": "resize",
+      "t": 452.7999999523163,
+      "width": 1280,
+      "height": 900,
+      "scrollY": 0,
+      "resizing": true,
+      "paper": {
+        "width": 1232,
+        "height": 47118,
+        "scrollTop": 0,
+        "scrollHeight": 47118,
+        "overflowY": "visible"
+      },
+      "savedRange": null
+    },
+    {
+      "kind": "native-event",
+      "type": "resize",
+      "t": 491.7999999523163,
+      "width": 1280,
+      "height": 900,
+      "scrollY": 0,
+      "resizing": true,
+      "paper": {
+        "width": 876,
+        "height": 76952,
+        "scrollTop": 0,
+        "scrollHeight": 76952,
+        "overflowY": "visible"
+      },
+      "savedRange": null
+    },
+    {
+      "kind": "registered",
+      "id": 3,
+      "name": "reserveHeadingInset",
+      "source": "function reserveHeadingInset() {\n    const root = document.getElementById('review-workspace');\n    const toolbar = document.querySelector('.report-controls');\n ",
+      "t": 525.2999999523163
+    },
+    {
+      "kind": "native-event",
+      "type": "review-math-ready",
+      "t": 584.9000000953674,
+      "width": 1280,
+      "height": 900,
+      "scrollY": 0,
+      "resizing": true,
+      "paper": {
+        "width": 876,
+        "height": 76952,
+        "scrollTop": 0,
+        "scrollHeight": 76952,
+        "overflowY": "visible"
+      },
+      "savedRange": null
+    },
+    {
+      "kind": "native-event",
+      "type": "load",
+      "t": 586.5,
+      "width": 1280,
+      "height": 900,
+      "scrollY": 0,
+      "resizing": true,
+      "paper": {
+        "width": 876,
+        "height": 76952,
+        "scrollTop": 0,
+        "scrollHeight": 76952,
+        "overflowY": "visible"
+      },
+      "savedRange": null
+    },
+    {
+      "kind": "native-event",
+      "type": "scroll",
+      "t": 786,
+      "width": 1280,
+      "height": 900,
+      "scrollY": 36066,
+      "resizing": false,
+      "paper": {
+        "width": 876,
+        "height": 76952,
+        "scrollTop": 0,
+        "scrollHeight": 76952,
+        "overflowY": "visible"
+      },
+      "savedRange": null
+    },
+    {
+      "kind": "registered",
+      "id": 4,
+      "name": "",
+      "source": "() => {\n      scheduled = false;\n      const compare = document.getElementById('layout-mode')?.value === 'compare';\n      const side = document.querySelector('.",
+      "t": 786.7000000476837
+    },
+    {
+      "kind": "native-event",
+      "type": "resize",
+      "t": 917.5999999046326,
+      "width": 1040,
+      "height": 780,
+      "scrollY": 36066,
+      "resizing": true,
+      "paper": {
+        "width": 944,
+        "height": 76619,
+        "scrollTop": 0,
+        "scrollHeight": 76619,
+        "overflowY": "visible"
+      },
+      "savedRange": {
+        "top": 100.859375,
+        "bottom": 120.859375,
+        "ratio": 0.33329608938547484,
+        "character": "g",
+        "offset": 11809
+      }
+    },
+    {
+      "kind": "release-original-FIFO",
+      "pending": [
+        {
+          "id": 1,
+          "name": ""
+        },
+        {
+          "id": 2,
+          "name": ""
+        },
+        {
+          "id": 3,
+          "name": "reserveHeadingInset"
+        },
+        {
+          "id": 4,
+          "name": ""
+        }
+      ],
+      "t": 1081.5999999046326,
+      "width": 1040,
+      "height": 780,
+      "scrollY": 36066,
+      "resizing": true,
+      "paper": {
+        "width": 944,
+        "height": 76619,
+        "scrollTop": 0,
+        "scrollHeight": 76619,
+        "overflowY": "visible"
+      },
+      "savedRange": {
+        "top": 100.859375,
+        "bottom": 120.859375,
+        "ratio": 0.33329608938547484,
+        "character": "g",
+        "offset": 11809
+      }
+    },
+    {
+      "kind": "callback-before",
+      "id": 1,
+      "name": "",
+      "source": "() => {\n    // A delayed first frame must not replace the pre-resize reading anchor.\n    if (!restoring && signature() === dimensions) remember();\n    else sche",
+      "t": 1083.4000000953674,
+      "width": 1040,
+      "height": 780,
+      "scrollY": 36066,
+      "resizing": true,
+      "paper": {
+        "width": 944,
+        "height": 76619,
+        "scrollTop": 0,
+        "scrollHeight": 76619,
+        "overflowY": "visible"
+      },
+      "savedRange": {
+        "top": 100.859375,
+        "bottom": 120.859375,
+        "ratio": 0.33329608938547484,
+        "character": "g",
+        "offset": 11809
+      }
+    },
+    {
+      "kind": "callback-after",
+      "id": 1,
+      "name": "",
+      "t": 1083.5999999046326,
+      "width": 1040,
+      "height": 780,
+      "scrollY": 36066,
+      "resizing": true,
+      "paper": {
+        "width": 944,
+        "height": 76619,
+        "scrollTop": 0,
+        "scrollHeight": 76619,
+        "overflowY": "visible"
+      },
+      "savedRange": {
+        "top": 100.859375,
+        "bottom": 120.859375,
+        "ratio": 0.33329608938547484,
+        "character": "g",
+        "offset": 11809
+      }
+    },
+    {
+      "kind": "callback-before",
+      "id": 2,
+      "name": "",
+      "source": "() => { frame = 0; layout(); }",
+      "t": 1083.5999999046326,
+      "width": 1040,
+      "height": 780,
+      "scrollY": 36066,
+      "resizing": true,
+      "paper": {
+        "width": 944,
+        "height": 76619,
+        "scrollTop": 0,
+        "scrollHeight": 76619,
+        "overflowY": "visible"
+      },
+      "savedRange": {
+        "top": 100.859375,
+        "bottom": 120.859375,
+        "ratio": 0.33329608938547484,
+        "character": "g",
+        "offset": 11809
+      }
+    },
+    {
+      "kind": "registered",
+      "id": 5,
+      "name": "settle",
+      "source": "function settle() {\n    settleFrame = 0;\n    if (signature() !== dimensions) restore();\n    else if (++stableFrames < 2) settleFrame = requestAnimationFrame(set",
+      "t": 1084.2999999523163
+    },
+    {
+      "kind": "callback-after",
+      "id": 2,
+      "name": "",
+      "t": 1084.2999999523163,
+      "width": 1040,
+      "height": 780,
+      "scrollY": 35773,
+      "resizing": true,
+      "paper": {
+        "width": 944,
+        "height": 76619,
+        "scrollTop": 0,
+        "scrollHeight": 76619,
+        "overflowY": "visible"
+      },
+      "savedRange": {
+        "top": 393.859375,
+        "bottom": 413.859375,
+        "ratio": 0.33329608938547484,
+        "character": "g",
+        "offset": 11809
+      }
+    },
+    {
+      "kind": "callback-before",
+      "id": 3,
+      "name": "reserveHeadingInset",
+      "source": "function reserveHeadingInset() {\n    const root = document.getElementById('review-workspace');\n    const toolbar = document.querySelector('.report-controls');\n ",
+      "t": 1084.4000000953674,
+      "width": 1040,
+      "height": 780,
+      "scrollY": 35773,
+      "resizing": true,
+      "paper": {
+        "width": 944,
+        "height": 76619,
+        "scrollTop": 0,
+        "scrollHeight": 76619,
+        "overflowY": "visible"
+      },
+      "savedRange": {
+        "top": 393.859375,
+        "bottom": 413.859375,
+        "ratio": 0.33329608938547484,
+        "character": "g",
+        "offset": 11809
+      }
+    },
+    {
+      "kind": "callback-after",
+      "id": 3,
+      "name": "reserveHeadingInset",
+      "t": 1087.0999999046326,
+      "width": 1040,
+      "height": 780,
+      "scrollY": 35773,
+      "resizing": true,
+      "paper": {
+        "width": 944,
+        "height": 76619,
+        "scrollTop": 0,
+        "scrollHeight": 76619,
+        "overflowY": "visible"
+      },
+      "savedRange": {
+        "top": 393.859375,
+        "bottom": 413.859375,
+        "ratio": 0.33329608938547484,
+        "character": "g",
+        "offset": 11809
+      }
+    },
+    {
+      "kind": "callback-before",
+      "id": 4,
+      "name": "",
+      "source": "() => {\n      scheduled = false;\n      const compare = document.getElementById('layout-mode')?.value === 'compare';\n      const side = document.querySelector('.",
+      "t": 1087.2000000476837,
+      "width": 1040,
+      "height": 780,
+      "scrollY": 35773,
+      "resizing": true,
+      "paper": {
+        "width": 944,
+        "height": 76619,
+        "scrollTop": 0,
+        "scrollHeight": 76619,
+        "overflowY": "visible"
+      },
+      "savedRange": {
+        "top": 393.859375,
+        "bottom": 413.859375,
+        "ratio": 0.33329608938547484,
+        "character": "g",
+        "offset": 11809
+      }
+    },
+    {
+      "kind": "callback-after",
+      "id": 4,
+      "name": "",
+      "t": 1087.7000000476837,
+      "width": 1040,
+      "height": 780,
+      "scrollY": 35773,
+      "resizing": true,
+      "paper": {
+        "width": 944,
+        "height": 76619,
+        "scrollTop": 0,
+        "scrollHeight": 76619,
+        "overflowY": "visible"
+      },
+      "savedRange": {
+        "top": 393.859375,
+        "bottom": 413.859375,
+        "ratio": 0.33329608938547484,
+        "character": "g",
+        "offset": 11809
+      }
+    },
+    {
+      "kind": "native-event",
+      "type": "scroll",
+      "t": 1088.7999999523163,
+      "width": 1040,
+      "height": 780,
+      "scrollY": 35773,
+      "resizing": true,
+      "paper": {
+        "width": 944,
+        "height": 76619,
+        "scrollTop": 0,
+        "scrollHeight": 76619,
+        "overflowY": "visible"
+      },
+      "savedRange": {
+        "top": 393.859375,
+        "bottom": 413.859375,
+        "ratio": 0.33329608938547484,
+        "character": "g",
+        "offset": 11809
+      }
+    },
+    {
+      "kind": "registered",
+      "id": 6,
+      "name": "",
+      "source": "() => {\n      scheduled = false;\n      const compare = document.getElementById('layout-mode')?.value === 'compare';\n      const side = document.querySelector('.",
+      "t": 1088.7999999523163
+    },
+    {
+      "kind": "callback-before",
+      "id": 5,
+      "name": "settle",
+      "source": "function settle() {\n    settleFrame = 0;\n    if (signature() !== dimensions) restore();\n    else if (++stableFrames < 2) settleFrame = requestAnimationFrame(set",
+      "t": 1088.7999999523163,
+      "width": 1040,
+      "height": 780,
+      "scrollY": 35773,
+      "resizing": true,
+      "paper": {
+        "width": 944,
+        "height": 76619,
+        "scrollTop": 0,
+        "scrollHeight": 76619,
+        "overflowY": "visible"
+      },
+      "savedRange": {
+        "top": 393.859375,
+        "bottom": 413.859375,
+        "ratio": 0.33329608938547484,
+        "character": "g",
+        "offset": 11809
+      }
+    },
+    {
+      "kind": "registered",
+      "id": 7,
+      "name": "settle",
+      "source": "function settle() {\n    settleFrame = 0;\n    if (signature() !== dimensions) restore();\n    else if (++stableFrames < 2) settleFrame = requestAnimationFrame(set",
+      "t": 1088.9000000953674
+    },
+    {
+      "kind": "callback-after",
+      "id": 5,
+      "name": "settle",
+      "t": 1089,
+      "width": 1040,
+      "height": 780,
+      "scrollY": 35773,
+      "resizing": true,
+      "paper": {
+        "width": 944,
+        "height": 76619,
+        "scrollTop": 0,
+        "scrollHeight": 76619,
+        "overflowY": "visible"
+      },
+      "savedRange": {
+        "top": 393.859375,
+        "bottom": 413.859375,
+        "ratio": 0.33329608938547484,
+        "character": "g",
+        "offset": 11809
+      }
+    },
+    {
+      "kind": "callback-before",
+      "id": 6,
+      "name": "",
+      "source": "() => {\n      scheduled = false;\n      const compare = document.getElementById('layout-mode')?.value === 'compare';\n      const side = document.querySelector('.",
+      "t": 1089.0999999046326,
+      "width": 1040,
+      "height": 780,
+      "scrollY": 35773,
+      "resizing": true,
+      "paper": {
+        "width": 944,
+        "height": 76619,
+        "scrollTop": 0,
+        "scrollHeight": 76619,
+        "overflowY": "visible"
+      },
+      "savedRange": {
+        "top": 393.859375,
+        "bottom": 413.859375,
+        "ratio": 0.33329608938547484,
+        "character": "g",
+        "offset": 11809
+      }
+    },
+    {
+      "kind": "callback-after",
+      "id": 6,
+      "name": "",
+      "t": 1089.2000000476837,
+      "width": 1040,
+      "height": 780,
+      "scrollY": 35773,
+      "resizing": true,
+      "paper": {
+        "width": 944,
+        "height": 76619,
+        "scrollTop": 0,
+        "scrollHeight": 76619,
+        "overflowY": "visible"
+      },
+      "savedRange": {
+        "top": 393.859375,
+        "bottom": 413.859375,
+        "ratio": 0.33329608938547484,
+        "character": "g",
+        "offset": 11809
+      }
+    },
+    {
+      "kind": "callback-before",
+      "id": 7,
+      "name": "settle",
+      "source": "function settle() {\n    settleFrame = 0;\n    if (signature() !== dimensions) restore();\n    else if (++stableFrames < 2) settleFrame = requestAnimationFrame(set",
+      "t": 1102.7000000476837,
+      "width": 1040,
+      "height": 780,
+      "scrollY": 35773,
+      "resizing": true,
+      "paper": {
+        "width": 944,
+        "height": 76619,
+        "scrollTop": 0,
+        "scrollHeight": 76619,
+        "overflowY": "visible"
+      },
+      "savedRange": {
+        "top": 393.859375,
+        "bottom": 413.859375,
+        "ratio": 0.33329608938547484,
+        "character": "g",
+        "offset": 11809
+      }
+    },
+    {
+      "kind": "callback-after",
+      "id": 7,
+      "name": "settle",
+      "t": 1103.0999999046326,
+      "width": 1040,
+      "height": 780,
+      "scrollY": 35773,
+      "resizing": false,
+      "paper": {
+        "width": 944,
+        "height": 76619,
+        "scrollTop": 0,
+        "scrollHeight": 76619,
+        "overflowY": "visible"
+      },
+      "savedRange": {
+        "top": 393.859375,
+        "bottom": 413.859375,
+        "ratio": 0.33329608938547484,
+        "character": "g",
+        "offset": 11809
+      }
+    }
+  ],
+  "completed": true,
+  "phase": "after",
+  "temporary_fixture_path_omitted": true,
+  "original_artifact_sha256": "b585941c54a2a20bb0bb2da85bf0e8697154d01a600ebbf1abfd575b9d33c7e2",
+  "source_revision_kind": "uncommitted guarded reading_position.js bytes; see asset_sha256",
+  "baseline_application_commit": "b742583254a69dd7103be07b4e5f110f3c4c2c5e"
+}

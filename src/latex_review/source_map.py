@@ -60,6 +60,13 @@ class SourceMap:
             cursor = segment.expanded_end
         if cursor != len(text):
             raise ValueError("展开映射未覆盖全文")
+        # Index only immutable, validated geometry. Historical callers may pass
+        # mutable/duck-typed iterables or later replace .segments; keep their
+        # original linear behavior rather than retaining stale geometry.
+        self._indexed_segments = segments if type(segments) is tuple and all(
+            type(segment) is SourceSegment and type(segment.expanded_start) is int
+            and type(segment.expanded_end) is int for segment in segments) else None
+        self._segment_ends = tuple(segment.expanded_end for segment in self._indexed_segments) if self._indexed_segments is not None else ()
 
     def _line_column(self, file: str, offset: int) -> tuple[int, int]:
         starts = self._line_starts[file]
@@ -70,8 +77,19 @@ class SourceMap:
         """返回每个相交来源；不得将跨文件或重复包含合并为一个范围。"""
         if start < 0 or end < start or end > len(self.text):
             raise ValueError("展开区间超出范围")
+        segments = self.segments
+        indexed = (self._indexed_segments is not None and segments is self._indexed_segments
+                   and type(start) is int and type(end) is int)
+        if indexed:
+            first = bisect_right(self._segment_ends, start)
+            # Do not slice the tuple or linearly skip an iterator's prefix.
+            candidates = (segments[index] for index in range(first, len(segments)))
+        else:
+            candidates = segments
         result = []
-        for segment in self.segments:
+        for segment in candidates:
+            if indexed and segment.expanded_start >= end:
+                break
             left, right = max(start, segment.expanded_start), min(end, segment.expanded_end)
             if left >= right:
                 continue

@@ -1,0 +1,14 @@
+{
+  "application_revision": "fe82620af8bbbb028809d59ceeaaad7085427880",
+  "frozen_root": "/tmp/writing-check-baseline-tests-fa6d7qky",
+  "command": [
+    "/home/ubuntu/.dsh/state/superagent/work/writing-check-delivery-6277b05259b6/.venv/bin/python",
+    "-m",
+    "pytest",
+    "-q"
+  ],
+  "exit_code": 1,
+  "wall_seconds": 760.613,
+  "log": "Docs/design/writing-check/evidence/before/baseline-pytest.log",
+  "note": "Frozen archive retained for debugging; no worktree code imported."
+}

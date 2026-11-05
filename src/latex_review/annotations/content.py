@@ -3,9 +3,13 @@
 All public values are JSON objects. Text offsets are UTF-16 code units, as in DOM
 Range. Formula atoms count as one U+FFFC; MathJax descendants never supply offsets.
 """
+from collections import OrderedDict
 from copy import deepcopy
+from dataclasses import dataclass
+from threading import Lock
 from difflib import SequenceMatcher
 from html.parser import HTMLParser
+from hashlib import sha256
 import json
 import re
 from pathlib import Path
@@ -59,21 +63,11 @@ def _semantic_units(units):
              for k, v in unit.items() if k not in ('selector', 'change_ids')} for unit in units]
 
 
-def build_content(project, preview_html: str, *, project_root: Path | None = None, changes=()):
-    """Extract actual preview text, including unmodified prose and degraded formulas.
-
-    Call while the source snapshot exists. Content identity includes resolved source
-    text, bibliography/macro interpretation and semantic preview coordinates.
-    Selectors and comparison-specific change membership do not affect identity.
-    """
-    from dataclasses import asdict
-    from ..cache import dependency_fingerprints
-    root = (project_root or project.expanded.source.worktree_origin or project.expanded.source.root).resolve()
-    entry = project.expanded.source.entry
-    project_id = digest({'root': str(root), 'entry': entry})
-    nodes = {n.review.id: n for n in project.nodes}
-    parser = _PreviewParser()
-    parser.feed(preview_html)
+def _extract_html_units(nodes, preview_html, *, _parsed=None):
+    """Extract only DOM-dependent facts; never retain a parsed project or source."""
+    parser = _parsed if _parsed is not None else _PreviewParser()
+    if _parsed is None:
+        parser.feed(preview_html)
     blocks, formulas, counters = [], [], {}
     block_tags = {'p', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'figcaption', 'td', 'th', 'blockquote', 'li'}
 
@@ -130,11 +124,10 @@ def build_content(project, preview_html: str, *, project_root: Path | None = Non
             if 'data-annotation-latex' in element.attrs:
                 ordinal = sum(f['node_id'] == owner.review.id for f in formulas)
                 formulas.append({'id': f'{owner.review.id}:formula:{ordinal}', 'kind': 'formula',
-                                 'node_id': owner.review.id, 'parent_node_id': owner.review.parent_id,
+                                 'node_id': owner.review.id,
                                  'raw_latex': element.attrs['data-annotation-latex'],
                                  'text': element.attrs['data-annotation-latex'], 'selector': element.selector(),
-                                 'source': asdict(owner.review.source), 'section_path': list(owner.review.section_path),
-                                 'labels': list(owner.labels), 'atoms': []})
+                                 'atoms': []})
                 continue
             # Each leaf block is a paragraph boundary. Container nodes cannot merge paragraphs.
             is_block = element.tag in block_tags
@@ -163,10 +156,9 @@ def build_content(project, preview_html: str, *, project_root: Path | None = Non
             ordinal = counters.get(owner.review.id, 0)
             counters[owner.review.id] = ordinal + 1
             blocks.append({'id': f'{owner.review.id}:block:{ordinal}', 'kind': 'text',
-                           'node_id': owner.review.id, 'parent_node_id': owner.review.parent_id,
-                           'text': text, 'raw_latex': owner.review.raw_latex, 'atoms': atoms,
-                           'selector': element.selector(), 'source': asdict(owner.review.source),
-                           'section_path': list(owner.review.section_path), 'labels': list(owner.labels)})
+                           'node_id': owner.review.id,
+                           'text': text, 'atoms': atoms,
+                           'selector': element.selector()})
             role = element.attrs.get('data-annotation-subunit')
             if element.tag == 'figcaption' or 'table-caption' in element.attrs.get('class', '').split():
                 role = 'caption'
@@ -184,9 +176,106 @@ def build_content(project, preview_html: str, *, project_root: Path | None = Non
                 if node_owner(el):
                     positions[el.selector()] = i
     units = sorted(blocks + formulas, key=lambda u: positions[u['selector']])
-    for order, unit in enumerate(units):
-        unit['order'] = order
-        unit['change_ids'] = [c.id for c in changes if c.new_node_id in (unit['node_id'], unit['parent_node_id'])]
+    html_node_ids = frozenset(el.attrs['data-node-id'] for el in descendants(parser.root)
+                              if el.attrs.get('data-node-id') is not None)
+    return units, html_node_ids
+
+
+@dataclass(frozen=True)
+class _HTMLUnit:
+    id: str
+    kind: str
+    node_id: str
+    text: str
+    selector: str
+    atoms: tuple
+    formula_raw: str | None
+    subunit: tuple
+
+
+@dataclass(frozen=True)
+class _HTMLExtraction:
+    node_ids: frozenset
+    node_types: tuple
+    units: tuple[_HTMLUnit, ...]
+
+
+# Bounded, immutable HTML-only facts. No project, DOM, source span, permission,
+# manifest identity, page binding, or mutable unit dictionary survives a call.
+_HTML_CACHE = OrderedDict()
+_HTML_CACHE_LOCK = Lock()
+_HTML_CACHE_ENTRIES = 2
+_HTML_CACHE_MAX_CHARS = 8_000_000
+_HTML_CACHE_MAX_UNITS = 20_000
+
+
+def _node_types(nodes, ids):
+    return tuple(sorted((id, nodes[id].review.type) for id in ids if id in nodes))
+
+
+def _freeze_html_units(extracted):
+    return tuple(_HTMLUnit(
+        unit['id'], unit['kind'], unit['node_id'], unit['text'], unit['selector'],
+        tuple((atom['offset'], atom['formula_node_id'], atom['raw_latex'], atom['selector'])
+              for atom in unit['atoms']),
+        unit.get('raw_latex') if unit['kind'] == 'formula' else None,
+        tuple(unit.get('subunit', {}).items())) for unit in extracted)
+
+
+def _html_units(nodes, preview_html):
+    cacheable = len(preview_html) <= _HTML_CACHE_MAX_CHARS
+    if cacheable:
+        with _HTML_CACHE_LOCK:
+            cached = _HTML_CACHE.get(preview_html)
+            if cached is not None and cached.node_types == _node_types(nodes, cached.node_ids):
+                _HTML_CACHE.move_to_end(preview_html)
+                return cached.units
+    extracted, node_ids = _extract_html_units(nodes, preview_html)
+    units = _freeze_html_units(extracted)
+    if cacheable and len(units) <= _HTML_CACHE_MAX_UNITS:
+        cached = _HTMLExtraction(node_ids, _node_types(nodes, node_ids), units)
+        with _HTML_CACHE_LOCK:
+            _HTML_CACHE[preview_html] = cached
+            _HTML_CACHE.move_to_end(preview_html)
+            while len(_HTML_CACHE) > _HTML_CACHE_ENTRIES:
+                _HTML_CACHE.popitem(last=False)
+    return units
+
+
+def build_content(project, preview_html: str, *, project_root: Path | None = None, changes=(),
+                  _fragment_plan=None):
+    """Bind immutable DOM extraction facts to this fresh captured project.
+
+    Exact HTML and rendered owner membership/types may reuse pure extraction.
+    Source/order/permissions, dependencies/macros and identity are bound anew.
+    """
+    from dataclasses import asdict
+    from ..cache import dependency_fingerprints
+    root = (project_root or project.expanded.source.worktree_origin or project.expanded.source.root).resolve()
+    entry = project.expanded.source.entry
+    project_id = digest({'root': str(root), 'entry': entry})
+    nodes = {n.review.id: n for n in project.nodes}
+    templates = None
+    if _fragment_plan is not None:
+        from .html_fragments import fragment_units
+        templates = fragment_units(project, preview_html, _fragment_plan)
+    if templates is None:
+        templates = _html_units(nodes, preview_html)
+    units = []
+    for order, template in enumerate(templates):
+        owner = nodes[template.node_id]
+        unit = {'id': template.id, 'kind': template.kind, 'node_id': template.node_id,
+                'parent_node_id': owner.review.parent_id, 'text': template.text,
+                'raw_latex': (template.formula_raw if template.kind == 'formula' else owner.review.raw_latex),
+                'atoms': [dict(zip(('offset', 'formula_node_id', 'raw_latex', 'selector'), atom))
+                          for atom in template.atoms],
+                'selector': template.selector, 'source': asdict(owner.review.source),
+                'section_path': list(owner.review.section_path), 'labels': list(owner.labels),
+                'order': order,
+                'change_ids': [c.id for c in changes if c.new_node_id in (template.node_id, owner.review.parent_id)]}
+        if template.subunit:
+            unit['subunit'] = dict(template.subunit)
+        units.append(unit)
     from ..annotation_sources import enrich_content
     enrich_content(project, units, root)
     # Keep legacy coordinates under their old version. Different parse/render
@@ -282,6 +371,90 @@ def validate_content(content):
     return content
 
 
+# Successful structural predicates only: never retain raw bytes, decoded trees,
+# source facts, permissions or publication authority. Every reader parses afresh.
+_VALIDATION_RECEIPT_LIMIT = 128
+_VALIDATION_RECEIPTS = OrderedDict()
+_VALIDATION_RECEIPT_LOCK = Lock()
+_RECEIPT_JSON_LOADS = json.loads
+_RECEIPT_JSON_DECODER = json._default_decoder
+_RECEIPT_JSON_STATE = tuple((key, id(value)) for key, value in vars(_RECEIPT_JSON_DECODER).items() if key != 'memo')
+_RECEIPT_JSON_METHODS = (json.JSONDecoder.decode, json.JSONDecoder.raw_decode)
+
+
+def _validation_receipt_namespace(validator=None):
+    from ..contract import SourceLocation
+    validator = validate_content if validator is None else validator
+    from . import _validation
+    predicates = (validator, exact_keys, _text, _integer, _slice, utf16_length,
+                  _validation._integer, _validation.utf16_length,
+                  SourceLocation.__init__, SourceLocation.__post_init__,
+                  json.loads, json.JSONDecoder.decode, json.JSONDecoder.raw_decode)
+    return (SCHEMA_VERSION, SourceLocation,
+            tuple((predicate, getattr(predicate, '__code__', None), getattr(predicate, '__defaults__', None),
+                   tuple(sorted((getattr(predicate, '__kwdefaults__', None) or {}).items())))
+                  for predicate in predicates), json.loads, id(json._default_decoder),
+            tuple((key, id(value)) for key, value in vars(json._default_decoder).items() if key != 'memo'),
+            json.JSONDecoder.decode, json.JSONDecoder.raw_decode)
+
+
+# Identity alone cannot prove that a replacement predicate is pure: it might
+# repair an invalid decoded tree in place. Such predicates always run in full.
+_CANONICAL_VALIDATION_NAMESPACE = _validation_receipt_namespace()
+
+
+def _validation_receipt_eligible(namespace):
+    return (namespace == _CANONICAL_VALIDATION_NAMESPACE
+            and json.loads is _RECEIPT_JSON_LOADS and json._default_decoder is _RECEIPT_JSON_DECODER
+            and _RECEIPT_JSON_DECODER.strict is True
+            and namespace[-3] == _RECEIPT_JSON_STATE and namespace[-2:] == _RECEIPT_JSON_METHODS
+            and not _RECEIPT_JSON_DECODER.memo)
+
+
+def decode_validated_content(raw, *, _universal_newlines=False):
+    """Fresh JSON tree plus a bounded exact-byte structural-validation receipt.
+
+    This is not a provenance/write-permission receipt. Under the standard strict
+    decoder, universal-newline conversion changes only JSON whitespace in any
+    successful parse, so both historical readers can share the same byte key.
+    Malformed JSON is still parsed (and rejected) before any receipt lookup.
+    """
+    digest = sha256(raw).digest() if type(raw) is bytes else None
+    text = raw.decode('utf-8') if isinstance(raw, (bytes, bytearray)) else raw
+    if _universal_newlines and isinstance(text, str):
+        text = text.replace('\r\n', '\n').replace('\r', '\n')
+    # Bind admission to the parser invoked, not a global it might restore.
+    decoder = json.loads
+    before = _validation_receipt_namespace()
+    eligible_before = _validation_receipt_eligible(before)
+    content = decoder(text)
+    validator = validate_content
+    namespace = _validation_receipt_namespace(validator)
+    key = (namespace, digest)
+    cacheable = (digest is not None and eligible_before and decoder is json.loads
+                 and before == namespace and _validation_receipt_eligible(namespace))
+    try:
+        if cacheable:
+            hash(key)
+    except TypeError:
+        cacheable = False
+    if cacheable:
+        with _VALIDATION_RECEIPT_LOCK:
+            if key in _VALIDATION_RECEIPTS:
+                _VALIDATION_RECEIPTS.move_to_end(key)
+                return content
+    validated = validator(content)
+    if (cacheable and validated is content and validate_content is validator
+            and _validation_receipt_namespace(validator) == namespace
+            and _validation_receipt_eligible(namespace)):
+        with _VALIDATION_RECEIPT_LOCK:
+            _VALIDATION_RECEIPTS[key] = True
+            _VALIDATION_RECEIPTS.move_to_end(key)
+            while len(_VALIDATION_RECEIPTS) > _VALIDATION_RECEIPT_LIMIT:
+                _VALIDATION_RECEIPTS.popitem(last=False)
+    return validated
+
+
 class PreparedContent(dict):
     """Validated server-owned manifest with an index outside its JSON representation."""
     def __init__(self, content):
@@ -292,7 +465,7 @@ class PreparedContent(dict):
 def load_content(report):
     root = Path(report).expanduser()
     root = root if root.is_dir() else root.parent
-    return validate_content(json.loads((root / MANIFEST).read_text(encoding='utf-8')))
+    return decode_validated_content((root / MANIFEST).read_bytes(), _universal_newlines=True)
 
 
 def make_anchor(content, selection):
@@ -526,5 +699,12 @@ def locate(content, anchor):
 def content_meta(content):
     """Bind the rendered page to its manifest without introducing browser behavior."""
     validate_content(content)
+    return (f'<meta name="latex-review-annotation-project" content="{content["project_id"]}">'
+            f'<meta name="latex-review-annotation-version" content="{content["version_id"]}">')
+
+
+def _content_meta_from_serialized(raw):
+    """Validate the producer's actual serialized bytes, never its mutable tree."""
+    content = decode_validated_content(raw)
     return (f'<meta name="latex-review-annotation-project" content="{content["project_id"]}">'
             f'<meta name="latex-review-annotation-version" content="{content["version_id"]}">')

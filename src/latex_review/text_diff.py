@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from difflib import SequenceMatcher
+from functools import lru_cache
 import re
 import unicodedata
 
@@ -48,11 +49,38 @@ _ABBREVIATIONS = {"mr", "mrs", "ms", "dr", "prof", "fig", "figs", "eq", "eqs", "
                   "ref", "refs", "no", "nos", "vol", "vs", "etc", "al", "e.g", "i.e", "cf", "st"}
 
 
+# Ordinary prose cannot begin a protected TeX fragment or sentence boundary.
+_SENTENCE_EVENT = re.compile(r"[\\%$.!?。！？]")
+_ASCII_WORD = re.compile(r"[A-Za-z0-9]+(?:['’][A-Za-z0-9]+)*")
+
+
+# Immutable source strings -> tuples of frozen Sentence values only. No project,
+# source metadata, permissions or input identities are cached. Large TeX blocks
+# bypass storage; the bounded LRU covers one ordinary large-paper working set.
+_SENTENCE_CACHE_MAX_BYTES = 4096
+
+
+@lru_cache(maxsize=8192)
+def _memoized_sentences(raw: str) -> tuple[Sentence, ...]:
+    return _split_sentences(raw)
+
+
 def split_sentences(raw: str) -> tuple[Sentence, ...]:
     """按原文偏移切句；公式、引用和完整宏调用作为不可分割片段。"""
+    if (type(raw) is str and len(raw) <= _SENTENCE_CACHE_MAX_BYTES
+            and (raw.isascii() or len(raw.encode('utf-8', errors='surrogatepass')) <= _SENTENCE_CACHE_MAX_BYTES)):
+        return _memoized_sentences(raw)
+    return _split_sentences(raw)
+
+
+def _split_sentences(raw: str) -> tuple[Sentence, ...]:
     result: list[Sentence] = []
     start = index = 0
     while index < len(raw):
+        event = _SENTENCE_EVENT.search(raw, index)
+        if event is None:
+            break
+        index = event.start()
         verbatim = _VERBATIM.match(raw, index)
         if verbatim:
             closing = f"\\end{{{verbatim.group(1)}}}"
@@ -179,9 +207,13 @@ def _latin_or_digit(char: str) -> bool:
 
 
 def _word_end(text: str, start: int) -> int | None:
-    if not _latin_or_digit(text[start]):
+    ascii_word = _ASCII_WORD.match(text, start)
+    if ascii_word is not None:
+        index = ascii_word.end()
+    elif _latin_or_digit(text[start]):
+        index = start + 1
+    else:
         return None
-    index = start + 1
     while index < len(text):
         char = text[index]
         if _latin_or_digit(char) or unicodedata.category(char).startswith("M"):
@@ -195,6 +227,8 @@ def _word_end(text: str, start: int) -> int | None:
 
 def _without_comments(raw: str) -> tuple[str, tuple[CommentSpan, ...]]:
     """按 TeX 规则移除注释及紧随的换行，逐字片段除外。"""
+    if '%' not in raw:
+        return raw, ()
     parts: list[str] = []
     comments: list[CommentSpan] = []
     index = 0

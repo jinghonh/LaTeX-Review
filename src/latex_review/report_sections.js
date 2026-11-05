@@ -9,6 +9,33 @@
   const headings = data.nodes.filter(node => types.has(node.type));
   const entries = [], byNode = new Map();
   const pairs = new Map(window.reviewNodePairs || []);
+  let explicitJump = null;
+  // The fixed workspace strip changes the toolbar's sticky inset. Reserve its
+  // actual wrapped height for headings too, without changing compare scrollers.
+  function reserveHeadingInset() {
+    const root = document.getElementById('review-workspace');
+    const toolbar = document.querySelector('.report-controls');
+    const navigation = root?.querySelector(':scope > [role="tablist"]');
+    if (!root || !toolbar || !navigation) return;
+    function headingInset() {
+      const style = getComputedStyle(toolbar);
+      const original = Math.ceil(navigation.getBoundingClientRect().height) + 160;
+      const bottom = style.position === 'sticky' ? toolbar.offsetHeight + (parseFloat(style.top) || 0) + 16 : 0;
+      const inset = Math.ceil(Math.max(original, bottom)) + 'px';
+      if (root.style.getPropertyValue('--workspace-heading-inset') !== inset)
+        root.style.setProperty('--workspace-heading-inset', inset);
+    }
+    headingInset();
+    if (typeof ResizeObserver !== 'undefined') {
+      const observer = new ResizeObserver(headingInset);
+      observer.observe(toolbar); observer.observe(navigation);
+    }
+    window.addEventListener('resize', headingInset, {passive: true});
+  }
+  // Workspace wrapping starts at DOMContentLoaded; do not measure before it exists.
+  if (document.readyState === 'loading')
+    document.addEventListener('DOMContentLoaded', () => requestAnimationFrame(reserveHeadingInset), {once: true});
+  else requestAnimationFrame(reserveHeadingInset);
   function add(node, old) {
     const entry = {node, old, children: [], changes: new Set()};
     entries.push(entry);
@@ -62,6 +89,7 @@
       button.append(name);
       if (!data.live) button.append(count); entry.button = button; entry.count = count;
       button.addEventListener('click', () => {
+        explicitJump = entry;
         if (window.reviewNavigation) window.reviewNavigation.chapter(entry.node.side, entry.node.id, entry.old?.id);
         else {
           const target = document.getElementById(entry.node.side + '-' + entry.node.id);
@@ -129,6 +157,21 @@
         const activationLine = compare ? threshold : Math.max(threshold, (parseFloat(getComputedStyle(title).scrollMarginTop) || 0) + 1);
         if (title.getBoundingClientRect().top <= activationLine) active = byNode.get('new-' + node.id);
       });
+      // A short paper can clamp a chapter jump at the document bottom before
+      // its heading reaches the activation line. Keep that visible, explicitly
+      // chosen chapter current until scrolling away, rather than selecting an
+      // earlier heading hidden beneath the sticky toolbar.
+      if (!compare && explicitJump?.node.side === 'new') {
+        const target = document.getElementById('new-' + explicitJump.node.id);
+        const title = target && Array.from(target.children).find(child => /^H[1-6]$/.test(child.tagName));
+        const bounds = title?.getBoundingClientRect();
+        const bottom = document.documentElement.scrollHeight - innerHeight;
+        const toolbarBottom = document.querySelector('.report-controls').getBoundingClientRect().bottom;
+        if (title?.getClientRects().length && window.scrollY >= bottom - 1 &&
+            bounds.top >= Math.max(0, toolbarBottom) && bounds.bottom <= innerHeight)
+          active = explicitJump;
+        else explicitJump = null;
+      }
       if (active) highlight(active);
     });
   }

@@ -1,0 +1,15 @@
+{
+  "classification": "historical_failed_actual_browser_capture",
+  "application_revision": "33135ce13b8fc4776320f0525c7477ece1375cef",
+  "job_id": "bash-18d1dc2361384335",
+  "exit_code": 1,
+  "route": "diff",
+  "viewport": {"width": 1440, "height": 1000},
+  "screenshot": "diff-navigation-failure.png",
+  "screenshot_sha256": "bcadfd5783c2cb252d21602222a95ecb1b4fb8b8fed25de40524f868ccfc1076",
+  "observed": "Actual normal pointer click on the initial workspace 问题检查 tab timed out after 30000ms. The existing reading panel's #sections-side chapter navigation covered the first workspace tabs and intercepted pointer events. Live route had completed first; diff failed before launching its check run or exercising annotation conversion.",
+  "playwright_error_excerpt": "Locator.click: Timeout 30000ms exceeded. locator(iframe).content_frame.get_by_role(tab, name=问题检查, exact=True) resolved visible/enabled/stable; div.directory-heading or nav#sections-side from section#workspace-reading subtree intercepts pointer events.",
+  "forced_click_used": false,
+  "owned_service_stopped_by_finally": true,
+  "status": "Reported to parent for production correction; not passing final delivery evidence."
+}

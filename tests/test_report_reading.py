@@ -68,7 +68,10 @@ def test_inline_expansion_keeps_reading_position(reading_report, browser_page):
     assert abs(summary.bounding_box()['y'] - before) <= 2
     page.locator('#next-change').click()
     assert page.locator('.inline-change[open]').count() == 1
-    assert page.locator('.inline-change[open] > summary').bounding_box()['y'] < 200
+    summary_box = page.locator('.inline-change[open] > summary').bounding_box()
+    toolbar_box = page.locator('.report-controls').bounding_box()
+    assert summary_box['y'] >= toolbar_box['y'] + toolbar_box['height']
+    assert summary_box['y'] + summary_box['height'] < page.evaluate('innerHeight')
 
 
 def test_reading_inline_navigation_and_filters(reading_report, browser_page):

@@ -1,0 +1,24 @@
+{
+  "page_errors": [],
+  "visible_text": "阅读与变更\n问题检查\n概念与符号\nAI 审查\n规则与覆盖\n问题检查\n\n上次结果（已过期） · 检查结果 · 部分范围未检查\n\n检查当前论文\n检查本次修改\n取消检查\n导出冻结检查结果\n严重度：全部\ninfo\nwarning\nerror\n来源：全部\ndeterministic\nsemantic\n人工状态：全部\nunreviewed\nconfirmed\nrejected\nwaived\n生命周期：全部\ncurrent\nresolved\nstale\nunknown\n与基线比较：全部\nnew\nexisting\nresolved\nnot_comparable\n\n问题条目数 4 · 命中位置数 4\n\nbibliography_key_unresolved: missing2026 · current · unreviewed\nfigure_unreferenced: fig:overview · current · unreviewed\ntable_unreferenced: tab:scores · current · unreviewed\nunresolved_reference: sec:missing · current · unreviewed",
+  "checks_status": {
+    "available": false,
+    "read_only": true,
+    "paper_id": "b41510320d9f8c5b217e7d666721b7a6454040d9e3c2f66ed215f7007e41d362",
+    "state": "unavailable",
+    "current_input_id": null,
+    "current_run": null,
+    "stale": true,
+    "coverage": [],
+    "capabilities": {
+      "run": false,
+      "cancel": false,
+      "knowledge": false,
+      "decisions": false,
+      "semantic_import": false,
+      "export": false
+    },
+    "message": "本地入口不可用；仅可阅读已有冻结结果。",
+    "page_version": "69fa81a7f4c5b527ba64b86918f1342d5bc8dc95655fe6bde199b23ebb0bae8c"
+  }
+}

@@ -19,6 +19,9 @@ from .latex_commands import MATH_COMMANDS, REFERENCE_COMMANDS, TEXT_COMMANDS
 
 _COMMAND = re.compile(r"\\([A-Za-z@]+|.)")
 _ENV = re.compile(r"\\(begin|end)\s*\{([^{}\s]+)\}")
+_BLANK = re.compile(r"(?:[ \t]*\r?\n){2,}")
+_SCAN_EVENT = re.compile(r"[\\${]|(?:[ \t]*\r?\n){2,}")
+_INLINE_EVENT = re.compile(r"[\\$]")
 _HEADING = {"part": 0, "chapter": 1, "section": 2, "subsection": 3, "subsubsection": 4}
 _MATH_ENV = {"equation", "equation*", "align", "align*", "alignat", "alignat*", "flalign", "flalign*", "gather", "gather*", "multline", "multline*", "displaymath", "math"}
 _NUMBERING_COMMANDS = {'appendix': 0, 'setcounter': 2, 'addtocounter': 2, 'stepcounter': 1,
@@ -82,25 +85,27 @@ class ParsedProject:
 
 def _masked(text: str) -> str:
     """屏蔽注释，保留全部字符下标；转义百分号不开始注释。"""
+    if "%" not in text:
+        return text
     chars = list(text)
     i = 0
     while i < len(text):
-        if text[i] == "%":
-            backslashes = 0
-            k = i - 1
-            while k >= 0 and text[k] == "\\":
-                backslashes += 1
-                k -= 1
-            if backslashes % 2:
-                i += 1
-                continue
-            j = i
-            while j < len(text) and text[j] not in "\r\n":
-                chars[j] = " "
-                j += 1
-            i = j
-        else:
+        i = text.find("%", i)
+        if i < 0:
+            break
+        backslashes = 0
+        k = i - 1
+        while k >= 0 and text[k] == "\\":
+            backslashes += 1
+            k -= 1
+        if backslashes % 2:
             i += 1
+            continue
+        j = i
+        while j < len(text) and text[j] not in "\r\n":
+            chars[j] = " "
+            j += 1
+        i = j
     return "".join(chars)
 
 
@@ -318,6 +323,10 @@ class _Builder:
     def _inline(self, parent: str, start: int, end: int) -> None:
         i = start
         while i < end:
+            event = _INLINE_EVENT.search(self.mask, i, end)
+            if event is None:
+                return
+            i = event.start()
             if self.mask.startswith("\\(", i):
                 close = self.mask.find("\\)", i + 2, end)
                 if close >= 0:
@@ -426,11 +435,17 @@ class _Builder:
              frontmatter: bool = False) -> None:
         i, pending = start, start
         while i < end:
-            blank = re.match(r"(?:[ \t]*\r?\n){2,}", self.mask[i:end])
+            # Only these events can affect scan state. Search the existing
+            # buffer directly: suffix slicing per ordinary character is O(n²).
+            event = _SCAN_EVENT.search(self.mask, i, end)
+            if event is None:
+                break
+            i = event.start()
+            blank = _BLANK.match(self.mask, i, end)
             if blank:
                 if not frontmatter:
                     self._flush(pending, i, parent)
-                i += blank.end()
+                i = blank.end()
                 pending = i
                 continue
             env = _ENV.match(self.mask, i)

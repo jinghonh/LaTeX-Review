@@ -1,0 +1,68 @@
+{
+  "scope": "Earlier cumulative working tree; source changed during execution. Not the final frozen revision.",
+  "command": ".venv/bin/python -m pytest -q --junitxml=/tmp/writing-check-full-pytest.xml",
+  "elapsed_seconds": 1049.07,
+  "passed": 1098,
+  "failed": 14,
+  "skipped": 19,
+  "junit_sha256": "6909fe5cb34e1fbcbaef149ed7f0001fbbaae7bc92dcc3447327d637ad223306",
+  "failures": [
+    {
+      "nodeid": "tests/test_local_history_browser::test_snapshot_incompatible_manifest_displays_saved_translations[stored-legacy-reader]",
+      "message": "assert b'{\"message\":...xe9\\x97\\xae\"}' == b'<!doctype h.../body></html>'\n  \n  At index 0 diff: b'{' != b'<'\n  Use -v to get more diff"
+    },
+    {
+      "nodeid": "tests/test_page_navigation::test_page_link_reveals_filtered_change_and_updates_preview",
+      "message": "playwright._impl._errors.TimeoutError: Locator.click: Timeout 30000ms exceeded.\nCall log:\n  - waiting for locator(\"#close-changes\")\n    - locator resolved to <button type=\"button\" id=\"close-changes\" aria-label=\"收起变更目录\">收起</button>\n  - attempting click action\n    2 × waiting for element to be visible, enabled and stable\n      - element is visible, enabled and stable\n      - scrolling into view if needed\n      - done scrolling\n[+17 more lines; full report in element text]"
+    },
+    {
+      "nodeid": "tests/test_reader_tools::test_search_keeps_filters_and_updates_translation",
+      "message": "playwright._impl._errors.TimeoutError: Locator.click: Timeout 30000ms exceeded.\nCall log:\n  - waiting for locator(\"#close-changes\")\n    - locator resolved to <button type=\"button\" id=\"close-changes\" aria-label=\"收起变更目录\">收起</button>\n  - attempting click action\n    2 × waiting for element to be visible, enabled and stable\n      - element is visible, enabled and stable\n      - scrolling into view if needed\n      - done scrolling\n[+17 more lines; full report in element text]"
+    },
+    {
+      "nodeid": "tests/test_reading_position::test_window_and_sidebar_resize_preserve_character[report]",
+      "message": "playwright._impl._errors.TimeoutError: Locator.click: Timeout 30000ms exceeded.\nCall log:\n  - waiting for locator(\"#close-sections\")\n    - locator resolved to <button type=\"button\" id=\"close-sections\">收起</button>\n  - attempting click action\n    2 × waiting for element to be visible, enabled and stable\n      - element is visible, enabled and stable\n      - scrolling into view if needed\n      - done scrolling\n[+17 more lines; full report in element text]"
+    },
+    {
+      "nodeid": "tests/test_report_reading::test_reading_inline_navigation_and_filters",
+      "message": "AssertionError: assert 4 == 0\n +  where 4 = evaluate('scrollY')\n +    where evaluate = <Page url='file:///tmp/pytest-of-ubuntu/pytest-188/test_reading_inline_navigation0/report/report.html?panel=reading'>.evaluate"
+    },
+    {
+      "nodeid": "tests/test_report_reading::test_margin_comparison_stays_beside_paper_at_medium_width[824]",
+      "message": "playwright._impl._errors.TimeoutError: Locator.click: Timeout 30000ms exceeded.\nCall log:\n  - waiting for locator(\"#close-changes\")\n    - locator resolved to <button type=\"button\" id=\"close-changes\" aria-label=\"收起变更目录\">收起</button>\n  - attempting click action\n    2 × waiting for element to be visible, enabled and stable\n      - element is visible, enabled and stable\n      - scrolling into view if needed\n      - done scrolling\n[+17 more lines; full report in element text]"
+    },
+    {
+      "nodeid": "tests/test_report_reading::test_margin_comparison_stays_beside_paper_at_medium_width[1280]",
+      "message": "playwright._impl._errors.TimeoutError: Locator.click: Timeout 30000ms exceeded.\nCall log:\n  - waiting for locator(\"#close-changes\")\n    - locator resolved to <button type=\"button\" id=\"close-changes\" aria-label=\"收起变更目录\">收起</button>\n  - attempting click action\n    2 × waiting for element to be visible, enabled and stable\n      - element is visible, enabled and stable\n      - scrolling into view if needed\n      - done scrolling\n[+17 more lines; full report in element text]"
+    },
+    {
+      "nodeid": "tests/test_report_reading::test_sentence_reveals_filtered_card_and_print_restores_flow",
+      "message": "playwright._impl._errors.TimeoutError: Locator.click: Timeout 30000ms exceeded.\nCall log:\n  - waiting for locator(\"#close-changes\")\n    - locator resolved to <button type=\"button\" id=\"close-changes\" aria-label=\"收起变更目录\">收起</button>\n  - attempting click action\n    2 × waiting for element to be visible, enabled and stable\n      - element is visible, enabled and stable\n      - scrolling into view if needed\n      - done scrolling\n[+17 more lines; full report in element text]"
+    },
+    {
+      "nodeid": "tests/test_report_sections::test_sections_counts_and_panel_restore",
+      "message": "playwright._impl._errors.TimeoutError: Locator.click: Timeout 30000ms exceeded.\nCall log:\n  - waiting for locator(\"#close-changes\")\n    - locator resolved to <button type=\"button\" id=\"close-changes\" aria-label=\"收起变更目录\">收起</button>\n  - attempting click action\n    2 × waiting for element to be visible, enabled and stable\n      - element is visible, enabled and stable\n      - scrolling into view if needed\n      - done scrolling\n[+17 more lines; full report in element text]"
+    },
+    {
+      "nodeid": "tests/test_translation::test_inline_only_translation_click_jumps_to_original_sentence[reading-new-We use $x_1$ here.-We use $x_2$ here.]",
+      "message": "playwright._impl._errors.TimeoutError: Locator.click: Timeout 30000ms exceeded.\nCall log:\n  - waiting for locator(\"#close-changes\")\n    - locator resolved to <button type=\"button\" id=\"close-changes\" aria-label=\"收起变更目录\">收起</button>\n  - attempting click action\n    2 × waiting for element to be visible, enabled and stable\n      - element is visible, enabled and stable\n      - scrolling into view if needed\n      - done scrolling\n[+17 more lines; full report in element text]"
+    },
+    {
+      "nodeid": "tests/test_translation::test_inline_only_translation_click_jumps_to_original_sentence[reading-new-We cite \\\\cite{alpha} here.-We cite \\\\cite{beta} here.]",
+      "message": "playwright._impl._errors.TimeoutError: Locator.click: Timeout 30000ms exceeded.\nCall log:\n  - waiting for locator(\"#close-changes\")\n    - locator resolved to <button type=\"button\" id=\"close-changes\" aria-label=\"收起变更目录\">收起</button>\n  - attempting click action\n    2 × waiting for element to be visible, enabled and stable\n      - element is visible, enabled and stable\n      - scrolling into view if needed\n      - done scrolling\n[+17 more lines; full report in element text]"
+    },
+    {
+      "nodeid": "tests/test_translation::test_inline_only_translation_click_jumps_to_original_sentence[compare-new-We use $x_1$ here.-We use $x_2$ here.]",
+      "message": "playwright._impl._errors.TimeoutError: Locator.click: Timeout 30000ms exceeded.\nCall log:\n  - waiting for locator(\"#close-changes\")\n    - locator resolved to <button type=\"button\" id=\"close-changes\" aria-label=\"收起变更目录\">收起</button>\n  - attempting click action\n    2 × waiting for element to be visible, enabled and stable\n      - element is visible, enabled and stable\n      - scrolling into view if needed\n      - done scrolling\n[+17 more lines; full report in element text]"
+    },
+    {
+      "nodeid": "tests/test_translation::test_inline_only_translation_click_jumps_to_original_sentence[compare-new-We cite \\\\cite{alpha} here.-We cite \\\\cite{beta} here.]",
+      "message": "playwright._impl._errors.TimeoutError: Locator.click: Timeout 30000ms exceeded.\nCall log:\n  - waiting for locator(\"#close-changes\")\n    - locator resolved to <button type=\"button\" id=\"close-changes\" aria-label=\"收起变更目录\">收起</button>\n  - attempting click action\n    2 × waiting for element to be visible, enabled and stable\n      - element is visible, enabled and stable\n      - scrolling into view if needed\n      - done scrolling\n[+17 more lines; full report in element text]"
+    },
+    {
+      "nodeid": "tests/test_translation::test_preview_exits_promptly_with_translation_in_flight[15]",
+      "message": "OSError: [Errno 98] Address already in use"
+    }
+  ],
+  "disposition": "Navigation, initial-scroll and historical-URL regressions under repair; translation shutdown port-reuse failure independently reproduced at baseline. Final source rerun pending."
+}

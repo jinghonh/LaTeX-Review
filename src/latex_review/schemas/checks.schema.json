@@ -1,0 +1,63 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://latex-review.local/schemas/checks.schema.json",
+  "title": "Current paper check report 1.0",
+  "type": "object", "additionalProperties": false,
+  "required": ["schema_version", "input_id", "input", "status", "evaluation_mode", "requested_scope", "fallback_reason", "findings", "coverage", "comparison", "summary"],
+  "properties": {
+    "schema_version": {"const": "1.0"},
+    "input_id": {"$ref": "#/$defs/hash"},
+    "input": {
+      "type": "object", "additionalProperties": false,
+      "required": ["paper_id", "entry", "content_id", "parser_version", "files", "knowledge_hash", "knowledge_revision", "engine_version", "rules", "configuration_hash", "scope"],
+      "properties": {
+        "paper_id": {"$ref": "#/$defs/hash"}, "entry": {"$ref": "#/$defs/path"},
+        "content_id": {"$ref": "#/$defs/hash"}, "parser_version": {"type": "string"},
+        "files": {"type": "object", "propertyNames": {"$ref": "#/$defs/path"}, "additionalProperties": {"$ref": "#/$defs/hash"}},
+        "knowledge_hash": {"$ref": "#/$defs/hash"}, "knowledge_revision": {"type": "integer", "minimum": 0},
+        "engine_version": {"type": "string"}, "rules": {"type": "object", "additionalProperties": {"type": "string"}},
+        "configuration_hash": {"$ref": "#/$defs/hash"}, "scope": {"const": "all"}
+      }
+    },
+    "status": {"enum": ["completed", "partial", "failed", "cancelled"]},
+    "evaluation_mode": {"const": "full"}, "requested_scope": {"enum": ["all", "changed"]},
+    "fallback_reason": {"type": ["string", "null"]},
+    "findings": {"type": "array", "items": {"$ref": "#/$defs/finding"}},
+    "coverage": {"type": "array", "items": {"$ref": "#/$defs/coverage"}},
+    "comparison": {"type": "object", "additionalProperties": false, "required": ["baseline_input_id", "comparable", "reasons"], "properties": {"baseline_input_id": {"anyOf": [{"$ref": "#/$defs/hash"}, {"type": "null"}]}, "comparable": {"type": "boolean"}, "reasons": {"type": "array", "items": {"type": "string"}}}},
+    "summary": {"type": "object", "additionalProperties": false, "required": ["finding_count", "occurrence_count", "candidate_count", "coverage_complete"], "properties": {"finding_count": {"type": "integer", "minimum": 0}, "occurrence_count": {"type": "integer", "minimum": 0}, "candidate_count": {"type": "integer", "minimum": 0}, "coverage_complete": {"type": "boolean"}}}
+  },
+  "$defs": {
+    "hash": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+    "path": {"type": "string", "minLength": 1, "pattern": "^(?!/)(?!.*(?:^|/)\\.\\.(?:/|$))(?![A-Za-z]:)(?!.*\\\\).+$"},
+    "evidence": {
+      "type": "object", "additionalProperties": false,
+      "required": ["entry", "content_id", "file", "file_sha256", "start", "end", "quote", "include_instance", "start_line", "start_column", "end_line", "end_column", "reliability", "reason"],
+      "properties": {
+        "entry": {"$ref": "#/$defs/path"}, "content_id": {"$ref": "#/$defs/hash"}, "file": {"$ref": "#/$defs/path"}, "file_sha256": {"$ref": "#/$defs/hash"},
+        "start": {"type": "integer", "minimum": 0}, "end": {"type": "integer", "minimum": 0}, "quote": {"type": "string"}, "include_instance": {"type": "string", "minLength": 1},
+        "start_line": {"type": "integer", "minimum": 1}, "start_column": {"type": "integer", "minimum": 1}, "end_line": {"type": "integer", "minimum": 1}, "end_column": {"type": "integer", "minimum": 1},
+        "reliability": {"enum": ["exact", "unknown"]}, "reason": {"type": ["string", "null"]}
+      }
+    },
+    "occurrence": {"type": "object", "additionalProperties": false, "required": ["entry", "node_id", "reading_order", "evidence"], "properties": {"entry": {"$ref": "#/$defs/path"}, "node_id": {"type": ["string", "null"]}, "reading_order": {"type": "integer", "minimum": 0}, "evidence": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/evidence"}}}},
+    "finding": {
+      "type": "object", "additionalProperties": false,
+      "required": ["rule_id", "rule_version", "finding_key", "target", "origin", "assessment", "severity", "message", "review_state", "lifecycle", "delta_status", "evidence", "related_occurrences", "change_ids"],
+      "properties": {
+        "rule_id": {"type": "string", "minLength": 1}, "rule_version": {"type": "string"}, "finding_key": {"$ref": "#/$defs/hash"}, "target": {"type": "string"},
+        "origin": {"enum": ["deterministic", "semantic"]}, "assessment": {"enum": ["rule_violation", "candidate", "author_confirmed"]}, "severity": {"enum": ["info", "warning", "error"]}, "message": {"type": "string"},
+        "review_state": {"enum": ["unreviewed", "confirmed", "rejected", "waived"]}, "lifecycle": {"enum": ["current", "resolved", "stale", "unknown"]}, "delta_status": {"enum": ["new", "existing", "resolved", "not_comparable"]},
+        "evidence": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/evidence"}}, "related_occurrences": {"type": "array", "items": {"$ref": "#/$defs/occurrence"}}, "change_ids": {"type": "array", "items": {"type": "string"}}
+      }
+    },
+    "coverage": {
+      "type": "object", "additionalProperties": false, "required": ["rule_id", "rule_version", "entry", "scope", "status", "complete", "applicable_count", "reasons", "blind_spots"],
+      "properties": {
+        "rule_id": {"type": "string"}, "rule_version": {"type": "string"}, "entry": {"$ref": "#/$defs/path"}, "scope": {"type": "string"},
+        "status": {"enum": ["executed", "no_applicable_objects", "disabled", "prerequisite_missing", "unsupported", "failed", "cancelled"]}, "complete": {"type": "boolean"}, "applicable_count": {"type": ["integer", "null"], "minimum": 0}, "reasons": {"type": "array", "items": {"type": "string"}},
+        "blind_spots": {"type": "array", "items": {"type": "object", "additionalProperties": false, "required": ["code", "message", "file"], "properties": {"code": {"type": "string"}, "message": {"type": "string"}, "file": {"anyOf": [{"$ref": "#/$defs/path"}, {"type": "null"}]}}}}
+      }
+    }
+  }
+}

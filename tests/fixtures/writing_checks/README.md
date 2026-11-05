@@ -1,0 +1,27 @@
+# Synthetic writing-check acceptance manuscript
+
+All text is synthetic and distributable. No private paper or production service is used.
+
+- [Main entry](<paper/main.tex>): abstract, body, methods, results, appendix and bibliography.
+- [Supplement](<paper/supplement.tex>): independent entry sharing a source dependency.
+- [Synthetic bibliography style](<paper/fixture.bst>): valid minimal article style, executable by BibTeX; no external `plain.bst` or `kpsewhich` is required for complete static checks.
+- [Repeated observation](<paper/shared/observation.tex>): included twice in the main entry; distinct include instances must survive mapping.
+- [UTF-8/CRLF source](<paper/shared/crlf.tex>): exactly two CRLF line endings, café/中文/🧪; retain bytes, not text-mode normalized newlines.
+- [External read-only profile](<read-only.toml>): register only against a temporary manuscript copy; real read-only permissions are not implied by the stored fixture.
+
+Intentional issues: missing bibliography key `missing2026`, missing cross-reference `sec:missing`, unreferenced labeled figure/table, inconsistent name `adaptive estimation method`, implementation identifier `fast_estimator`, and a scope-sensitive reuse of `$s$`. The latter three are **not** baseline deterministic findings without registered author knowledge. Verbatim/commented missing references are negative controls. The fixture has a simple tagged equation and a complex align expression; neither demonstrates arbitrary TeX or mathematical correctness.
+
+Portability revision after the frozen captures: the current paper tree has **10 files / 3,854 bytes**, with main-entry SHA-256 `794e5ec784dff7b10f723e6b28ea782f5687c3ac5bdf668d0fa7caa44c2e8d71`. It uses the included synthetic style instead of the externally supplied standard `plain` style. Existing Before/After artifacts retain their original 9-file inputs and immutable SHA maps; this revision does not retroactively change those measurements. New paired captures must use the same current fixture revision for both phases; do not compare a new fixture capture against an old one. The separately approved semantic-quality manuscript is unchanged.
+
+The reproducible capture harness [capture_reading.py](<../../../Docs/design/writing-check/evidence/capture_reading.py>) copies this tree outside the repository. For the old version it changes only `improves reproducibility` → `supports reproducibility` and removes ` and the unregistered source \\cite{missing2026}` from the introduction. The current/live copy is byte-identical to this fixture. Do not edit this scenario between Before and After; measurement metadata stores each file's SHA-256.
+
+```sh
+# Preserve the historical nine-file captures; create a matched portable-fixture pair.
+.venv/bin/python Docs/design/writing-check/evidence/capture_reading.py --phase before --output-dir Docs/design/writing-check/evidence/before-final
+# After implementing the workspace, with exactly the same fixture/browser settings:
+.venv/bin/python Docs/design/writing-check/evidence/capture_reading.py --phase after --output-dir Docs/design/writing-check/evidence/after-final --validate-workspace --validate-offline-panels
+```
+
+The optional [offline-panel probe](<../../../Docs/design/writing-check/evidence/validate_offline_panels.py>) runs only after both baseline four-finding captures. It registers a forbidden-name policy in the temporary copy, verifies knowledge staleness and a new exact-source finding, exports a local semantic request, imports one fixed valid plus one deliberately invalid candidate, then explicitly converts the deterministic term finding into the existing annotation system twice: one created thread, then the same reused thread, finding still current/unreviewed. Before/after manuscript SHA maps are retained. It never invokes a provider and cannot establish model usefulness. The original manuscript bytes must remain unchanged. After measurements distinguish partial captures (`capture_complete: false`) from fully completed runs, identify the Git revision when production sources are clean independently of dirty docs/evidence, and record initial/end application-source hashes/mutation. Actual POST diagnostics retain only non-secret headers, scope, frozen report keys/content ID and the bound sidecar; they verify the real entry→worker proxy rather than substituting direct worker requests.
+
+Before always imports frozen `fe82620af8bbbb028809d59ceeaaad7085427880` source via `git archive`, even if worktree code has changed. After imports worktree source. Each invocation uses an ephemeral loopback port, private state/config/cache roots and stops only its own daemon. Non-loopback browser traffic is blocked, so math is captured in the real offline-fallback state rather than pretending online MathJax succeeded. Baseline build/parse timings are descriptive microbenchmarks, not a pass against the 2 MiB/40-source/5,000-unit NFR target.

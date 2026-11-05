@@ -1,0 +1,1274 @@
+{
+  "schema_version": "1.0",
+  "complete": true,
+  "platform": "Linux-6.8.0-138-generic-x86_64-with-glibc2.39",
+  "python": "3.11.17",
+  "source_boundary_begin": {
+    "utc": "2026-11-05T09:00:20.569527+00:00",
+    "files": {
+      "src/latex_review/__init__.py": "33e5dabf1a9f3337d90ed5d2cd2f44dde0ad43692755c7870b75eafbe0fd6af7",
+      "src/latex_review/agent_tools.py": "0c0bbc569991cb58c1c262ba72e753494dfed826a43fa67ef1f9e540f5459ca7",
+      "src/latex_review/annotation_audit.py": "5d1f1bc22e85da7cca2f46030a937c40b405bb76c04a9d3e8a46cd746210f97f",
+      "src/latex_review/annotation_batch_cli.py": "68766999dc9c85b2e6150d4bb23d3d698480904cf53eb400dab530e1e932687a",
+      "src/latex_review/annotation_cli.py": "ba7e8ae44c15fe9c6dd6cb65d36c426835908f82de9b53bf41a81717096e815a",
+      "src/latex_review/annotation_codec.js": "7ad38b0880cffa45fc2bdb1e117823936cbd1db6959644625231f035bedbd80c",
+      "src/latex_review/annotation_delivery.js": "cfc04438e247f614d0945f07d50720480c8041fe48774c2a7bdb35c6f4adea33",
+      "src/latex_review/annotation_jobs.py": "09b9286e353a31da6ef17e19e166a560c73bdf646a6b948a0fa32aa9a13ec5cc",
+      "src/latex_review/annotation_output.py": "bc290834b935824516abc4b53cf2a50f5a6990bea8c55b09b7ddac87857350de",
+      "src/latex_review/annotation_review_record.py": "6ee0fa92fb7dde18fbf34a4365f485be22ae358efaf779fad4c5f773d994ce7a",
+      "src/latex_review/annotation_sources.py": "5d8bd91932a085df4c147bd2d679cb337e3641be372d37199afa40a216fe4ffe",
+      "src/latex_review/annotations/__init__.py": "1081f3696da3ab2cb2e4f24c095d051248f96f906edbe4966e1307b86262270c",
+      "src/latex_review/annotations/_batch.py": "b10702af8779b3d089ee1f3b80f12a0b5d03347de5333ab5cb9483437d3511e5",
+      "src/latex_review/annotations/_locations.py": "67a569f23b059632e88fcb9a211b92b985de1374277ce1fb31ebd2566a024181",
+      "src/latex_review/annotations/_preflight.py": "eb02b01e1c1f60f4e73bbc7751eed619ccde00a4a9825fb95515760f7e0a7270",
+      "src/latex_review/annotations/_storage.py": "4a167c97d2670bb6dad552f7aabd9ba3d21f0559a2671b95023f25ed6dab0ce1",
+      "src/latex_review/annotations/_suggestions.py": "64ddcdf47f62c1d5a17bb5f525aacf87d37b20e2bc43fa0049386a46c8992006",
+      "src/latex_review/annotations/_validation.py": "e313e78241a8fd22390c2bf3eafb5c81ae7600ac96e3bde4d7476e150b55ce1e",
+      "src/latex_review/annotations/content.py": "e6901d2acfbcd65a5a6c6b10b0ca6ce62f660d1439c954b7607d1feda2e9baa7",
+      "src/latex_review/annotations/html_fragments.py": "d7e10900efad118bbec36340211455cb339a5ebe5bfcdabe4301b2812817ba68",
+      "src/latex_review/annotations/store.py": "8f357c7bd4e02db6960c55db6ae9045d95ab805e296bee75ae1fa70d6081650b",
+      "src/latex_review/bibliography.py": "231826a405351b5fdad5375514a05249bd2057f9ec9503490bb49655b3fe109a",
+      "src/latex_review/cache.py": "8b2d1a6cb33c42fc1c92e78abdb20cd2f2502ad5e2ffb529c5a88af72c28e2e6",
+      "src/latex_review/check_configuration.py": "e027612631c828ce76bc63cf4503add626292832152c06754f53cfeb12992e08",
+      "src/latex_review/checks/__init__.py": "3b6e1cfb8859660434b9c035bc9c3af127c228c1fd9bf29fa5d97e91e193e249",
+      "src/latex_review/checks/annotation_link.py": "e77a9ebbcb7abe3a0a08e2290f6636510121a8ea7f8e2a9aab8df6098026b921",
+      "src/latex_review/checks/cli.py": "0fe086200fb9ce7da2911a5495a588861c1f74fc44e64cc71401999e65e62052",
+      "src/latex_review/checks/diagnostics.py": "0aa52036e6b67c413edf4b79a369679be4827df7c5145930c81f4b05296fc249",
+      "src/latex_review/checks/document.py": "7688a2c8c0fad70f9f640a9188c9208f5f75d737270dce01e327add2e800b59c",
+      "src/latex_review/checks/engine.py": "bd79247b5452e2070b4f4a0010dc74fe7eb5a46ef4abd3ba67850cb089c95eaa",
+      "src/latex_review/checks/finding_review.py": "75f42bca601fcea8de43614576fc4bb2a5cd889f00c07c8d17dc8a9345975ccb",
+      "src/latex_review/checks/http.py": "1bccaa30dc39929c84ed72601e671d29a5f360954b0033245da37ac9f9d2c0fb",
+      "src/latex_review/checks/knowledge_rules.py": "5d9d74b4052f5c0feb9c089488a901a729edb7a75dfa29bbf0d197697839e1b8",
+      "src/latex_review/checks/model.py": "a0ddc8ddb55b0f2d2a01828911e696854cc77f5e72b18f76c19fb0bf461eb5b1",
+      "src/latex_review/checks/registry.py": "7a455815d58baf35e029d4e8325bd951c01a00b5ab9ac523ca98307608e45403",
+      "src/latex_review/checks/semantic.py": "a91b607973ccca7551a1efb10106986eb26b6678857b8dc2b1feb1ee37c01038",
+      "src/latex_review/checks/semantic_cli.py": "75e730555edc49b27070c5a8fdc03792898f8b81b5080cf33e8e075105bb6d7d",
+      "src/latex_review/checks/semantic_service.py": "9e6e4d6675e659294ea3bbbdf709de58bd1c508b7379b0e16615c0070f9ed9e4",
+      "src/latex_review/checks/service.py": "e05d56e6f9c19bb298f7326afd5d1478cf92c3aa4375ed82ce6982c73b4611c0",
+      "src/latex_review/checks/service_state.py": "5d4ee62949ff7c11cd168efd273734e07051adebff2a576b957c2895d789a885",
+      "src/latex_review/checks/snapshot.py": "feec7fa5504a77bfab43eab0bf4863a6101d000ad8e763018726059df18fa04e",
+      "src/latex_review/checks/store.py": "693088547f37e3a17a9ab2830b35dc667848c8cb5fb46b789356437bbd13aef1",
+      "src/latex_review/ci.py": "0b62229ec684e9d17ae9dde190b38da1f78496676260501799bd90ffa4d59235",
+      "src/latex_review/ci_comment.py": "eda47a37fbd176f09facdc93539fdc2c38bd10c6dbf5aa2d3aedc21119e18800",
+      "src/latex_review/cli.py": "58147d0bdb4a946e9674d203d9bdffbe3eaec52f5ab3c7358786bab31841b1a9",
+      "src/latex_review/comparison.py": "fde346a211d68434ca0d39ce7abd3d82398b2f0634d17c3e3b69e7a35cbfd29c",
+      "src/latex_review/compilation.py": "6f79a893cb68426f55a011bcfaf65ea1886a8a6458587a317f6ab14ddc88a9bb",
+      "src/latex_review/compile_numbering.py": "78883f4b7e14981fa8562ef908ccf2b0e178ef941504cae843cc70e6f07f3ded",
+      "src/latex_review/contract.py": "2b201dbe9347d7fd0b78926bfe21a60b4c1c5593962b9a304b2eebe16323660e",
+      "src/latex_review/delivery.py": "e25e7356f9b3296bf9f4302ccbd52cdb7345f208d749dc1f6a451efabc1e0214",
+      "src/latex_review/file_events.py": "554aba1027c5cc8b5aa3f75b63a1db7fff5437db6c9e69b832d6fd0d3ba1fcf7",
+      "src/latex_review/fragment_render.py": "5346450e25fd36e5f22279c66bc09a7af3de19fc4eeafb8ab3f8b51408e24ff7",
+      "src/latex_review/identity.py": "52f4da6d0358ff7be200e2327ee35ef087c5bad5b94e16ba7eae59e398890f35",
+      "src/latex_review/latex_commands.py": "03430f1eb877dd5a086be3e1605cd330108a59ca0456489dd4d0be8b86911ab3",
+      "src/latex_review/live.py": "d962291851a32d91a6dcd5eb84d558820fd98a07cdfd241ac92fcc26b832c811",
+      "src/latex_review/live_reader.js": "e60be6feee93d1f0030ed087520dde6518ffd4b990e6b23b24f5dd7807fdd90f",
+      "src/latex_review/local_client.py": "9ec525c42adfc4022fce586e76c012b23027a27e02216d9937ca4f34bb9dd2cf",
+      "src/latex_review/local_dashboard.html": "d86d3c2b5c9751ff2fd9ccb6d12566f2132326c5e3a11afdef3655360b9338ea",
+      "src/latex_review/local_history.py": "c7f269a77cc222cc0eac02c4cd7c32e781ef017c078259bb7245a1d719ae0997",
+      "src/latex_review/local_history_events.py": "9bbe30fd9f2a2dac5423efcc0865c0b2ee7fa16f7192e5043bfc5da1a4cedfca",
+      "src/latex_review/local_paths.py": "664fda439776309db5c0c4ba6cec73de39ae41c1042e6c94984b54898454ed0a",
+      "src/latex_review/local_protocol.py": "6291e6f5f936855dd8bc1ac70bc171a637dcc977524f33f650fdf30f699abf05",
+      "src/latex_review/local_report.html": "c52b4da1abcd370ad4ff06a0fad2f1c982f6faccc05c5dfaea848e39d5463094",
+      "src/latex_review/local_reports.py": "ffb2c416d0d40ec1fda29dc3504ece6711ff26dff515f83a0561fe7d1b3412bd",
+      "src/latex_review/local_security.py": "baca4ea990108f99526f75f583b5a967cd34af01c5dcbfcd4754aaaa2cd4556f",
+      "src/latex_review/local_service.py": "d556a59f44ba27b406d5204fba392c93b30dc78c0e704b6863f74da20e664452",
+      "src/latex_review/local_state.py": "b634a3acc45cffb71f8f10e63a46d76c2b183b4c31a10da27e603036d69ef44b",
+      "src/latex_review/local_tasks.py": "d1f396a930a64bc68ba1c5e417ad3d785b8288f3a34701058a4f9062a6237c2e",
+      "src/latex_review/local_worker.py": "e69c67f9d90c817ccffa6e8fbda4566e7ff36d1d4aceddc820c72ff7ca7f72dc",
+      "src/latex_review/macros.py": "2206796e11680519c48bf0ee3b78764f7e8c84f933edd9232dfdb76c5fb577e1",
+      "src/latex_review/matching.py": "a33a841e528035cbcf317c12eb690fd70dce12ea8e9c26bd9472d2b71cdc5f85",
+      "src/latex_review/math_render.js": "3d825d4878d8791677b3bcd4a4b60851fa5789934617d7ec0ea23091d4237323",
+      "src/latex_review/math_structure.py": "445790c73f9931a4a35e7df050fa693caa5c50c9664032e754e115117355c34c",
+      "src/latex_review/numbering.py": "afa977d64b4a779c05d8686001f43f44596ff812214f98c5665568131eab1e5c",
+      "src/latex_review/output_leases.py": "66b55a1b724d983ae134cd66dc4fd80708e25000fe269524b4c24d5098f2dbb9",
+      "src/latex_review/pdf_cache.py": "7a1aaae595e53e099145d28e1336946885c31f31ffa2f6e8a725f79269be889c",
+      "src/latex_review/preview.py": "5cc5b67cb1a05d989e45a1c2523a367fa824bc1fb48d8bdac12867e27c9ff636",
+      "src/latex_review/preview_fragments.py": "42c42db1def3efc3fa09cb8c3fe937690e4f2459d0aab3133cc446f3e765d151",
+      "src/latex_review/project_profile.py": "94bb332df04b716149d9ed95cf909589d816c1f52139dc3be56194efd1e48bce",
+      "src/latex_review/quote_matching.py": "d97503bd6a66160512fe25e3171c910c6151e0b067d67a7fbe3805142225e270",
+      "src/latex_review/reading.py": "2c0e461d72fc4a59bce20ea43309fd48a350b1531a94954b3b5acb3a00a4d8e9",
+      "src/latex_review/reading_position.js": "2164d281180128f6e9dc1121152a89ca957e352abb6750b7837e114dec0d541c",
+      "src/latex_review/report.css": "087f4f500f7487e84520a27479802c9f405f9368f23303a4ca0c8628b96641db",
+      "src/latex_review/report.py": "98d9ff000cb05e2123be391012b23036d47c42334eb1f81a0c6efa6b1b7c1940",
+      "src/latex_review/report_annotations.js": "1b47731a3f8d36ffa8447a1529f40e2ff4cacf45400fcf2568e2f14589c82a4c",
+      "src/latex_review/report_directory.py": "26d07ce81507bde82d82799f425d0fd1e6beeb47d37fee0464020945160cc19d",
+      "src/latex_review/report_interaction.js": "826eb0554c190c4082b85b09ff72aac9d958bfa34411510165f9321ec51fee53",
+      "src/latex_review/report_reader.js": "f98cae74a35585e55a68217a8664c042cdf710dffc4a21af6b59c1ab3d9bbd5f",
+      "src/latex_review/report_rebuild.py": "a453e25d30e956a14118fa6d1fb66320c01df42b48ee37be63e177225a1e9920",
+      "src/latex_review/report_search.js": "e7f561a7762155daa0ceb4819e18f4b66422155d1dc441bd175701fc331f881d",
+      "src/latex_review/report_sections.js": "fb5034b1fecf03defc68566a31309510a0b56a32c7350216b289f743cd1c6a96",
+      "src/latex_review/report_translation.js": "795439f9a19e6d490a45d2c0e868f99bd64530022b9a3ad37060c5d63fa299bc",
+      "src/latex_review/resource_cache.py": "7dc5da295a682179aadb77eaa421b7bb761218ad145d3d23b35cbcc3c41b327a",
+      "src/latex_review/review_knowledge.js": "d365cabb1e86b473c5b232bef71240f0616323247d601208fb567c898df14503",
+      "src/latex_review/review_semantic.js": "e543ca1b2ecf7b838a0f3a83994322c7deaeffe1c97899f1d4bfe3281af2885d",
+      "src/latex_review/review_workspace.css": "1b315a9b98a980072c8f1aeed76f295495fb1d106993c1eee290d842ac0fc7ee",
+      "src/latex_review/review_workspace.js": "feb55803b5f78c7c8cc18f39c7bee741fe2572f5778c0b13934f023fad7ce6b4",
+      "src/latex_review/rules.py": "aaf6c56aa367c973fd3ed2db7c72b203c23bf0b353aca4b9efbdab96424f0a2f",
+      "src/latex_review/run_manifest.py": "b28b355e057b24e858f623432d38863ffe0b012b8b99c1c85f356c52a2347a83",
+      "src/latex_review/schemas/annotation-suggestion.schema.json": "39f1fc6498524e333ed3e2657d73aef2776956befb7e4a075c38753e20307f27",
+      "src/latex_review/schemas/checks.schema.json": "3aa356490c7fc9395fa5c704de2c5eaace010802aa5ae06faea07bfbdb644d7f",
+      "src/latex_review/schemas/diagnostics.schema.json": "123d095d41de361eab5720569ff86af90b7879a1176bcd6c73e46df9d3429d0c",
+      "src/latex_review/schemas/diff.schema.json": "a029b25b83a7f1c255cb483bce9b4f664ed6292437362f45595a47aeae2e1329",
+      "src/latex_review/schemas/knowledge.schema.json": "f88c5492e93f9c5875005afe42c2f9c906aea1375ac2066fa1b6fa1773f243fc",
+      "src/latex_review/schemas/semantic-request.schema.json": "ea9f22e16272d768ea5f304f51f2153c19efb4938dc4f716c9dbc58958c3b830",
+      "src/latex_review/schemas/semantic-response.schema.json": "8cf890b97705ccfd687df9331feecae697ad7e266050172bf45384b9a8783ff2",
+      "src/latex_review/serve.py": "9888665b447a53796b6517e00d8a8e633321da99c48ef966f34c7ea1fb0beb80",
+      "src/latex_review/source_map.py": "f9853972ae4931ad16663bb89c70e35aae9c88b0b586f5f99ea0507051c951a7",
+      "src/latex_review/sources.py": "e167b69481bd16649984b668106a11f6434a33c3390aa759e17315be17a86622",
+      "src/latex_review/structure.py": "1d95016c9a4e255ef8a9639a4883f6c0be4eb5aa8ca1119a10fa01fd06c3977c",
+      "src/latex_review/structured_diff.py": "397a9d531569a492f8feb607e4ef5a6224415e94e41686227bb593c65daed09e",
+      "src/latex_review/table_model.py": "0a491594822806ca14317b2af805929ff18f7a9f4198a2d875864168ce4abbde",
+      "src/latex_review/text_diff.py": "f1c5f1534d5823eb993eb7787c4064bb16b9b296076c96effed69862bc0d25e9",
+      "src/latex_review/translation.py": "b6ab1035e33eeefeb8a9d450c60aca68c55cb86dc434bc4f2aadd2163fafbc14",
+      "src/latex_review/translation_session.py": "ec3f36778d38d50ad5589e324a8999081f0e10ee56c49473a94e257f7247e3a9",
+      "src/latex_review/upload.py": "f94ae43267053b5b28a90f2924db3981c9c3284b96df5110ac25b90137084ef8",
+      "src/latex_review/version_storage.py": "0c34a856ae93290f135db83e696ee0a9c508d98049381b2d5a0a07468c3a6d85",
+      "src/latex_review/visual.py": "3375dc67c56d6bea8d2f1dee43ffe0d2d1f997c064a78a486478c799d01df6af",
+      "Docs/design/writing-check/evidence/benchmark_saved_checks.py": "6b0d313a29bc5791bcb4040a762cd074267c9e868945cdec5301e6a482155597",
+      "Docs/design/writing-check/evidence/benchmark_checks.py": "39e401cdc692cf1a482332f7f6af707d3d807d86c5ecff935df8ed86ba37682d"
+    },
+    "aggregate_sha256": "818b02326ecffdf402ac0387541de6ad921e1a051daad0f0e9a9d26ca3994a8e"
+  },
+  "environment_begin": {
+    "load_average": [
+      0.177734375,
+      0.24609375,
+      0.35498046875
+    ],
+    "logical_cpus": 2,
+    "affinity_cpus": 2,
+    "cgroup_cpu.stat": "usage_usec 249391554000\nuser_usec 199525793000\nsystem_usec 49865761000\ncore_sched.force_idle_usec 0\nnr_periods 0\nnr_throttled 0\nthrottled_usec 0\nnr_bursts 0\nburst_usec 0"
+  },
+  "concurrent_workload_declared": "UNINSTRUMENTED QUIET full saved pipeline N10 COMMENT on applicationb742583254a69dd7103be07b4e5f110f3c4c2c5e, docs-onlymeasuredHEADbecf726dafeba0700ad41db1f0d342b636357e9d,120sourceaggregate818b02326ecffdf402ac0387541de6ad921e1a051daad0f0e9a9d26ca3994a8e. EXACTsame40files/5000paragraphs/1479521initialbytes/nativeevents/default800msquiet/fullpreviewpublication/realprivateEntry+Worker/entrycoordinator/HTTPcurrentstatus+export/FIRSTsaveretained/.5observerpluswork. Parent/allchildrenidle,no localheavyjobs/tests/browser/profiler/servers or source/helper/docs/Git writes untilBOTHsequentialrunscollected. RemoteCIseparatehardware. No component substitution/extraeval/manualwarm/canonicalhooks/instrumentation/model/TeX/network/.1supplement. Comment-onlyhistoricalrecipeNOTvisibleproseacceptance; NEXTproserunretainsactual5000unitvisibleproofinside. ALLhistoryincludingoptimized7+light7bfailure+outliersretained, no rerununtilgreen/no privatefeedbackread/copied.",
+  "source_files": 40,
+  "paragraphs": 5000,
+  "requested_saves": 10,
+  "edit_kind": "comment",
+  "edit_workload": "Append an invisible TeX comment; historical recipe, not evidence of visible prose editing performance.",
+  "notifier_debounce_ms": 800,
+  "observer_poll_sleep_seconds": 0.5,
+  "per_settle_timeout_seconds": 180.0,
+  "samples": [
+    {
+      "status_polls": 6,
+      "status_rtt_seconds": [
+        0.07541678892448545,
+        0.18666166393086314,
+        0.21025053597986698,
+        0.2347755739465356,
+        0.5355510909575969,
+        0.07710035517811775
+      ],
+      "old_input_polls": 5,
+      "no_new_run_polls": 4,
+      "states_observed": [
+        {
+          "seconds": 0.07590640592388809,
+          "state": "completed"
+        },
+        {
+          "seconds": 3.2457808319013566,
+          "state": "running"
+        },
+        {
+          "seconds": 3.8232326249126345,
+          "state": "completed"
+        }
+      ],
+      "observation_errors": [],
+      "load_at_start": {
+        "load_average": [
+          0.3046875,
+          0.271484375,
+          0.36279296875
+        ],
+        "logical_cpus": 2,
+        "affinity_cpus": 2,
+        "cgroup_cpu.stat": "usage_usec 249402245000\nuser_usec 199535687000\nsystem_usec 49866558000\ncore_sched.force_idle_usec 0\nnr_periods 0\nnr_throttled 0\nthrottled_usec 0\nnr_bursts 0\nburst_usec 0"
+      },
+      "first_matching_preview_publication_seconds": 2.7102260298561305,
+      "preview_content_id": "7fc67a2a3c7367cc3e89032daedf94c20c77dbb45f4117268de3f8168cb534d5",
+      "live_revision": 2,
+      "watcher_message": "\u5df2\u66f4\u65b0\u5f53\u524d\u8bba\u6587\u3002\u9884\u89c8\u8bca\u65ad\uff1a0 \u9879\u3002",
+      "first_new_run_observed_seconds": 3.2457808319013566,
+      "first_running_observed_seconds": 3.2457808319013566,
+      "first_completed_status_seconds": 3.8232326249126345,
+      "save_to_verified_current_seconds": 3.8983669318258762,
+      "input_id": "aa9cce0ab0f9454fa3ce4e85578164a8497c5d2904637e0a80812a1321b7990b",
+      "content_id": "7fc67a2a3c7367cc3e89032daedf94c20c77dbb45f4117268de3f8168cb534d5",
+      "run_id": "48e45e350a674ff4b725b75167a4ebde",
+      "status": "completed",
+      "requested_scope": "changed",
+      "evaluation_mode": "full",
+      "fallback_reason": "full_scan_required_for_global_rules",
+      "expected_saved_file_sha256": "c6f00d4e91f29ce725d6c3f57afaa97e71d99b44d3789164d89e72da6e2144b7",
+      "authoritative_match": true,
+      "final_status": {
+        "state": "completed",
+        "stale": false,
+        "current_input_id": "aa9cce0ab0f9454fa3ce4e85578164a8497c5d2904637e0a80812a1321b7990b",
+        "current_run": {
+          "run_id": "48e45e350a674ff4b725b75167a4ebde",
+          "paper_id": "9076ffe3c57e56c494935089951567496cb2a98cb3d110d88fdd5224bc1f76e9",
+          "state": "completed",
+          "scope": "changed",
+          "page_version": "6ef3f8b14d174190990007fec6f9de6fce546a577454f8b7f689f206cf22b646",
+          "input_id": "aa9cce0ab0f9454fa3ce4e85578164a8497c5d2904637e0a80812a1321b7990b",
+          "error": null
+        },
+        "available": true
+      },
+      "load_at_end": {
+        "load_average": [
+          0.60107421875,
+          0.33349609375,
+          0.3828125
+        ],
+        "logical_cpus": 2,
+        "affinity_cpus": 2,
+        "cgroup_cpu.stat": "usage_usec 249406580000\nuser_usec 199539595000\nsystem_usec 49866985000\ncore_sched.force_idle_usec 0\nnr_periods 0\nnr_throttled 0\nthrottled_usec 0\nnr_bursts 0\nburst_usec 0"
+      },
+      "save": 1,
+      "write_seconds": 6.980588659644127e-05,
+      "observed_intervals_not_internal_stage_durations": {
+        "save_to_preview_publication_seconds": 2.7102260298561305,
+        "publication_to_first_new_run_seconds": 0.5355548020452261,
+        "first_new_run_to_completed_status_seconds": 0.5774517930112779,
+        "completed_status_to_export_verified_seconds": 0.07513430691324174
+      }
+    },
+    {
+      "status_polls": 6,
+      "status_rtt_seconds": [
+        0.07604358298704028,
+        0.24562190799042583,
+        0.23034511716105044,
+        0.3536734019871801,
+        0.4659854050260037,
+        0.08507259795442224
+      ],
+      "old_input_polls": 5,
+      "no_new_run_polls": 4,
+      "states_observed": [
+        {
+          "seconds": 0.07718466292135417,
+          "state": "completed"
+        },
+        {
+          "seconds": 3.3742068270221353,
+          "state": "running"
+        },
+        {
+          "seconds": 3.959633674006909,
+          "state": "completed"
+        }
+      ],
+      "observation_errors": [],
+      "load_at_start": {
+        "load_average": [
+          0.60107421875,
+          0.33349609375,
+          0.3828125
+        ],
+        "logical_cpus": 2,
+        "affinity_cpus": 2,
+        "cgroup_cpu.stat": "usage_usec 249406584000\nuser_usec 199539599000\nsystem_usec 49866985000\ncore_sched.force_idle_usec 0\nnr_periods 0\nnr_throttled 0\nthrottled_usec 0\nnr_bursts 0\nburst_usec 0"
+      },
+      "first_matching_preview_publication_seconds": 2.9082153120543808,
+      "preview_content_id": "f8ff69f92084f0e90a764a519986e309d8ce9fd5f3e80e448fc061116ad383e4",
+      "live_revision": 3,
+      "watcher_message": "\u5df2\u66f4\u65b0\u5f53\u524d\u8bba\u6587\u3002\u9884\u89c8\u8bca\u65ad\uff1a0 \u9879\u3002",
+      "first_new_run_observed_seconds": 3.3742068270221353,
+      "first_running_observed_seconds": 3.3742068270221353,
+      "first_completed_status_seconds": 3.959633674006909,
+      "save_to_verified_current_seconds": 4.150796256028116,
+      "input_id": "c8d26780f8d53fd31c1db6715d11234201ac1203d07b8f0fb99491dc55582486",
+      "content_id": "f8ff69f92084f0e90a764a519986e309d8ce9fd5f3e80e448fc061116ad383e4",
+      "run_id": "948ff7ba8ecd49449a11d94efb540029",
+      "status": "completed",
+      "requested_scope": "changed",
+      "evaluation_mode": "full",
+      "fallback_reason": "full_scan_required_for_global_rules",
+      "expected_saved_file_sha256": "28ce5919831039000912be58a92c2943537020111ee6deff7e26b695068f3ec9",
+      "authoritative_match": true,
+      "final_status": {
+        "state": "completed",
+        "stale": false,
+        "current_input_id": "c8d26780f8d53fd31c1db6715d11234201ac1203d07b8f0fb99491dc55582486",
+        "current_run": {
+          "run_id": "948ff7ba8ecd49449a11d94efb540029",
+          "paper_id": "9076ffe3c57e56c494935089951567496cb2a98cb3d110d88fdd5224bc1f76e9",
+          "state": "completed",
+          "scope": "changed",
+          "page_version": "bf5dd1c17a919b3b4fc95c06a0a5e2a466d0741244887b195cc1fc78b5e67bcc",
+          "input_id": "c8d26780f8d53fd31c1db6715d11234201ac1203d07b8f0fb99491dc55582486",
+          "error": null
+        },
+        "available": true
+      },
+      "load_at_end": {
+        "load_average": [
+          0.63330078125,
+          0.3447265625,
+          0.38623046875
+        ],
+        "logical_cpus": 2,
+        "affinity_cpus": 2,
+        "cgroup_cpu.stat": "usage_usec 249412390000\nuser_usec 199544694000\nsystem_usec 49867696000\ncore_sched.force_idle_usec 0\nnr_periods 0\nnr_throttled 0\nthrottled_usec 0\nnr_bursts 0\nburst_usec 0"
+      },
+      "save": 2,
+      "write_seconds": 0.0005623239558190107,
+      "observed_intervals_not_internal_stage_durations": {
+        "save_to_preview_publication_seconds": 2.9082153120543808,
+        "publication_to_first_new_run_seconds": 0.4659915149677545,
+        "first_new_run_to_completed_status_seconds": 0.5854268469847739,
+        "completed_status_to_export_verified_seconds": 0.19116258202120662
+      }
+    },
+    {
+      "status_polls": 7,
+      "status_rtt_seconds": [
+        0.07472686795517802,
+        0.1490658330731094,
+        0.24947199993766844,
+        0.16039300081320107,
+        0.3869677728507668,
+        0.1757940931711346,
+        0.07976175285875797
+      ],
+      "old_input_polls": 6,
+      "no_new_run_polls": 5,
+      "states_observed": [
+        {
+          "seconds": 0.0755569830071181,
+          "state": "completed"
+        },
+        {
+          "seconds": 3.7013772018253803,
+          "state": "running"
+        },
+        {
+          "seconds": 4.281473582843319,
+          "state": "completed"
+        }
+      ],
+      "observation_errors": [],
+      "load_at_start": {
+        "load_average": [
+          0.63330078125,
+          0.3447265625,
+          0.38623046875
+        ],
+        "logical_cpus": 2,
+        "affinity_cpus": 2,
+        "cgroup_cpu.stat": "usage_usec 249412395000\nuser_usec 199544699000\nsystem_usec 49867696000\ncore_sched.force_idle_usec 0\nnr_periods 0\nnr_throttled 0\nthrottled_usec 0\nnr_bursts 0\nburst_usec 0"
+      },
+      "first_matching_preview_publication_seconds": 2.6372492839582264,
+      "preview_content_id": "23de5d56a595dc4e2338364cf2bbc805659d0a490bb0320df5934b2f396eb1f7",
+      "live_revision": 4,
+      "watcher_message": "\u5df2\u66f4\u65b0\u5f53\u524d\u8bba\u6587\u3002\u9884\u89c8\u8bca\u65ad\uff1a0 \u9879\u3002",
+      "first_new_run_observed_seconds": 3.7013772018253803,
+      "first_running_observed_seconds": 3.7013772018253803,
+      "first_completed_status_seconds": 4.281473582843319,
+      "save_to_verified_current_seconds": 4.367912306915969,
+      "input_id": "cb454a387c50853a6ea4440882637eb1d92f3ff366a798575c91e2f16e4b60a7",
+      "content_id": "23de5d56a595dc4e2338364cf2bbc805659d0a490bb0320df5934b2f396eb1f7",
+      "run_id": "c28f50460a0c438bb04179974a9765f4",
+      "status": "completed",
+      "requested_scope": "changed",
+      "evaluation_mode": "full",
+      "fallback_reason": "full_scan_required_for_global_rules",
+      "expected_saved_file_sha256": "315480e69b7e8b5a382e86c424cebad294c7be7e57ad8ce06cb009e175231f3f",
+      "authoritative_match": true,
+      "final_status": {
+        "state": "completed",
+        "stale": false,
+        "current_input_id": "cb454a387c50853a6ea4440882637eb1d92f3ff366a798575c91e2f16e4b60a7",
+        "current_run": {
+          "run_id": "c28f50460a0c438bb04179974a9765f4",
+          "paper_id": "9076ffe3c57e56c494935089951567496cb2a98cb3d110d88fdd5224bc1f76e9",
+          "state": "completed",
+          "scope": "changed",
+          "page_version": "46266381b13db9ae3ba2524a14e590c5ed9c83b40b0e4e47d32db35f4c0d610e",
+          "input_id": "cb454a387c50853a6ea4440882637eb1d92f3ff366a798575c91e2f16e4b60a7",
+          "error": null
+        },
+        "available": true
+      },
+      "load_at_end": {
+        "load_average": [
+          0.58251953125,
+          0.3388671875,
+          0.3837890625
+        ],
+        "logical_cpus": 2,
+        "affinity_cpus": 2,
+        "cgroup_cpu.stat": "usage_usec 249418938000\nuser_usec 199550428000\nsystem_usec 49868510000\ncore_sched.force_idle_usec 0\nnr_periods 0\nnr_throttled 0\nthrottled_usec 0\nnr_bursts 0\nburst_usec 0"
+      },
+      "save": 3,
+      "write_seconds": 0.000184657983481884,
+      "observed_intervals_not_internal_stage_durations": {
+        "save_to_preview_publication_seconds": 2.6372492839582264,
+        "publication_to_first_new_run_seconds": 1.0641279178671539,
+        "first_new_run_to_completed_status_seconds": 0.5800963810179383,
+        "completed_status_to_export_verified_seconds": 0.08643872407265007
+      }
+    },
+    {
+      "status_polls": 6,
+      "status_rtt_seconds": [
+        0.07857084600254893,
+        0.1905081500299275,
+        0.21960448194295168,
+        0.15647230693139136,
+        0.5106731900013983,
+        0.07948599196970463
+      ],
+      "old_input_polls": 5,
+      "no_new_run_polls": 4,
+      "states_observed": [
+        {
+          "seconds": 0.08081647800281644,
+          "state": "completed"
+        },
+        {
+          "seconds": 3.1599048618227243,
+          "state": "running"
+        },
+        {
+          "seconds": 3.7397655269596726,
+          "state": "completed"
+        }
+      ],
+      "observation_errors": [],
+      "load_at_start": {
+        "load_average": [
+          0.58251953125,
+          0.3388671875,
+          0.3837890625
+        ],
+        "logical_cpus": 2,
+        "affinity_cpus": 2,
+        "cgroup_cpu.stat": "usage_usec 249418944000\nuser_usec 199550434000\nsystem_usec 49868510000\ncore_sched.force_idle_usec 0\nnr_periods 0\nnr_throttled 0\nthrottled_usec 0\nnr_bursts 0\nburst_usec 0"
+      },
+      "first_matching_preview_publication_seconds": 2.649223173968494,
+      "preview_content_id": "39d79b2c344b4d4d257ac23bc1993855d12f041738e2a373bbf86ae13e847748",
+      "live_revision": 5,
+      "watcher_message": "\u5df2\u66f4\u65b0\u5f53\u524d\u8bba\u6587\u3002\u9884\u89c8\u8bca\u65ad\uff1a0 \u9879\u3002",
+      "first_new_run_observed_seconds": 3.1599048618227243,
+      "first_running_observed_seconds": 3.1599048618227243,
+      "first_completed_status_seconds": 3.7397655269596726,
+      "save_to_verified_current_seconds": 3.814973384840414,
+      "input_id": "f700136c7e052c189390ad81de3c3ad7e4113110e9bdd433e0f84ca00c10ee75",
+      "content_id": "39d79b2c344b4d4d257ac23bc1993855d12f041738e2a373bbf86ae13e847748",
+      "run_id": "46eaafdddeed4b4e83f8cbd721cc21cc",
+      "status": "completed",
+      "requested_scope": "changed",
+      "evaluation_mode": "full",
+      "fallback_reason": "full_scan_required_for_global_rules",
+      "expected_saved_file_sha256": "092f2171911b8bd406b7ad527505238b19f3eef2985674260cbef2ba4e22cb2b",
+      "authoritative_match": true,
+      "final_status": {
+        "state": "completed",
+        "stale": false,
+        "current_input_id": "f700136c7e052c189390ad81de3c3ad7e4113110e9bdd433e0f84ca00c10ee75",
+        "current_run": {
+          "run_id": "46eaafdddeed4b4e83f8cbd721cc21cc",
+          "paper_id": "9076ffe3c57e56c494935089951567496cb2a98cb3d110d88fdd5224bc1f76e9",
+          "state": "completed",
+          "scope": "changed",
+          "page_version": "efbac066d215a5a60663f16f268c6dbee16839c391f9058639925f8fcabee218",
+          "input_id": "f700136c7e052c189390ad81de3c3ad7e4113110e9bdd433e0f84ca00c10ee75",
+          "error": null
+        },
+        "available": true
+      },
+      "load_at_end": {
+        "load_average": [
+          0.58251953125,
+          0.3388671875,
+          0.3837890625
+        ],
+        "logical_cpus": 2,
+        "affinity_cpus": 2,
+        "cgroup_cpu.stat": "usage_usec 249423216000\nuser_usec 199554403000\nsystem_usec 49868813000\ncore_sched.force_idle_usec 0\nnr_periods 0\nnr_throttled 0\nthrottled_usec 0\nnr_bursts 0\nburst_usec 0"
+      },
+      "save": 4,
+      "write_seconds": 0.0018000178970396519,
+      "observed_intervals_not_internal_stage_durations": {
+        "save_to_preview_publication_seconds": 2.649223173968494,
+        "publication_to_first_new_run_seconds": 0.5106816878542304,
+        "first_new_run_to_completed_status_seconds": 0.5798606651369482,
+        "completed_status_to_export_verified_seconds": 0.07520785788074136
+      }
+    },
+    {
+      "status_polls": 6,
+      "status_rtt_seconds": [
+        0.07466429495252669,
+        0.14078820799477398,
+        0.2196624840144068,
+        0.11156482505612075,
+        0.533211249858141,
+        0.07583330804482102
+      ],
+      "old_input_polls": 5,
+      "no_new_run_polls": 4,
+      "states_observed": [
+        {
+          "seconds": 0.07518538390286267,
+          "state": "completed"
+        },
+        {
+          "seconds": 3.0819979708176106,
+          "state": "running"
+        },
+        {
+          "seconds": 3.658232224872336,
+          "state": "completed"
+        }
+      ],
+      "observation_errors": [],
+      "load_at_start": {
+        "load_average": [
+          0.58251953125,
+          0.3388671875,
+          0.3837890625
+        ],
+        "logical_cpus": 2,
+        "affinity_cpus": 2,
+        "cgroup_cpu.stat": "usage_usec 249423220000\nuser_usec 199554407000\nsystem_usec 49868813000\ncore_sched.force_idle_usec 0\nnr_periods 0\nnr_throttled 0\nthrottled_usec 0\nnr_bursts 0\nburst_usec 0"
+      },
+      "first_matching_preview_publication_seconds": 2.548783174948767,
+      "preview_content_id": "6f996cfc068ae3bc21961531252b057cb4beb29cc6da605511f4f81c004f2379",
+      "live_revision": 6,
+      "watcher_message": "\u5df2\u66f4\u65b0\u5f53\u524d\u8bba\u6587\u3002\u9884\u89c8\u8bca\u65ad\uff1a0 \u9879\u3002",
+      "first_new_run_observed_seconds": 3.0819979708176106,
+      "first_running_observed_seconds": 3.0819979708176106,
+      "first_completed_status_seconds": 3.658232224872336,
+      "save_to_verified_current_seconds": 3.833170976024121,
+      "input_id": "7c731ff5b122174dd80a7a79ac7880f088b8753839c9cff1094a7f8a8fcd6b9f",
+      "content_id": "6f996cfc068ae3bc21961531252b057cb4beb29cc6da605511f4f81c004f2379",
+      "run_id": "33d2cf5c671944d0b9757925de00e4b6",
+      "status": "completed",
+      "requested_scope": "changed",
+      "evaluation_mode": "full",
+      "fallback_reason": "full_scan_required_for_global_rules",
+      "expected_saved_file_sha256": "9ebc1970d28406407d341e068b07426d690abc99ae99a9d4aa1ed5353436322e",
+      "authoritative_match": true,
+      "final_status": {
+        "state": "completed",
+        "stale": false,
+        "current_input_id": "7c731ff5b122174dd80a7a79ac7880f088b8753839c9cff1094a7f8a8fcd6b9f",
+        "current_run": {
+          "run_id": "33d2cf5c671944d0b9757925de00e4b6",
+          "paper_id": "9076ffe3c57e56c494935089951567496cb2a98cb3d110d88fdd5224bc1f76e9",
+          "state": "completed",
+          "scope": "changed",
+          "page_version": "ac3f3666e35e7b2f5febc8bfab31d85488dd3acebf7d2d9461439254173ea25f",
+          "input_id": "7c731ff5b122174dd80a7a79ac7880f088b8753839c9cff1094a7f8a8fcd6b9f",
+          "error": null
+        },
+        "available": true
+      },
+      "load_at_end": {
+        "load_average": [
+          0.6162109375,
+          0.35009765625,
+          0.38720703125
+        ],
+        "logical_cpus": 2,
+        "affinity_cpus": 2,
+        "cgroup_cpu.stat": "usage_usec 249427331000\nuser_usec 199558277000\nsystem_usec 49869054000\ncore_sched.force_idle_usec 0\nnr_periods 0\nnr_throttled 0\nthrottled_usec 0\nnr_bursts 0\nburst_usec 0"
+      },
+      "save": 5,
+      "write_seconds": 9.451387450098991e-05,
+      "observed_intervals_not_internal_stage_durations": {
+        "save_to_preview_publication_seconds": 2.548783174948767,
+        "publication_to_first_new_run_seconds": 0.5332147958688438,
+        "first_new_run_to_completed_status_seconds": 0.5762342540547252,
+        "completed_status_to_export_verified_seconds": 0.17493875115178525
+      }
+    },
+    {
+      "status_polls": 6,
+      "status_rtt_seconds": [
+        0.07345400308258832,
+        0.19436754402704537,
+        0.19341335003264248,
+        0.21934321289882064,
+        0.5763760909903795,
+        0.07305643009021878
+      ],
+      "old_input_polls": 5,
+      "no_new_run_polls": 4,
+      "states_observed": [
+        {
+          "seconds": 0.07437087199650705,
+          "state": "completed"
+        },
+        {
+          "seconds": 3.2593748439103365,
+          "state": "running"
+        },
+        {
+          "seconds": 3.832815221976489,
+          "state": "completed"
+        }
+      ],
+      "observation_errors": [],
+      "load_at_start": {
+        "load_average": [
+          0.6162109375,
+          0.35009765625,
+          0.38720703125
+        ],
+        "logical_cpus": 2,
+        "affinity_cpus": 2,
+        "cgroup_cpu.stat": "usage_usec 249427335000\nuser_usec 199558281000\nsystem_usec 49869054000\ncore_sched.force_idle_usec 0\nnr_periods 0\nnr_throttled 0\nthrottled_usec 0\nnr_bursts 0\nburst_usec 0"
+      },
+      "first_matching_preview_publication_seconds": 2.682994419010356,
+      "preview_content_id": "b3303d798625f97697bbfa1396412e231842dda0057868f59b77e0cdedc09a5f",
+      "live_revision": 7,
+      "watcher_message": "\u5df2\u66f4\u65b0\u5f53\u524d\u8bba\u6587\u3002\u9884\u89c8\u8bca\u65ad\uff1a0 \u9879\u3002",
+      "first_new_run_observed_seconds": 3.2593748439103365,
+      "first_running_observed_seconds": 3.2593748439103365,
+      "first_completed_status_seconds": 3.832815221976489,
+      "save_to_verified_current_seconds": 3.907283026026562,
+      "input_id": "84ac472239634d4921d4b8aef877e5ca8d1bd06d6af85a7e88904482d2d206a3",
+      "content_id": "b3303d798625f97697bbfa1396412e231842dda0057868f59b77e0cdedc09a5f",
+      "run_id": "2ac797f52fbb4214adb1012fbb84bf12",
+      "status": "completed",
+      "requested_scope": "changed",
+      "evaluation_mode": "full",
+      "fallback_reason": "full_scan_required_for_global_rules",
+      "expected_saved_file_sha256": "266a4923ba9d729c2406be7e7665da01cff6fa341319eafc8cbe5bcd4bd602e1",
+      "authoritative_match": true,
+      "final_status": {
+        "state": "completed",
+        "stale": false,
+        "current_input_id": "84ac472239634d4921d4b8aef877e5ca8d1bd06d6af85a7e88904482d2d206a3",
+        "current_run": {
+          "run_id": "2ac797f52fbb4214adb1012fbb84bf12",
+          "paper_id": "9076ffe3c57e56c494935089951567496cb2a98cb3d110d88fdd5224bc1f76e9",
+          "state": "completed",
+          "scope": "changed",
+          "page_version": "f6297f8a7f9222be7b3880225aa8b99db0e31d2576d4802e6da636977851e863",
+          "input_id": "84ac472239634d4921d4b8aef877e5ca8d1bd06d6af85a7e88904482d2d206a3",
+          "error": null
+        },
+        "available": true
+      },
+      "load_at_end": {
+        "load_average": [
+          0.88720703125,
+          0.4111328125,
+          0.40673828125
+        ],
+        "logical_cpus": 2,
+        "affinity_cpus": 2,
+        "cgroup_cpu.stat": "usage_usec 249431625000\nuser_usec 199562273000\nsystem_usec 49869352000\ncore_sched.force_idle_usec 0\nnr_periods 0\nnr_throttled 0\nthrottled_usec 0\nnr_bursts 0\nburst_usec 0"
+      },
+      "save": 6,
+      "write_seconds": 0.00043999007903039455,
+      "observed_intervals_not_internal_stage_durations": {
+        "save_to_preview_publication_seconds": 2.682994419010356,
+        "publication_to_first_new_run_seconds": 0.5763804248999804,
+        "first_new_run_to_completed_status_seconds": 0.5734403780661523,
+        "completed_status_to_export_verified_seconds": 0.07446780405007303
+      }
+    },
+    {
+      "status_polls": 6,
+      "status_rtt_seconds": [
+        0.07346334191970527,
+        0.21372050512582064,
+        0.1671286418568343,
+        0.35355579294264317,
+        0.3979324691463262,
+        0.07176757697016001
+      ],
+      "old_input_polls": 5,
+      "no_new_run_polls": 4,
+      "states_observed": [
+        {
+          "seconds": 0.0740990440826863,
+          "state": "completed"
+        },
+        {
+          "seconds": 3.208016388118267,
+          "state": "running"
+        },
+        {
+          "seconds": 3.7802431711461395,
+          "state": "completed"
+        }
+      ],
+      "observation_errors": [],
+      "load_at_start": {
+        "load_average": [
+          0.88720703125,
+          0.4111328125,
+          0.40673828125
+        ],
+        "logical_cpus": 2,
+        "affinity_cpus": 2,
+        "cgroup_cpu.stat": "usage_usec 249431629000\nuser_usec 199562277000\nsystem_usec 49869352000\ncore_sched.force_idle_usec 0\nnr_periods 0\nnr_throttled 0\nthrottled_usec 0\nnr_bursts 0\nburst_usec 0"
+      },
+      "first_matching_preview_publication_seconds": 2.8100786339491606,
+      "preview_content_id": "7035715208575db0f59ea06d2cb9f31241017260d61f1daa10fbd7d6101fe326",
+      "live_revision": 8,
+      "watcher_message": "\u5df2\u66f4\u65b0\u5f53\u524d\u8bba\u6587\u3002\u9884\u89c8\u8bca\u65ad\uff1a0 \u9879\u3002",
+      "first_new_run_observed_seconds": 3.208016388118267,
+      "first_running_observed_seconds": 3.208016388118267,
+      "first_completed_status_seconds": 3.7802431711461395,
+      "save_to_verified_current_seconds": 3.8542681171093136,
+      "input_id": "83244dbab8e648abf713bd91e0a0c2811f2959705d98ed243104fca19cf955af",
+      "content_id": "7035715208575db0f59ea06d2cb9f31241017260d61f1daa10fbd7d6101fe326",
+      "run_id": "b8cdf325d53f43549b71bcdba6a7f20f",
+      "status": "completed",
+      "requested_scope": "changed",
+      "evaluation_mode": "full",
+      "fallback_reason": "full_scan_required_for_global_rules",
+      "expected_saved_file_sha256": "90b3c02f8289fa847a1d0d0c5925c7cb226c585e6e95b59ae0b67eda325e1f02",
+      "authoritative_match": true,
+      "final_status": {
+        "state": "completed",
+        "stale": false,
+        "current_input_id": "83244dbab8e648abf713bd91e0a0c2811f2959705d98ed243104fca19cf955af",
+        "current_run": {
+          "run_id": "b8cdf325d53f43549b71bcdba6a7f20f",
+          "paper_id": "9076ffe3c57e56c494935089951567496cb2a98cb3d110d88fdd5224bc1f76e9",
+          "state": "completed",
+          "scope": "changed",
+          "page_version": "e4b0b688ada4d2febb1ef3e101176a03f1262787bbbd4d11299c201f246f0c3e",
+          "input_id": "83244dbab8e648abf713bd91e0a0c2811f2959705d98ed243104fca19cf955af",
+          "error": null
+        },
+        "available": true
+      },
+      "load_at_end": {
+        "load_average": [
+          0.896484375,
+          0.42138671875,
+          0.41015625
+        ],
+        "logical_cpus": 2,
+        "affinity_cpus": 2,
+        "cgroup_cpu.stat": "usage_usec 249435809000\nuser_usec 199566120000\nsystem_usec 49869689000\ncore_sched.force_idle_usec 0\nnr_periods 0\nnr_throttled 0\nthrottled_usec 0\nnr_bursts 0\nburst_usec 0"
+      },
+      "save": 7,
+      "write_seconds": 0.00013747205957770348,
+      "observed_intervals_not_internal_stage_durations": {
+        "save_to_preview_publication_seconds": 2.8100786339491606,
+        "publication_to_first_new_run_seconds": 0.3979377541691065,
+        "first_new_run_to_completed_status_seconds": 0.5722267830278724,
+        "completed_status_to_export_verified_seconds": 0.0740249459631741
+      }
+    },
+    {
+      "status_polls": 6,
+      "status_rtt_seconds": [
+        0.07287673419341445,
+        0.30617155809886754,
+        0.2940342731308192,
+        0.29766464000567794,
+        0.23051966005004942,
+        0.07379396189935505
+      ],
+      "old_input_polls": 5,
+      "no_new_run_polls": 4,
+      "states_observed": [
+        {
+          "seconds": 0.07340831798501313,
+          "state": "completed"
+        },
+        {
+          "seconds": 3.2031822230201215,
+          "state": "running"
+        },
+        {
+          "seconds": 3.7773702300619334,
+          "state": "completed"
+        }
+      ],
+      "observation_errors": [],
+      "load_at_start": {
+        "load_average": [
+          0.896484375,
+          0.42138671875,
+          0.41015625
+        ],
+        "logical_cpus": 2,
+        "affinity_cpus": 2,
+        "cgroup_cpu.stat": "usage_usec 249435813000\nuser_usec 199566123000\nsystem_usec 49869690000\ncore_sched.force_idle_usec 0\nnr_periods 0\nnr_throttled 0\nthrottled_usec 0\nnr_bursts 0\nburst_usec 0"
+      },
+      "first_matching_preview_publication_seconds": 2.972658570157364,
+      "preview_content_id": "fb93527d02de664c641c097d4cee0d1dcfdfe89d98666c5ccadf7ce323b448aa",
+      "live_revision": 9,
+      "watcher_message": "\u5df2\u66f4\u65b0\u5f53\u524d\u8bba\u6587\u3002\u9884\u89c8\u8bca\u65ad\uff1a0 \u9879\u3002",
+      "first_new_run_observed_seconds": 3.2031822230201215,
+      "first_running_observed_seconds": 3.2031822230201215,
+      "first_completed_status_seconds": 3.7773702300619334,
+      "save_to_verified_current_seconds": 3.962724819080904,
+      "input_id": "5311716940b8ad55b7787ca0d2897cdb07f2d0abb37d17dfbdb7ffd61e48d17d",
+      "content_id": "fb93527d02de664c641c097d4cee0d1dcfdfe89d98666c5ccadf7ce323b448aa",
+      "run_id": "378428ea5e1d4f489628dc0b9ebfeba9",
+      "status": "completed",
+      "requested_scope": "changed",
+      "evaluation_mode": "full",
+      "fallback_reason": "full_scan_required_for_global_rules",
+      "expected_saved_file_sha256": "345d7a03a970b7c652e99011ab9a0180d65505d9c73561e256dcc1a41c3cfaaa",
+      "authoritative_match": true,
+      "final_status": {
+        "state": "completed",
+        "stale": false,
+        "current_input_id": "5311716940b8ad55b7787ca0d2897cdb07f2d0abb37d17dfbdb7ffd61e48d17d",
+        "current_run": {
+          "run_id": "378428ea5e1d4f489628dc0b9ebfeba9",
+          "paper_id": "9076ffe3c57e56c494935089951567496cb2a98cb3d110d88fdd5224bc1f76e9",
+          "state": "completed",
+          "scope": "changed",
+          "page_version": "9eb8613395bae9e5586ff72a95e36e92b8e3227672960ef4568cec045e6ec4bd",
+          "input_id": "5311716940b8ad55b7787ca0d2897cdb07f2d0abb37d17dfbdb7ffd61e48d17d",
+          "error": null
+        },
+        "available": true
+      },
+      "load_at_end": {
+        "load_average": [
+          0.896484375,
+          0.42138671875,
+          0.41015625
+        ],
+        "logical_cpus": 2,
+        "affinity_cpus": 2,
+        "cgroup_cpu.stat": "usage_usec 249439986000\nuser_usec 199570039000\nsystem_usec 49869947000\ncore_sched.force_idle_usec 0\nnr_periods 0\nnr_throttled 0\nthrottled_usec 0\nnr_bursts 0\nburst_usec 0"
+      },
+      "save": 8,
+      "write_seconds": 9.475904516875744e-05,
+      "observed_intervals_not_internal_stage_durations": {
+        "save_to_preview_publication_seconds": 2.972658570157364,
+        "publication_to_first_new_run_seconds": 0.23052365286275744,
+        "first_new_run_to_completed_status_seconds": 0.5741880070418119,
+        "completed_status_to_export_verified_seconds": 0.18535458901897073
+      }
+    },
+    {
+      "status_polls": 6,
+      "status_rtt_seconds": [
+        0.08197567705065012,
+        0.17326668603345752,
+        0.20416372502222657,
+        0.15369850094430149,
+        0.5832096629310399,
+        0.0770731579978019
+      ],
+      "old_input_polls": 5,
+      "no_new_run_polls": 4,
+      "states_observed": [
+        {
+          "seconds": 0.08274887199513614,
+          "state": "completed"
+        },
+        {
+          "seconds": 3.198641585884616,
+          "state": "running"
+        },
+        {
+          "seconds": 3.776198623003438,
+          "state": "completed"
+        }
+      ],
+      "observation_errors": [],
+      "load_at_start": {
+        "load_average": [
+          0.896484375,
+          0.42138671875,
+          0.41015625
+        ],
+        "logical_cpus": 2,
+        "affinity_cpus": 2,
+        "cgroup_cpu.stat": "usage_usec 249439992000\nuser_usec 199570044000\nsystem_usec 49869948000\ncore_sched.force_idle_usec 0\nnr_periods 0\nnr_throttled 0\nthrottled_usec 0\nnr_bursts 0\nburst_usec 0"
+      },
+      "first_matching_preview_publication_seconds": 2.6154271410778165,
+      "preview_content_id": "836fe9873300c78113df8d2354b62c6a615e15bc9bb57ba582ba8d2ba961de6f",
+      "live_revision": 10,
+      "watcher_message": "\u5df2\u66f4\u65b0\u5f53\u524d\u8bba\u6587\u3002\u9884\u89c8\u8bca\u65ad\uff1a0 \u9879\u3002",
+      "first_new_run_observed_seconds": 3.198641585884616,
+      "first_running_observed_seconds": 3.198641585884616,
+      "first_completed_status_seconds": 3.776198623003438,
+      "save_to_verified_current_seconds": 3.853412924101576,
+      "input_id": "74cf0a73ebaf13a5ff919477140b85a473ec3b1665d6486133c2ba39bdf9253f",
+      "content_id": "836fe9873300c78113df8d2354b62c6a615e15bc9bb57ba582ba8d2ba961de6f",
+      "run_id": "3a165f912c1e4a3dbcdcc160beaa0f4d",
+      "status": "completed",
+      "requested_scope": "changed",
+      "evaluation_mode": "full",
+      "fallback_reason": "full_scan_required_for_global_rules",
+      "expected_saved_file_sha256": "d02105d55b82e115c5c0c7a05ba2eb47bdf87c66ac833801f69abfebf211b73e",
+      "authoritative_match": true,
+      "final_status": {
+        "state": "completed",
+        "stale": false,
+        "current_input_id": "74cf0a73ebaf13a5ff919477140b85a473ec3b1665d6486133c2ba39bdf9253f",
+        "current_run": {
+          "run_id": "3a165f912c1e4a3dbcdcc160beaa0f4d",
+          "paper_id": "9076ffe3c57e56c494935089951567496cb2a98cb3d110d88fdd5224bc1f76e9",
+          "state": "completed",
+          "scope": "changed",
+          "page_version": "caa87c3b9a31990dbe3f10fd39c24da943daa3e0309a2a6e0634010f941521be",
+          "input_id": "74cf0a73ebaf13a5ff919477140b85a473ec3b1665d6486133c2ba39bdf9253f",
+          "error": null
+        },
+        "available": true
+      },
+      "load_at_end": {
+        "load_average": [
+          0.90478515625,
+          0.43115234375,
+          0.41357421875
+        ],
+        "logical_cpus": 2,
+        "affinity_cpus": 2,
+        "cgroup_cpu.stat": "usage_usec 249444116000\nuser_usec 199573804000\nsystem_usec 49870312000\ncore_sched.force_idle_usec 0\nnr_periods 0\nnr_throttled 0\nthrottled_usec 0\nnr_bursts 0\nburst_usec 0"
+      },
+      "save": 9,
+      "write_seconds": 0.00032890308648347855,
+      "observed_intervals_not_internal_stage_durations": {
+        "save_to_preview_publication_seconds": 2.6154271410778165,
+        "publication_to_first_new_run_seconds": 0.5832144448067993,
+        "first_new_run_to_completed_status_seconds": 0.5775570371188223,
+        "completed_status_to_export_verified_seconds": 0.0772143010981381
+      }
+    },
+    {
+      "status_polls": 6,
+      "status_rtt_seconds": [
+        0.08113574795424938,
+        0.2825100210029632,
+        0.23006893508136272,
+        0.24785312288440764,
+        0.3757409250829369,
+        0.07881454494781792
+      ],
+      "old_input_polls": 5,
+      "no_new_run_polls": 4,
+      "states_observed": [
+        {
+          "seconds": 0.08228547614999115,
+          "state": "completed"
+        },
+        {
+          "seconds": 3.2199458349496126,
+          "state": "running"
+        },
+        {
+          "seconds": 3.799140417948365,
+          "state": "completed"
+        }
+      ],
+      "observation_errors": [],
+      "load_at_start": {
+        "load_average": [
+          0.90478515625,
+          0.43115234375,
+          0.41357421875
+        ],
+        "logical_cpus": 2,
+        "affinity_cpus": 2,
+        "cgroup_cpu.stat": "usage_usec 249444126000\nuser_usec 199573814000\nsystem_usec 49870312000\ncore_sched.force_idle_usec 0\nnr_periods 0\nnr_throttled 0\nthrottled_usec 0\nnr_bursts 0\nburst_usec 0"
+      },
+      "first_matching_preview_publication_seconds": 2.8442007570993155,
+      "preview_content_id": "0bf993e28a93b5ac52c920b7f6597c26085a2b07b30353b0ddb63cdc1289ddfe",
+      "live_revision": 11,
+      "watcher_message": "\u5df2\u66f4\u65b0\u5f53\u524d\u8bba\u6587\u3002\u9884\u89c8\u8bca\u65ad\uff1a0 \u9879\u3002",
+      "first_new_run_observed_seconds": 3.2199458349496126,
+      "first_running_observed_seconds": 3.2199458349496126,
+      "first_completed_status_seconds": 3.799140417948365,
+      "save_to_verified_current_seconds": 3.9753384341020137,
+      "input_id": "3280f3aae8a17d88c9fc94d7c19fa8061eb822b9ed48e8c81d216d8180610fdb",
+      "content_id": "0bf993e28a93b5ac52c920b7f6597c26085a2b07b30353b0ddb63cdc1289ddfe",
+      "run_id": "3e7866b61be643f892cd1b6baa8064a5",
+      "status": "completed",
+      "requested_scope": "changed",
+      "evaluation_mode": "full",
+      "fallback_reason": "full_scan_required_for_global_rules",
+      "expected_saved_file_sha256": "96183a92d78ccd55299545f909a91d0e133ff471be8f284d7d54de4d5b8a2eb8",
+      "authoritative_match": true,
+      "final_status": {
+        "state": "completed",
+        "stale": false,
+        "current_input_id": "3280f3aae8a17d88c9fc94d7c19fa8061eb822b9ed48e8c81d216d8180610fdb",
+        "current_run": {
+          "run_id": "3e7866b61be643f892cd1b6baa8064a5",
+          "paper_id": "9076ffe3c57e56c494935089951567496cb2a98cb3d110d88fdd5224bc1f76e9",
+          "state": "completed",
+          "scope": "changed",
+          "page_version": "6f2539ad751fa55a86843271fd43bf3e86bba14d131cdfa5cba71dbc344a4dbd",
+          "input_id": "3280f3aae8a17d88c9fc94d7c19fa8061eb822b9ed48e8c81d216d8180610fdb",
+          "error": null
+        },
+        "available": true
+      },
+      "load_at_end": {
+        "load_average": [
+          0.91259765625,
+          0.44091796875,
+          0.4169921875
+        ],
+        "logical_cpus": 2,
+        "affinity_cpus": 2,
+        "cgroup_cpu.stat": "usage_usec 249448409000\nuser_usec 199577835000\nsystem_usec 49870574000\ncore_sched.force_idle_usec 0\nnr_periods 0\nnr_throttled 0\nthrottled_usec 0\nnr_bursts 0\nburst_usec 0"
+      },
+      "save": 10,
+      "write_seconds": 0.0005468039307743311,
+      "observed_intervals_not_internal_stage_durations": {
+        "save_to_preview_publication_seconds": 2.8442007570993155,
+        "publication_to_first_new_run_seconds": 0.3757450778502971,
+        "first_new_run_to_completed_status_seconds": 0.5791945829987526,
+        "completed_status_to_export_verified_seconds": 0.1761980161536485
+      }
+    }
+  ],
+  "measurement": "Real private entry ensure -> live worker native watcher/rebuild -> asynchronous saved notifier -> coordinator -> worker HTTP status/export.",
+  "boundary_notes": [
+    "Timer starts immediately before source write; write close included; no fsync durability claim.",
+    "Elapsed verified-current includes filesystem event detection, full preview rebuild/publication, default 800ms debounce, HTTP notify, coordinator queue and complete check, status observation and export verification.",
+    "Publication/queue/running timestamps are first-observed upper bounds, not isolated internal stage durations. Short queue/running states can be missed.",
+    "Polling sleeps plus recorded HTTP RTT introduce detection delay and observer load. No browser refresh or browser paint is measured.",
+    "Cold ensure/start and baseline settle are separate from sequential saved-edit samples.",
+    "Spec saved-hot p95 target is <=2s excluding TeX compilation and external network/model calls. This measurement includes rendering, debounce and local loopback transport; no external network/model calls or TeX compilation occur.",
+    "Source boundary hashes identify observed workspace, not a claim of exact final revision."
+  ],
+  "source_bytes_initial": 1479521,
+  "entry_start_seconds": 0.3570263469591737,
+  "ensure_to_worker_ready_seconds": 6.837548542069271,
+  "baseline_after_worker_ready": {
+    "status_polls": 4,
+    "status_rtt_seconds": [
+      0.21897484408691525,
+      0.027848192024976015,
+      0.1461556819267571,
+      0.0781911970116198
+    ],
+    "old_input_polls": 3,
+    "no_new_run_polls": 2,
+    "states_observed": [
+      {
+        "seconds": 0.21950482297688723,
+        "state": null
+      },
+      {
+        "seconds": 1.3942313939332962,
+        "state": "running"
+      },
+      {
+        "seconds": 1.9728068909607828,
+        "state": "completed"
+      }
+    ],
+    "observation_errors": [],
+    "load_at_start": {
+      "load_average": [
+        0.3046875,
+        0.271484375,
+        0.36279296875
+      ],
+      "logical_cpus": 2,
+      "affinity_cpus": 2,
+      "cgroup_cpu.stat": "usage_usec 249400547000\nuser_usec 199534129000\nsystem_usec 49866418000\ncore_sched.force_idle_usec 0\nnr_periods 0\nnr_throttled 0\nthrottled_usec 0\nnr_bursts 0\nburst_usec 0"
+    },
+    "first_matching_preview_publication_seconds": 0.0005263830535113811,
+    "preview_content_id": "36e2dd68e9f3c946cd428fbe05c94f2f843d199284ff6a7e59c12495eb093d4d",
+    "live_revision": 1,
+    "watcher_message": "\u6301\u7eed\u9884\u89c8\u5df2\u542f\u52a8\u3002",
+    "first_new_run_observed_seconds": 1.3942313939332962,
+    "first_running_observed_seconds": 1.3942313939332962,
+    "first_completed_status_seconds": 1.9728068909607828,
+    "save_to_verified_current_seconds": 2.148788708029315,
+    "input_id": "64534889ce3117f639b5feef7d1f22c0ea5cbd2577521a5c6de1ea0e8b633002",
+    "content_id": "36e2dd68e9f3c946cd428fbe05c94f2f843d199284ff6a7e59c12495eb093d4d",
+    "run_id": "1f03c89dfe674bfd94a46f57ec3d50c4",
+    "status": "completed",
+    "requested_scope": "changed",
+    "evaluation_mode": "full",
+    "fallback_reason": "no_baseline",
+    "expected_saved_file_sha256": "e7ac09ac6b707fe5722a0736273fee32ffc9aa18a1d3022ea337c679ea637723",
+    "authoritative_match": true,
+    "final_status": {
+      "state": "completed",
+      "stale": false,
+      "current_input_id": "64534889ce3117f639b5feef7d1f22c0ea5cbd2577521a5c6de1ea0e8b633002",
+      "current_run": {
+        "run_id": "1f03c89dfe674bfd94a46f57ec3d50c4",
+        "paper_id": "9076ffe3c57e56c494935089951567496cb2a98cb3d110d88fdd5224bc1f76e9",
+        "state": "completed",
+        "scope": "changed",
+        "page_version": "3dfcfe653ed63b9e8683ba8a7e77f8d4743bcdd733dda12fa9321af6a15de35f",
+        "input_id": "64534889ce3117f639b5feef7d1f22c0ea5cbd2577521a5c6de1ea0e8b633002",
+        "error": null
+      },
+      "available": true
+    },
+    "load_at_end": {
+      "load_average": [
+        0.3046875,
+        0.271484375,
+        0.36279296875
+      ],
+      "logical_cpus": 2,
+      "affinity_cpus": 2,
+      "cgroup_cpu.stat": "usage_usec 249402243000\nuser_usec 199535685000\nsystem_usec 49866558000\ncore_sched.force_idle_usec 0\nnr_periods 0\nnr_throttled 0\nthrottled_usec 0\nnr_bursts 0\nburst_usec 0"
+    }
+  },
+  "saved_median_seconds": 3.902824978926219,
+  "saved_p95_nearest_rank_seconds": 4.367912306915969,
+  "saved_min_seconds": 3.814973384840414,
+  "saved_max_seconds": 4.367912306915969,
+  "saved_hot_p95_target_seconds": 2,
+  "saved_hot_p95_target_met": false,
+  "cleanup": {
+    "owned_entry_exit_code": 0,
+    "owned_entry_exited": true,
+    "owned_worker_exited": true,
+    "isolated_endpoint_removed": true
+  },
+  "source_boundary_end": {
+    "utc": "2026-11-05T09:01:10.642064+00:00",
+    "files": {
+      "src/latex_review/__init__.py": "33e5dabf1a9f3337d90ed5d2cd2f44dde0ad43692755c7870b75eafbe0fd6af7",
+      "src/latex_review/agent_tools.py": "0c0bbc569991cb58c1c262ba72e753494dfed826a43fa67ef1f9e540f5459ca7",
+      "src/latex_review/annotation_audit.py": "5d1f1bc22e85da7cca2f46030a937c40b405bb76c04a9d3e8a46cd746210f97f",
+      "src/latex_review/annotation_batch_cli.py": "68766999dc9c85b2e6150d4bb23d3d698480904cf53eb400dab530e1e932687a",
+      "src/latex_review/annotation_cli.py": "ba7e8ae44c15fe9c6dd6cb65d36c426835908f82de9b53bf41a81717096e815a",
+      "src/latex_review/annotation_codec.js": "7ad38b0880cffa45fc2bdb1e117823936cbd1db6959644625231f035bedbd80c",
+      "src/latex_review/annotation_delivery.js": "cfc04438e247f614d0945f07d50720480c8041fe48774c2a7bdb35c6f4adea33",
+      "src/latex_review/annotation_jobs.py": "09b9286e353a31da6ef17e19e166a560c73bdf646a6b948a0fa32aa9a13ec5cc",
+      "src/latex_review/annotation_output.py": "bc290834b935824516abc4b53cf2a50f5a6990bea8c55b09b7ddac87857350de",
+      "src/latex_review/annotation_review_record.py": "6ee0fa92fb7dde18fbf34a4365f485be22ae358efaf779fad4c5f773d994ce7a",
+      "src/latex_review/annotation_sources.py": "5d8bd91932a085df4c147bd2d679cb337e3641be372d37199afa40a216fe4ffe",
+      "src/latex_review/annotations/__init__.py": "1081f3696da3ab2cb2e4f24c095d051248f96f906edbe4966e1307b86262270c",
+      "src/latex_review/annotations/_batch.py": "b10702af8779b3d089ee1f3b80f12a0b5d03347de5333ab5cb9483437d3511e5",
+      "src/latex_review/annotations/_locations.py": "67a569f23b059632e88fcb9a211b92b985de1374277ce1fb31ebd2566a024181",
+      "src/latex_review/annotations/_preflight.py": "eb02b01e1c1f60f4e73bbc7751eed619ccde00a4a9825fb95515760f7e0a7270",
+      "src/latex_review/annotations/_storage.py": "4a167c97d2670bb6dad552f7aabd9ba3d21f0559a2671b95023f25ed6dab0ce1",
+      "src/latex_review/annotations/_suggestions.py": "64ddcdf47f62c1d5a17bb5f525aacf87d37b20e2bc43fa0049386a46c8992006",
+      "src/latex_review/annotations/_validation.py": "e313e78241a8fd22390c2bf3eafb5c81ae7600ac96e3bde4d7476e150b55ce1e",
+      "src/latex_review/annotations/content.py": "e6901d2acfbcd65a5a6c6b10b0ca6ce62f660d1439c954b7607d1feda2e9baa7",
+      "src/latex_review/annotations/html_fragments.py": "d7e10900efad118bbec36340211455cb339a5ebe5bfcdabe4301b2812817ba68",
+      "src/latex_review/annotations/store.py": "8f357c7bd4e02db6960c55db6ae9045d95ab805e296bee75ae1fa70d6081650b",
+      "src/latex_review/bibliography.py": "231826a405351b5fdad5375514a05249bd2057f9ec9503490bb49655b3fe109a",
+      "src/latex_review/cache.py": "8b2d1a6cb33c42fc1c92e78abdb20cd2f2502ad5e2ffb529c5a88af72c28e2e6",
+      "src/latex_review/check_configuration.py": "e027612631c828ce76bc63cf4503add626292832152c06754f53cfeb12992e08",
+      "src/latex_review/checks/__init__.py": "3b6e1cfb8859660434b9c035bc9c3af127c228c1fd9bf29fa5d97e91e193e249",
+      "src/latex_review/checks/annotation_link.py": "e77a9ebbcb7abe3a0a08e2290f6636510121a8ea7f8e2a9aab8df6098026b921",
+      "src/latex_review/checks/cli.py": "0fe086200fb9ce7da2911a5495a588861c1f74fc44e64cc71401999e65e62052",
+      "src/latex_review/checks/diagnostics.py": "0aa52036e6b67c413edf4b79a369679be4827df7c5145930c81f4b05296fc249",
+      "src/latex_review/checks/document.py": "7688a2c8c0fad70f9f640a9188c9208f5f75d737270dce01e327add2e800b59c",
+      "src/latex_review/checks/engine.py": "bd79247b5452e2070b4f4a0010dc74fe7eb5a46ef4abd3ba67850cb089c95eaa",
+      "src/latex_review/checks/finding_review.py": "75f42bca601fcea8de43614576fc4bb2a5cd889f00c07c8d17dc8a9345975ccb",
+      "src/latex_review/checks/http.py": "1bccaa30dc39929c84ed72601e671d29a5f360954b0033245da37ac9f9d2c0fb",
+      "src/latex_review/checks/knowledge_rules.py": "5d9d74b4052f5c0feb9c089488a901a729edb7a75dfa29bbf0d197697839e1b8",
+      "src/latex_review/checks/model.py": "a0ddc8ddb55b0f2d2a01828911e696854cc77f5e72b18f76c19fb0bf461eb5b1",
+      "src/latex_review/checks/registry.py": "7a455815d58baf35e029d4e8325bd951c01a00b5ab9ac523ca98307608e45403",
+      "src/latex_review/checks/semantic.py": "a91b607973ccca7551a1efb10106986eb26b6678857b8dc2b1feb1ee37c01038",
+      "src/latex_review/checks/semantic_cli.py": "75e730555edc49b27070c5a8fdc03792898f8b81b5080cf33e8e075105bb6d7d",
+      "src/latex_review/checks/semantic_service.py": "9e6e4d6675e659294ea3bbbdf709de58bd1c508b7379b0e16615c0070f9ed9e4",
+      "src/latex_review/checks/service.py": "e05d56e6f9c19bb298f7326afd5d1478cf92c3aa4375ed82ce6982c73b4611c0",
+      "src/latex_review/checks/service_state.py": "5d4ee62949ff7c11cd168efd273734e07051adebff2a576b957c2895d789a885",
+      "src/latex_review/checks/snapshot.py": "feec7fa5504a77bfab43eab0bf4863a6101d000ad8e763018726059df18fa04e",
+      "src/latex_review/checks/store.py": "693088547f37e3a17a9ab2830b35dc667848c8cb5fb46b789356437bbd13aef1",
+      "src/latex_review/ci.py": "0b62229ec684e9d17ae9dde190b38da1f78496676260501799bd90ffa4d59235",
+      "src/latex_review/ci_comment.py": "eda47a37fbd176f09facdc93539fdc2c38bd10c6dbf5aa2d3aedc21119e18800",
+      "src/latex_review/cli.py": "58147d0bdb4a946e9674d203d9bdffbe3eaec52f5ab3c7358786bab31841b1a9",
+      "src/latex_review/comparison.py": "fde346a211d68434ca0d39ce7abd3d82398b2f0634d17c3e3b69e7a35cbfd29c",
+      "src/latex_review/compilation.py": "6f79a893cb68426f55a011bcfaf65ea1886a8a6458587a317f6ab14ddc88a9bb",
+      "src/latex_review/compile_numbering.py": "78883f4b7e14981fa8562ef908ccf2b0e178ef941504cae843cc70e6f07f3ded",
+      "src/latex_review/contract.py": "2b201dbe9347d7fd0b78926bfe21a60b4c1c5593962b9a304b2eebe16323660e",
+      "src/latex_review/delivery.py": "e25e7356f9b3296bf9f4302ccbd52cdb7345f208d749dc1f6a451efabc1e0214",
+      "src/latex_review/file_events.py": "554aba1027c5cc8b5aa3f75b63a1db7fff5437db6c9e69b832d6fd0d3ba1fcf7",
+      "src/latex_review/fragment_render.py": "5346450e25fd36e5f22279c66bc09a7af3de19fc4eeafb8ab3f8b51408e24ff7",
+      "src/latex_review/identity.py": "52f4da6d0358ff7be200e2327ee35ef087c5bad5b94e16ba7eae59e398890f35",
+      "src/latex_review/latex_commands.py": "03430f1eb877dd5a086be3e1605cd330108a59ca0456489dd4d0be8b86911ab3",
+      "src/latex_review/live.py": "d962291851a32d91a6dcd5eb84d558820fd98a07cdfd241ac92fcc26b832c811",
+      "src/latex_review/live_reader.js": "e60be6feee93d1f0030ed087520dde6518ffd4b990e6b23b24f5dd7807fdd90f",
+      "src/latex_review/local_client.py": "9ec525c42adfc4022fce586e76c012b23027a27e02216d9937ca4f34bb9dd2cf",
+      "src/latex_review/local_dashboard.html": "d86d3c2b5c9751ff2fd9ccb6d12566f2132326c5e3a11afdef3655360b9338ea",
+      "src/latex_review/local_history.py": "c7f269a77cc222cc0eac02c4cd7c32e781ef017c078259bb7245a1d719ae0997",
+      "src/latex_review/local_history_events.py": "9bbe30fd9f2a2dac5423efcc0865c0b2ee7fa16f7192e5043bfc5da1a4cedfca",
+      "src/latex_review/local_paths.py": "664fda439776309db5c0c4ba6cec73de39ae41c1042e6c94984b54898454ed0a",
+      "src/latex_review/local_protocol.py": "6291e6f5f936855dd8bc1ac70bc171a637dcc977524f33f650fdf30f699abf05",
+      "src/latex_review/local_report.html": "c52b4da1abcd370ad4ff06a0fad2f1c982f6faccc05c5dfaea848e39d5463094",
+      "src/latex_review/local_reports.py": "ffb2c416d0d40ec1fda29dc3504ece6711ff26dff515f83a0561fe7d1b3412bd",
+      "src/latex_review/local_security.py": "baca4ea990108f99526f75f583b5a967cd34af01c5dcbfcd4754aaaa2cd4556f",
+      "src/latex_review/local_service.py": "d556a59f44ba27b406d5204fba392c93b30dc78c0e704b6863f74da20e664452",
+      "src/latex_review/local_state.py": "b634a3acc45cffb71f8f10e63a46d76c2b183b4c31a10da27e603036d69ef44b",
+      "src/latex_review/local_tasks.py": "d1f396a930a64bc68ba1c5e417ad3d785b8288f3a34701058a4f9062a6237c2e",
+      "src/latex_review/local_worker.py": "e69c67f9d90c817ccffa6e8fbda4566e7ff36d1d4aceddc820c72ff7ca7f72dc",
+      "src/latex_review/macros.py": "2206796e11680519c48bf0ee3b78764f7e8c84f933edd9232dfdb76c5fb577e1",
+      "src/latex_review/matching.py": "a33a841e528035cbcf317c12eb690fd70dce12ea8e9c26bd9472d2b71cdc5f85",
+      "src/latex_review/math_render.js": "3d825d4878d8791677b3bcd4a4b60851fa5789934617d7ec0ea23091d4237323",
+      "src/latex_review/math_structure.py": "445790c73f9931a4a35e7df050fa693caa5c50c9664032e754e115117355c34c",
+      "src/latex_review/numbering.py": "afa977d64b4a779c05d8686001f43f44596ff812214f98c5665568131eab1e5c",
+      "src/latex_review/output_leases.py": "66b55a1b724d983ae134cd66dc4fd80708e25000fe269524b4c24d5098f2dbb9",
+      "src/latex_review/pdf_cache.py": "7a1aaae595e53e099145d28e1336946885c31f31ffa2f6e8a725f79269be889c",
+      "src/latex_review/preview.py": "5cc5b67cb1a05d989e45a1c2523a367fa824bc1fb48d8bdac12867e27c9ff636",
+      "src/latex_review/preview_fragments.py": "42c42db1def3efc3fa09cb8c3fe937690e4f2459d0aab3133cc446f3e765d151",
+      "src/latex_review/project_profile.py": "94bb332df04b716149d9ed95cf909589d816c1f52139dc3be56194efd1e48bce",
+      "src/latex_review/quote_matching.py": "d97503bd6a66160512fe25e3171c910c6151e0b067d67a7fbe3805142225e270",
+      "src/latex_review/reading.py": "2c0e461d72fc4a59bce20ea43309fd48a350b1531a94954b3b5acb3a00a4d8e9",
+      "src/latex_review/reading_position.js": "2164d281180128f6e9dc1121152a89ca957e352abb6750b7837e114dec0d541c",
+      "src/latex_review/report.css": "087f4f500f7487e84520a27479802c9f405f9368f23303a4ca0c8628b96641db",
+      "src/latex_review/report.py": "98d9ff000cb05e2123be391012b23036d47c42334eb1f81a0c6efa6b1b7c1940",
+      "src/latex_review/report_annotations.js": "1b47731a3f8d36ffa8447a1529f40e2ff4cacf45400fcf2568e2f14589c82a4c",
+      "src/latex_review/report_directory.py": "26d07ce81507bde82d82799f425d0fd1e6beeb47d37fee0464020945160cc19d",
+      "src/latex_review/report_interaction.js": "826eb0554c190c4082b85b09ff72aac9d958bfa34411510165f9321ec51fee53",
+      "src/latex_review/report_reader.js": "f98cae74a35585e55a68217a8664c042cdf710dffc4a21af6b59c1ab3d9bbd5f",
+      "src/latex_review/report_rebuild.py": "a453e25d30e956a14118fa6d1fb66320c01df42b48ee37be63e177225a1e9920",
+      "src/latex_review/report_search.js": "e7f561a7762155daa0ceb4819e18f4b66422155d1dc441bd175701fc331f881d",
+      "src/latex_review/report_sections.js": "fb5034b1fecf03defc68566a31309510a0b56a32c7350216b289f743cd1c6a96",
+      "src/latex_review/report_translation.js": "795439f9a19e6d490a45d2c0e868f99bd64530022b9a3ad37060c5d63fa299bc",
+      "src/latex_review/resource_cache.py": "7dc5da295a682179aadb77eaa421b7bb761218ad145d3d23b35cbcc3c41b327a",
+      "src/latex_review/review_knowledge.js": "d365cabb1e86b473c5b232bef71240f0616323247d601208fb567c898df14503",
+      "src/latex_review/review_semantic.js": "e543ca1b2ecf7b838a0f3a83994322c7deaeffe1c97899f1d4bfe3281af2885d",
+      "src/latex_review/review_workspace.css": "1b315a9b98a980072c8f1aeed76f295495fb1d106993c1eee290d842ac0fc7ee",
+      "src/latex_review/review_workspace.js": "feb55803b5f78c7c8cc18f39c7bee741fe2572f5778c0b13934f023fad7ce6b4",
+      "src/latex_review/rules.py": "aaf6c56aa367c973fd3ed2db7c72b203c23bf0b353aca4b9efbdab96424f0a2f",
+      "src/latex_review/run_manifest.py": "b28b355e057b24e858f623432d38863ffe0b012b8b99c1c85f356c52a2347a83",
+      "src/latex_review/schemas/annotation-suggestion.schema.json": "39f1fc6498524e333ed3e2657d73aef2776956befb7e4a075c38753e20307f27",
+      "src/latex_review/schemas/checks.schema.json": "3aa356490c7fc9395fa5c704de2c5eaace010802aa5ae06faea07bfbdb644d7f",
+      "src/latex_review/schemas/diagnostics.schema.json": "123d095d41de361eab5720569ff86af90b7879a1176bcd6c73e46df9d3429d0c",
+      "src/latex_review/schemas/diff.schema.json": "a029b25b83a7f1c255cb483bce9b4f664ed6292437362f45595a47aeae2e1329",
+      "src/latex_review/schemas/knowledge.schema.json": "f88c5492e93f9c5875005afe42c2f9c906aea1375ac2066fa1b6fa1773f243fc",
+      "src/latex_review/schemas/semantic-request.schema.json": "ea9f22e16272d768ea5f304f51f2153c19efb4938dc4f716c9dbc58958c3b830",
+      "src/latex_review/schemas/semantic-response.schema.json": "8cf890b97705ccfd687df9331feecae697ad7e266050172bf45384b9a8783ff2",
+      "src/latex_review/serve.py": "9888665b447a53796b6517e00d8a8e633321da99c48ef966f34c7ea1fb0beb80",
+      "src/latex_review/source_map.py": "f9853972ae4931ad16663bb89c70e35aae9c88b0b586f5f99ea0507051c951a7",
+      "src/latex_review/sources.py": "e167b69481bd16649984b668106a11f6434a33c3390aa759e17315be17a86622",
+      "src/latex_review/structure.py": "1d95016c9a4e255ef8a9639a4883f6c0be4eb5aa8ca1119a10fa01fd06c3977c",
+      "src/latex_review/structured_diff.py": "397a9d531569a492f8feb607e4ef5a6224415e94e41686227bb593c65daed09e",
+      "src/latex_review/table_model.py": "0a491594822806ca14317b2af805929ff18f7a9f4198a2d875864168ce4abbde",
+      "src/latex_review/text_diff.py": "f1c5f1534d5823eb993eb7787c4064bb16b9b296076c96effed69862bc0d25e9",
+      "src/latex_review/translation.py": "b6ab1035e33eeefeb8a9d450c60aca68c55cb86dc434bc4f2aadd2163fafbc14",
+      "src/latex_review/translation_session.py": "ec3f36778d38d50ad5589e324a8999081f0e10ee56c49473a94e257f7247e3a9",
+      "src/latex_review/upload.py": "f94ae43267053b5b28a90f2924db3981c9c3284b96df5110ac25b90137084ef8",
+      "src/latex_review/version_storage.py": "0c34a856ae93290f135db83e696ee0a9c508d98049381b2d5a0a07468c3a6d85",
+      "src/latex_review/visual.py": "3375dc67c56d6bea8d2f1dee43ffe0d2d1f997c064a78a486478c799d01df6af",
+      "Docs/design/writing-check/evidence/benchmark_saved_checks.py": "6b0d313a29bc5791bcb4040a762cd074267c9e868945cdec5301e6a482155597",
+      "Docs/design/writing-check/evidence/benchmark_checks.py": "39e401cdc692cf1a482332f7f6af707d3d807d86c5ecff935df8ed86ba37682d"
+    },
+    "aggregate_sha256": "818b02326ecffdf402ac0387541de6ad921e1a051daad0f0e9a9d26ca3994a8e"
+  },
+  "source_paths_changed_during_measurement": [],
+  "environment_end": {
+    "load_average": [
+      0.91259765625,
+      0.44091796875,
+      0.4169921875
+    ],
+    "logical_cpus": 2,
+    "affinity_cpus": 2,
+    "cgroup_cpu.stat": "usage_usec 249449318000\nuser_usec 199578699000\nsystem_usec 49870619000\ncore_sched.force_idle_usec 0\nnr_periods 0\nnr_throttled 0\nthrottled_usec 0\nnr_bursts 0\nburst_usec 0"
+  }
+}

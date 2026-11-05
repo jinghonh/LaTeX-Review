@@ -14,6 +14,7 @@ class ReadingFeatures:
     translation_actions: str
     translation_status: str
     scripts: str
+    checks: dict
 
 
 def _data(identifier: str, value: object) -> str:
@@ -34,7 +35,8 @@ def _script(name: str, revision: int | None = None) -> str:
 
 def build_reading(new: ParsedProject, units: list[dict], *, old: ParsedProject | None = None,
                   pairs: tuple[tuple[str, str], ...] = (), fingerprint: str = '',
-                  revision: int = 1) -> ReadingFeatures:
+                  revision: int = 1, check_snapshot=None, checks_report=None,
+                  preview_diagnostics=()) -> ReadingFeatures:
     live = old is None
     projects = [('new', new)] if live else [('old', old), ('new', new)]
     nodes = [{'side': side, 'id': node.review.id, 'type': node.review.type,
@@ -56,6 +58,22 @@ def build_reading(new: ParsedProject, units: list[dict], *, old: ParsedProject |
                    + _script('report_search.js') + _script('report_reader.js')
                    + _script('report_translation.js') + _script('report_annotations.js')
                    + _script('annotation_delivery.js'))
+    # Frozen checks are derived only from the already parsed revision. Never
+    # read newer disk content while assembling an older report or snapshot.
+    from .checks.snapshot import snapshot_from_project
+    from .checks.document import build_check_document
+    from .checks.engine import evaluate_current
+    frozen_checks = checks_report
+    if frozen_checks is None:
+        previous = evaluate_current(build_check_document(snapshot_from_project(old))) if old is not None else None
+        frozen_checks = evaluate_current(build_check_document(check_snapshot or snapshot_from_project(new)), previous=previous)
+    workspace_css = files('latex_review').joinpath('review_workspace.css').read_text(encoding='utf-8')
+    from .checks.diagnostics import preview_diagnostics_data
+    display_diagnostics = preview_diagnostics_data(preview_diagnostics, frozen_checks['input']['content_id'])
+    scripts += (_data('checks-data', frozen_checks) + _data('preview-diagnostics-data', display_diagnostics)
+                + '<style>' + workspace_css + '</style>'
+                + _script('review_workspace.js') + _script('review_knowledge.js')
+                + _script('review_semantic.js'))
     options = [('bilingual', '英中对照'), ('original', '英文原文')]
     if not live:
         options.reverse()
@@ -79,4 +97,4 @@ def build_reading(new: ParsedProject, units: list[dict], *, old: ParsedProject |
                  '<h2>章节目录</h2><button type="button" id="close-sections">收起</button></div>'
                  + ('' if live else '<p class="section-legend">变更总数 · 未审阅</p>')
                  + '<ol id="section-tree"></ol></nav>')
-    return ReadingFeatures(toggle, directory, mode, actions, status, scripts)
+    return ReadingFeatures(toggle, directory, mode, actions, status, scripts, frozen_checks)

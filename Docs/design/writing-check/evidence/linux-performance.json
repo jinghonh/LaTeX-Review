@@ -1,0 +1,90 @@
+{
+  "schema_version": "1.0",
+  "platform": "Linux-6.8.0-138-generic-x86_64-with-glibc2.39",
+  "python": "3.11.17",
+  "logical_cpus": 2,
+  "source_bytes_initial": 1479521,
+  "source_files": 40,
+  "paragraphs": 5000,
+  "units_each_run": [
+    5000,
+    5000,
+    5000,
+    5000,
+    5000,
+    5000,
+    5000,
+    5000,
+    5000,
+    5000,
+    5000
+  ],
+  "cold_seconds": 0.7653059719596058,
+  "hot_seconds": [
+    0.8743213941343129,
+    0.882727556861937,
+    1.0587194189429283,
+    1.255372275132686,
+    0.8864165989216417,
+    0.9065919239073992,
+    0.8269514199346304,
+    0.8154033538885415,
+    0.9564635641872883,
+    1.3155571359675378
+  ],
+  "hot_median_seconds": 0.8965042614145204,
+  "hot_p95_seconds": 1.3155571359675378,
+  "stages": [
+    {
+      "capture_parse_seconds": 0.6205247929319739,
+      "adapt_rules_seconds": 0.14478117902763188
+    },
+    {
+      "capture_parse_seconds": 0.7464928729459643,
+      "adapt_rules_seconds": 0.12782852118834853
+    },
+    {
+      "capture_parse_seconds": 0.7620330068748444,
+      "adapt_rules_seconds": 0.12069454998709261
+    },
+    {
+      "capture_parse_seconds": 0.9282020779792219,
+      "adapt_rules_seconds": 0.13051734096370637
+    },
+    {
+      "capture_parse_seconds": 1.1152426269836724,
+      "adapt_rules_seconds": 0.14012964814901352
+    },
+    {
+      "capture_parse_seconds": 0.7461344730108976,
+      "adapt_rules_seconds": 0.14028212591074407
+    },
+    {
+      "capture_parse_seconds": 0.778054865077138,
+      "adapt_rules_seconds": 0.12853705883026123
+    },
+    {
+      "capture_parse_seconds": 0.7018503418657929,
+      "adapt_rules_seconds": 0.12510107806883752
+    },
+    {
+      "capture_parse_seconds": 0.6942994759883732,
+      "adapt_rules_seconds": 0.1211038779001683
+    },
+    {
+      "capture_parse_seconds": 0.6861819990444928,
+      "adapt_rules_seconds": 0.27028156514279544
+    },
+    {
+      "capture_parse_seconds": 1.1688061009626836,
+      "adapt_rules_seconds": 0.1467510350048542
+    }
+  ],
+  "cold_target_met": true,
+  "hot_target_met": true,
+  "cold_target_seconds": 10,
+  "hot_p95_target_seconds": 2,
+  "evaluation_mode": "full",
+  "status": "completed",
+  "note": "Single Linux synthetic reference run; excludes compilation/network. Not macOS or real-paper acceptance."
+}
