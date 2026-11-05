@@ -29,7 +29,7 @@ PATH="$PWD/.test-venv/bin:$PATH" PYTHONPATH="/tmp:$PWD/src" \
 
 仅三个可复用浏览器 fixture 所在的主要模块就有约 64.5s setup 成本。选择复用一个测试模块内的 Playwright/Chromium **进程**。每例仍创建独立上下文：隐式 `browser.new_page()` 每次独立，显式 `new_context()` 内的多标签按原语义共享。逐例 finalizer 关闭所有未显式关闭的上下文；模块结束关闭浏览器和 driver。准备或用例失败也清理上下文；批注页的上下文、服务器线程和监听套接字用 `finally`/上下文管理器收尾。
 
-报告、源码目录、磁盘状态、服务令牌和端口保持逐例独立。未复用可变报告：其项目身份、来源、检查快照和重建配方包含真实路径，直接复制会串写来源。服务生命周期、进程所有权、文件监听与计时敏感测试保持原执行方式；HTTP 服务器轮询、防抖和所有固定观察窗口保持原值。
+报告、源码目录、磁盘状态、服务令牌和端口保持逐例独立。未复用可变报告：其项目身份、来源、检查快照和重建配方包含真实路径，直接复制会串写来源。专门检查了 `test_report_reading.py` 的只读静态报告候选；它只影响少数 setup、预期收益低于一秒，未引入路径绑定缓存，避免把不可变样本方案扩大到可变批注/实时服务场景。服务生命周期、进程所有权、文件监听与计时敏感测试保持原执行方式；HTTP 服务器轮询、防抖和所有固定观察窗口保持原值。
 
 本轮加入显式分片入口 `scripts/run-test-shards.py`。`LATEX_REVIEW_TEST_SHARDS=auto` 在少于 4 个 CPU 的主机上保持一个完整串行进程；在至少 4 个 CPU 的主机上并行启动两个明确分组：包含浏览器、文件监听、服务生命周期、进程所有权和计时敏感场景的 serial lane，以及只包含私有 `tmp_path`、无浏览器/常驻服务/原生 watcher/固定外部产物的 pure lane。新文件默认进入 serial lane。启动前生成完整 collection manifest，合并后用 `Counter` 校验全部 nodeid 及参数重数；每个 lane 使用独立 evidence、配置、状态和端口命名空间，并保留各自进程清理审计。当前 2 CPU 本机自动回退串行；`LATEX_REVIEW_TEST_SHARDS=0` 是子进程和诊断的显式串行回退。没有引入 xdist，避免浏览器、监听器和本地服务在通用 worker 中争用资源。
 
@@ -99,14 +99,14 @@ python3 scripts/compare-test-runs.py \
 
 ## 交付检查点与结果
 
-固定测试检查点：**`42af9d9dd0966d1fdd2aa341a94a56d9637d210c`**，Before 为 `702896fd22bc25c9ef016badde6265eedda68114`。[首轮完整结果与原始包](test-runtime/results-42af9d9.md)记录两组 Linux 同机完整墙钟减少 **11.02% / 8.89%**、全部用例清单、逐阶段/模块耗时，以及 macOS baseline 的真实失败和 After 通过；失败配对没有有效降幅。追加完整复验及 PR 当前交付状态见 [PR #58](https://github.com/jinghonh/LaTeX-Review/pull/58)，不以相关回归代替完整验收。请求人原有保存性能 **≤2s 未达标**记录不变，本任务没有重跑该性能基准。
+当前测试检查点：**`d12085820e904d2fc61523b8acc89766048a0bf1`**，Before 为 `702896fd22bc25c9ef016badde6265eedda68114`。[本轮分片完整结果](test-runtime/results-d120858.md)记录 Linux 4 CPU 同机完整墙钟 **9.7486%** 实测降幅和 macOS 3 CPU 自动串行回退后的 **2.9411%** 降幅；首轮浏览器复用结果与失败样本仍在[历史记录](test-runtime/results-42af9d9.md)，没有被覆盖。PR #58 已通过双平台完整比较、双项 macOS 功能验证和全部覆盖/清理检查；不以相关回归代替完整验收。请求人原有保存性能 **≤2s 未达标**记录不变，本任务没有重跑该性能基准。
 
 macOS 可用本机 Python 3.11+ 在独立工作副本与虚拟环境复验固定检查点：
 
 ```sh
 git fetch origin
-git worktree add --detach ../latex-review-tests-42af9d9 42af9d9dd0966d1fdd2aa341a94a56d9637d210c
-cd ../latex-review-tests-42af9d9
+git worktree add --detach ../latex-review-tests-d120858 d12085820e904d2fc61523b8acc89766048a0bf1
+cd ../latex-review-tests-d120858
 python3 -m venv .venv
 . .venv/bin/activate
 python3 -m pip install -e '.[test]'
@@ -114,5 +114,6 @@ python3 -m playwright install chromium
 LATEX_REVIEW_REQUIRE_BROWSER=1 LATEX_REVIEW_FUNCTIONAL_ONLY=1 ./scripts/verify-macos.sh
 # 或生成完整墙钟、逐例 phase、JUnit、CLI 和进程审计证据：
 LATEX_REVIEW_REQUIRE_BROWSER=1 LATEX_REVIEW_FUNCTIONAL_ONLY=1 \
+LATEX_REVIEW_TEST_SHARDS=auto \
   python3 scripts/measure-tests.py --output /absolute/new-macos-evidence
 ```
