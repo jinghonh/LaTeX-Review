@@ -99,4 +99,16 @@ python3 scripts/compare-test-runs.py \
 
 ## 交付检查点与结果
 
-完整可比结果、精确 after SHA、逐模块耗时与原始证据在完成跨平台验证后补入；当前阶段不以相关回归或 PR 存在代替完整验收。请求人原有保存性能 **≤2s 未达标**记录不变，本任务没有重跑该性能基准。
+固定测试检查点：**`42af9d9dd0966d1fdd2aa341a94a56d9637d210c`**，Before 为 `702896fd22bc25c9ef016badde6265eedda68114`。[首轮完整结果与原始包](test-runtime/results-42af9d9.md)记录两组 Linux 同机完整墙钟减少 **11.02% / 8.89%**、全部用例清单、逐阶段/模块耗时，以及 macOS baseline 的真实失败和 After 通过；失败配对没有有效降幅。追加完整复验及 PR 当前交付状态见 [PR #58](https://github.com/jinghonh/LaTeX-Review/pull/58)，不以相关回归代替完整验收。请求人原有保存性能 **≤2s 未达标**记录不变，本任务没有重跑该性能基准。
+
+macOS 可在独立工作副本复验固定检查点（环境需已有本项目测试依赖与 Chromium）：
+
+```sh
+git fetch origin
+git worktree add --detach ../latex-review-tests-42af9d9 42af9d9dd0966d1fdd2aa341a94a56d9637d210c
+# 在新工作副本中，激活独立虚拟环境并安装 -e '.[test]' 后执行：
+LATEX_REVIEW_REQUIRE_BROWSER=1 LATEX_REVIEW_FUNCTIONAL_ONLY=1 ./scripts/verify-macos.sh
+# 或生成完整墙钟、逐例 phase、JUnit、CLI 和进程审计证据：
+LATEX_REVIEW_REQUIRE_BROWSER=1 LATEX_REVIEW_FUNCTIONAL_ONLY=1 \
+  python3 scripts/measure-tests.py --output /absolute/new-macos-evidence
+```
