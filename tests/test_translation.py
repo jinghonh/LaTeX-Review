@@ -3,6 +3,7 @@
 from dataclasses import replace
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from io import BytesIO
+import errno
 import json
 import os
 from pathlib import Path
@@ -903,7 +904,19 @@ def test_preview_exits_promptly_with_translation_in_flight(provider, translation
         from latex_review import local_client
         local_client.stop()
         from urllib.parse import urlsplit
-        with create_server(report.directory, urlsplit(base).port):
+        # stop() observes entry /health becoming unavailable, not completion
+        # of the manager's asynchronous owned-worker cleanup. Preserve the
+        # immediate CLI-detach deadline above, but allow bounded port release.
+        deadline = time.monotonic() + 10
+        while True:
+            try:
+                rebound = create_server(report.directory, urlsplit(base).port)
+                break
+            except OSError as error:
+                if error.errno != errno.EADDRINUSE or time.monotonic() >= deadline:
+                    raise
+                time.sleep(.02)
+        with rebound:
             pass
     finally:
         gate.set()

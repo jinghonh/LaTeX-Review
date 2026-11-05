@@ -40,6 +40,17 @@
       panels[key].setAttribute('aria-labelledby', tabs[key].id);
       nav.append(tabs[key]);
     });
+    // Reserve the actual wrapped navigation height for document flow and every
+    // viewport-attached reader surface. Neither layer may cover the other's controls.
+    function reserveNavigation() {
+      const height = `${Math.ceil(nav.getBoundingClientRect().height)}px`;
+      if (root.style.getPropertyValue('--workspace-nav-height') !== height) {
+        root.style.setProperty('--workspace-nav-height', height);
+      }
+    }
+    reserveNavigation();
+    if (typeof ResizeObserver !== 'undefined') new ResizeObserver(reserveNavigation).observe(nav);
+    else window.addEventListener('resize', reserveNavigation, {passive: true});
     // Initial selection is not a tab switch: do not save a transient parser-time
     // layout adjustment as the reading position. The reader restores persisted
     // positions after load; later switches capture the actual reading position.

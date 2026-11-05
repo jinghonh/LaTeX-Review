@@ -55,6 +55,7 @@ latex-review-local stop
 
 | 需求 | 文档 |
 | --- | --- |
+| 全文写作检查、知识确认与候选语义审查 | [写作检查](Docs/writing-check.md) |
 | 论文工作台、故障诊断与只读报告历史 | [本地论文工作台](Docs/local-workbench.md) |
 | 安装、比较来源与配置 | [使用指南](Docs/user-guide.md) |
 | 多入口与只读论文项目 | [外部项目配置](Docs/multi-entry-projects.md) |

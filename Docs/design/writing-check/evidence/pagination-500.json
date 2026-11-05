@@ -1,0 +1,418 @@
+{
+  "schema_version": 1,
+  "scenario": "Chromium offline frozen synthetic 500-finding pagination and panel switching",
+  "scope": "Actual production workspace/knowledge/semantic JavaScript and workspace CSS; intercepted static HTML/status only, no running backend or provider.",
+  "limitations": [
+    "Synthetic cloned findings share exact fixture source evidence; not a real-paper correctness or throughput claim.",
+    "No UI latency threshold was specified; timings are observed, not a pass against an invented threshold.",
+    "Two-animation-frame latency includes browser scheduling; load also includes Playwright script injection/driver roundtrips."
+  ],
+  "machine": {
+    "platform": "Linux-6.8.0-138-generic-x86_64-with-glibc2.39",
+    "architecture": "x86_64",
+    "logical_cpus": 2
+  },
+  "browser": {
+    "engine": "Chromium",
+    "version": "156.0.8078.4",
+    "headless": true,
+    "executable_override": null,
+    "viewport": {
+      "width": 1280,
+      "height": 900
+    }
+  },
+  "production_commit": "44085641b20d99b86d56fcd0a9f6a0ccfb5a660d",
+  "dataset": {
+    "findings": 500,
+    "page_size": 50,
+    "forward_page_row_counts": [
+      50,
+      50,
+      50,
+      50,
+      50,
+      50,
+      50,
+      50,
+      50,
+      50
+    ],
+    "serialized_report_bytes": 658084,
+    "ordered_finding_keys_sha256": "c25ccd143c64537032184551f3029e7b6936c6bf5093b08d9e50a5e2e7ede47e",
+    "combined_filter_matches": 63,
+    "combined_filter_last_page_rows": 13,
+    "confirmed_matches": 100
+  },
+  "load_ms": 298.59522683545947,
+  "timings": {
+    "next_page": {
+      "samples": [
+        {
+          "handler_ms": 3.700000047683716,
+          "two_animation_frames_ms": 12.700000047683716,
+          "selector": "#fixture-page-control",
+          "value": null
+        },
+        {
+          "handler_ms": 5.6000001430511475,
+          "two_animation_frames_ms": 22.100000143051147,
+          "selector": "#fixture-page-control",
+          "value": null
+        },
+        {
+          "handler_ms": 1.9000000953674316,
+          "two_animation_frames_ms": 7.400000095367432,
+          "selector": "#fixture-page-control",
+          "value": null
+        },
+        {
+          "handler_ms": 1.7999999523162842,
+          "two_animation_frames_ms": 7.400000095367432,
+          "selector": "#fixture-page-control",
+          "value": null
+        },
+        {
+          "handler_ms": 3.4000000953674316,
+          "two_animation_frames_ms": 7.5,
+          "selector": "#fixture-page-control",
+          "value": null
+        },
+        {
+          "handler_ms": 1.5,
+          "two_animation_frames_ms": 5.3999998569488525,
+          "selector": "#fixture-page-control",
+          "value": null
+        },
+        {
+          "handler_ms": 2.3999998569488525,
+          "two_animation_frames_ms": 10.799999952316284,
+          "selector": "#fixture-page-control",
+          "value": null
+        },
+        {
+          "handler_ms": 1.5999999046325684,
+          "two_animation_frames_ms": 8.299999952316284,
+          "selector": "#fixture-page-control",
+          "value": null
+        },
+        {
+          "handler_ms": 3.4000000953674316,
+          "two_animation_frames_ms": 31.59999990463257,
+          "selector": "#fixture-page-control",
+          "value": null
+        },
+        {
+          "handler_ms": 3.4000000953674316,
+          "two_animation_frames_ms": 9.100000143051147,
+          "selector": "#fixture-page-control",
+          "value": null
+        },
+        {
+          "handler_ms": 4.5,
+          "two_animation_frames_ms": 8.399999856948853,
+          "selector": "#fixture-page-control",
+          "value": null
+        }
+      ],
+      "count": 11,
+      "median_ms": 8.399999856948853,
+      "p95_ms": 31.59999990463257,
+      "maximum_ms": 31.59999990463257
+    },
+    "previous_page": {
+      "samples": [
+        {
+          "handler_ms": 3.0999999046325684,
+          "two_animation_frames_ms": 9.5,
+          "selector": "#fixture-page-control",
+          "value": null
+        },
+        {
+          "handler_ms": 2.5,
+          "two_animation_frames_ms": 7.599999904632568,
+          "selector": "#fixture-page-control",
+          "value": null
+        },
+        {
+          "handler_ms": 2.700000047683716,
+          "two_animation_frames_ms": 31.800000190734863,
+          "selector": "#fixture-page-control",
+          "value": null
+        },
+        {
+          "handler_ms": 2.200000047683716,
+          "two_animation_frames_ms": 12.5,
+          "selector": "#fixture-page-control",
+          "value": null
+        },
+        {
+          "handler_ms": 2.5,
+          "two_animation_frames_ms": 8.599999904632568,
+          "selector": "#fixture-page-control",
+          "value": null
+        },
+        {
+          "handler_ms": 2.5,
+          "two_animation_frames_ms": 9.400000095367432,
+          "selector": "#fixture-page-control",
+          "value": null
+        },
+        {
+          "handler_ms": 2.5,
+          "two_animation_frames_ms": 33.299999952316284,
+          "selector": "#fixture-page-control",
+          "value": null
+        },
+        {
+          "handler_ms": 2.9000000953674316,
+          "two_animation_frames_ms": 9.799999952316284,
+          "selector": "#fixture-page-control",
+          "value": null
+        },
+        {
+          "handler_ms": 2.9000000953674316,
+          "two_animation_frames_ms": 12.900000095367432,
+          "selector": "#fixture-page-control",
+          "value": null
+        },
+        {
+          "handler_ms": 4.700000047683716,
+          "two_animation_frames_ms": 12.700000047683716,
+          "selector": "#fixture-page-control",
+          "value": null
+        }
+      ],
+      "count": 10,
+      "median_ms": 11.149999976158142,
+      "p95_ms": 33.299999952316284,
+      "maximum_ms": 33.299999952316284
+    },
+    "panel_switch": {
+      "samples": [
+        {
+          "handler_ms": 3.5,
+          "two_animation_frames_ms": 19.699999809265137,
+          "selector": "#workspace-tab-reading",
+          "value": null
+        },
+        {
+          "handler_ms": 3.700000047683716,
+          "two_animation_frames_ms": 17.100000143051147,
+          "selector": "#workspace-tab-coverage",
+          "value": null
+        },
+        {
+          "handler_ms": 5.200000047683716,
+          "two_animation_frames_ms": 23.399999856948853,
+          "selector": "#workspace-tab-knowledge",
+          "value": null
+        },
+        {
+          "handler_ms": 3,
+          "two_animation_frames_ms": 22.700000047683716,
+          "selector": "#workspace-tab-semantic",
+          "value": null
+        },
+        {
+          "handler_ms": 5.400000095367432,
+          "two_animation_frames_ms": 21.600000143051147,
+          "selector": "#workspace-tab-checks",
+          "value": null
+        },
+        {
+          "handler_ms": 2.299999952316284,
+          "two_animation_frames_ms": 21.199999809265137,
+          "selector": "#workspace-tab-reading",
+          "value": null
+        },
+        {
+          "handler_ms": 2.8999998569488525,
+          "two_animation_frames_ms": 24.799999952316284,
+          "selector": "#workspace-tab-coverage",
+          "value": null
+        },
+        {
+          "handler_ms": 1.2000000476837158,
+          "two_animation_frames_ms": 25.299999952316284,
+          "selector": "#workspace-tab-knowledge",
+          "value": null
+        },
+        {
+          "handler_ms": 0.9000000953674316,
+          "two_animation_frames_ms": 25.40000009536743,
+          "selector": "#workspace-tab-semantic",
+          "value": null
+        },
+        {
+          "handler_ms": 5,
+          "two_animation_frames_ms": 23.5,
+          "selector": "#workspace-tab-checks",
+          "value": null
+        },
+        {
+          "handler_ms": 1.2999999523162842,
+          "two_animation_frames_ms": 22,
+          "selector": "#workspace-tab-reading",
+          "value": null
+        },
+        {
+          "handler_ms": 2.200000047683716,
+          "two_animation_frames_ms": 24.799999952316284,
+          "selector": "#workspace-tab-coverage",
+          "value": null
+        },
+        {
+          "handler_ms": 1.0999999046325684,
+          "two_animation_frames_ms": 23.799999952316284,
+          "selector": "#workspace-tab-knowledge",
+          "value": null
+        },
+        {
+          "handler_ms": 1.7999999523162842,
+          "two_animation_frames_ms": 22.799999952316284,
+          "selector": "#workspace-tab-semantic",
+          "value": null
+        },
+        {
+          "handler_ms": 4.200000047683716,
+          "two_animation_frames_ms": 22,
+          "selector": "#workspace-tab-checks",
+          "value": null
+        },
+        {
+          "handler_ms": 1.6000001430511475,
+          "two_animation_frames_ms": 24.200000047683716,
+          "selector": "#workspace-tab-reading",
+          "value": null
+        },
+        {
+          "handler_ms": 1.4000000953674316,
+          "two_animation_frames_ms": 25,
+          "selector": "#workspace-tab-coverage",
+          "value": null
+        },
+        {
+          "handler_ms": 1.0999999046325684,
+          "two_animation_frames_ms": 26.399999856948853,
+          "selector": "#workspace-tab-knowledge",
+          "value": null
+        },
+        {
+          "handler_ms": 1,
+          "two_animation_frames_ms": 26.40000009536743,
+          "selector": "#workspace-tab-semantic",
+          "value": null
+        },
+        {
+          "handler_ms": 4.200000047683716,
+          "two_animation_frames_ms": 26.700000047683716,
+          "selector": "#workspace-tab-checks",
+          "value": null
+        },
+        {
+          "handler_ms": 2.5999999046325684,
+          "two_animation_frames_ms": 25,
+          "selector": "#workspace-tab-reading",
+          "value": null
+        },
+        {
+          "handler_ms": 1.5,
+          "two_animation_frames_ms": 24.90000009536743,
+          "selector": "#workspace-tab-coverage",
+          "value": null
+        },
+        {
+          "handler_ms": 1.0999999046325684,
+          "two_animation_frames_ms": 24.899999856948853,
+          "selector": "#workspace-tab-knowledge",
+          "value": null
+        },
+        {
+          "handler_ms": 2,
+          "two_animation_frames_ms": 24.799999952316284,
+          "selector": "#workspace-tab-semantic",
+          "value": null
+        },
+        {
+          "handler_ms": 4.099999904632568,
+          "two_animation_frames_ms": 28.90000009536743,
+          "selector": "#workspace-tab-checks",
+          "value": null
+        }
+      ],
+      "count": 25,
+      "median_ms": 24.799999952316284,
+      "p95_ms": 26.700000047683716,
+      "maximum_ms": 28.90000009536743
+    },
+    "filter": {
+      "samples": [
+        {
+          "handler_ms": 8,
+          "two_animation_frames_ms": 19.399999856948853,
+          "selector": "input[aria-label=\"筛选检查问题\"]",
+          "value": "Batch A"
+        },
+        {
+          "handler_ms": 4.599999904632568,
+          "two_animation_frames_ms": 17.200000047683716,
+          "selector": "select[aria-label=\"严重度\"]",
+          "value": "warning"
+        },
+        {
+          "handler_ms": 4.5,
+          "two_animation_frames_ms": 19.700000047683716,
+          "selector": "input[aria-label=\"筛选检查问题\"]",
+          "value": ""
+        },
+        {
+          "handler_ms": 5.099999904632568,
+          "two_animation_frames_ms": 16.200000047683716,
+          "selector": "select[aria-label=\"严重度\"]",
+          "value": ""
+        },
+        {
+          "handler_ms": 4.5,
+          "two_animation_frames_ms": 30.5,
+          "selector": "select[aria-label=\"人工状态\"]",
+          "value": "confirmed"
+        },
+        {
+          "handler_ms": 4,
+          "two_animation_frames_ms": 16.09999990463257,
+          "selector": "select[aria-label=\"人工状态\"]",
+          "value": ""
+        }
+      ],
+      "count": 6,
+      "median_ms": 18.299999952316284,
+      "p95_ms": 30.5,
+      "maximum_ms": 30.5
+    }
+  },
+  "checks": {
+    "forward_exact_keys": true,
+    "reverse_exact_keys": true,
+    "no_duplicates_or_missing_keys": true,
+    "filter_counts_and_exact_keys": true,
+    "panels_preserve_check_rows_and_source_dom": true,
+    "panel_switch_additional_requests": 0,
+    "panel_switch_additional_check_renders": 0,
+    "panel_switch_additional_frozen_report_parses": 0,
+    "provider_calls": 0,
+    "frozen_report_unchanged": true,
+    "browser_errors": [],
+    "unexpected_requests": []
+  },
+  "requests": [
+    {
+      "method": "GET",
+      "path": "/pagination-test"
+    },
+    {
+      "method": "GET",
+      "path": "/api/checks/status"
+    }
+  ]
+}

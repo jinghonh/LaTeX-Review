@@ -1,0 +1,93 @@
+----------------------------------------
+Exception occurred during processing of request from ('127.0.0.1', 53650)
+Traceback (most recent call last):
+  File "/home/ubuntu/.local/share/uv/python/cpython-3.11.17-linux-x86_64-gnu/lib/python3.11/socketserver.py", line 691, in process_request_thread
+    self.finish_request(request, client_address)
+  File "/home/ubuntu/.local/share/uv/python/cpython-3.11.17-linux-x86_64-gnu/lib/python3.11/socketserver.py", line 361, in finish_request
+    self.RequestHandlerClass(request, client_address, self)
+  File "/home/ubuntu/.local/share/uv/python/cpython-3.11.17-linux-x86_64-gnu/lib/python3.11/socketserver.py", line 755, in __init__
+    self.handle()
+  File "/home/ubuntu/.local/share/uv/python/cpython-3.11.17-linux-x86_64-gnu/lib/python3.11/http/server.py", line 440, in handle
+    self.handle_one_request()
+  File "/home/ubuntu/.local/share/uv/python/cpython-3.11.17-linux-x86_64-gnu/lib/python3.11/http/server.py", line 428, in handle_one_request
+    method()
+  File "/tmp/writing-check-baseline-tests-fa6d7qky/tests/test_translation.py", line 106, in do_POST
+    self.wfile.write(body)
+  File "/home/ubuntu/.local/share/uv/python/cpython-3.11.17-linux-x86_64-gnu/lib/python3.11/socketserver.py", line 834, in write
+    self._sock.sendall(b)
+BrokenPipeError: [Errno 32] Broken pipe
+----------------------------------------
+F.                                                                       [100%]
+=================================== FAILURES ===================================
+__________ test_preview_exits_promptly_with_translation_in_flight[2] ___________
+
+provider = (TranslationConfig(base_url='http://127.0.0.1:35843/v1', model='test-model', api_key_env='TEST_TRANSLATION_KEY', concu..."id": 3, "placeholders": [], "text": "Another stable sentence."}]}'}]}}], [], <threading.Event at 0x71661ad1b110: set>)
+translation_report = (ReportResult(directory=PosixPath('/tmp/pytest-of-ubuntu/pytest-143/test_preview_exits_promptly_wi0/report'), document...: 'new-paragraph-97f096e29cde0a37', 'side': 'new', 'node_id': 'paragraph-97f096e29cde0a37', 'kind': 'paragraph', ...}])
+tmp_path = PosixPath('/tmp/pytest-of-ubuntu/pytest-143/test_preview_exits_promptly_wi0')
+stop_signal = <Signals.SIGINT: 2>
+
+    @pytest.mark.parametrize("stop_signal", [signal.SIGINT, signal.SIGTERM])
+    def test_preview_exits_promptly_with_translation_in_flight(provider, translation_report, tmp_path, stop_signal):
+        config, calls, _, gate = provider
+        report, units = translation_report
+        path = tmp_path / "config.toml"
+        path.write_text('[translation]\nbase_url=' + json.dumps(config.base_url) + '\nmodel="test-model"\n'
+                        'api_key_env="TEST_TRANSLATION_KEY"\ntimeout=30\n')
+        gate.clear()
+        process = subprocess.Popen([sys.executable, "-m", "latex_review.serve", str(report.directory),
+                                    "--config", str(path), "--wait"], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+        try:
+            address = process.stdout.readline().strip()
+            assert address.startswith("http://127.0.0.1:")
+            from test_local_core import report_url
+            base = report_url(address).rsplit("/", 1)[0]
+            with urlopen(base + "/api/translation/status") as response:
+                token = json.load(response)["token"]
+            request = Request(base + "/api/translation/start", data=json.dumps({"units": [units[0]["id"]]}).encode(),
+                              headers={"Content-Type": "application/json", "X-LaTeX-Review-Token": token})
+            with urlopen(request):
+                pass
+            _wait(lambda: len(calls) == 1)
+            process.send_signal(stop_signal)
+            assert process.wait(timeout=1.5) == 0
+            # Detaching a CLI must not stop a shared reading service.
+            with urlopen(address) as response:
+                assert response.status == 200
+            from latex_review import local_client
+            local_client.stop()
+            from urllib.parse import urlsplit
+>           with create_server(report.directory, urlsplit(base).port):
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_translation.py:906: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+src/latex_review/serve.py:315: in create_server
+    server = ReportServer(("127.0.0.1", port), partial(ReportHandler, directory=str(root)))
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/latex_review/serve.py:270: in __init__
+    super().__init__(*args, **kwargs)
+/home/ubuntu/.local/share/uv/python/cpython-3.11.17-linux-x86_64-gnu/lib/python3.11/socketserver.py:456: in __init__
+    self.server_bind()
+src/latex_review/serve.py:299: in server_bind
+    TCPServer.server_bind(self)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <latex_review.serve.ReportServer object at 0x71661a49e710>
+
+    def server_bind(self):
+        """Called by constructor to bind the socket.
+    
+        May be overridden.
+    
+        """
+        if self.allow_reuse_address and hasattr(socket, "SO_REUSEADDR"):
+            self.socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        if self.allow_reuse_port and hasattr(socket, "SO_REUSEPORT"):
+            self.socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEPORT, 1)
+>       self.socket.bind(self.server_address)
+E       OSError: [Errno 98] Address already in use
+
+/home/ubuntu/.local/share/uv/python/cpython-3.11.17-linux-x86_64-gnu/lib/python3.11/socketserver.py:472: OSError
+=========================== short test summary info ============================
+FAILED tests/test_translation.py::test_preview_exits_promptly_with_translation_in_flight[2]
+1 failed, 1 passed, 57 deselected in 5.16s

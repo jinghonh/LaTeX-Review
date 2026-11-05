@@ -34,14 +34,14 @@ def test_initial_selection_ignores_transient_scroll_and_preserves_published_url(
         page.add_script_tag(path=str(ASSETS / 'review_workspace.js'))
         assert page.evaluate('scrollY') == 0
         assert page.url == url
-        assert page.locator('[role=tablist]').evaluate('node => getComputedStyle(node).position') == 'static'
-        # Later transitions still retain actual reading position; focus must not
-        # introduce a second scroll. DOM click avoids Playwright pre-scrolling.
+        assert page.locator('[role=tablist]').evaluate('node => getComputedStyle(node).position') == 'fixed'
+        # Real pointer clicks retain the actual reading position: navigation has
+        # its own reserved viewport strip and never requires pre-scrolling.
         page.evaluate('scrollTo(0, 333)')
-        page.locator('#workspace-tab-checks').evaluate('node => node.click()')
+        page.locator('#workspace-tab-checks').click()
         assert page.evaluate('scrollY') == 0
         assert urlsplit(page.url).query == ('' if snapshot else 'panel=checks')
-        page.locator('#workspace-tab-reading').evaluate('node => node.click()')
+        page.locator('#workspace-tab-reading').click()
         assert page.evaluate('scrollY') == 333
         assert urlsplit(page.url).query == ('' if snapshot else 'panel=reading')
         assert not errors
