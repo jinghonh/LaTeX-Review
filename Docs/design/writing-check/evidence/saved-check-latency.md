@@ -1,14 +1,50 @@
 # Actual saved-edit → current-report latency
 
-## Next fixed application b742583 — original-boundary measurements pending
+## CURRENT OWNER DECISION: performance work stopped, target not met
 
-[Fixed-source instructions](<../checkpoint-b742583.md>): application `b742583254a69dd7103be07b4e5f110f3c4c2c5e`, 120-file app/helper aggregate `818b02326ecffdf402ac0387541de6ad921e1a051daad0f0e9a9d26ca3994a8e`. Two local producer-path optimizations remove unused translation imports and equivalent whitespace-regex work without skipping rendering or changing output/source/authority semantics. Combined relevant validation: **440 passed / 2 report-only skipped / 92.08s**, not a full-suite result. New comment/prose N10 and full CI are pending; no performance-pass claim. Micro CPU and prior-source samples below do not substitute for this application's full saved-edit boundary. The prior physical 466 source still strictly fails at 2.026850125s / 2.019279333s; no rounding or selective rerun. The old hosted standalone restoration failure remains unexplained and now retains failure-only geometry diagnostics, without altered waits/Range/<3px.
+At **2026-11-05T09:18:35Z**, [the requester explicitly instructed](<https://github.com/jinghonh/LaTeX-Review/issues/55#issuecomment-6654282319>) “不继续改进性能问题了”. This supersedes every earlier continuous-performance mandate. Exact status: **“请求人决定不再优化，当前目标未达标”**.
+
+No new performance code, design, profiling or benchmark rounds to reach 2s. Only an explicit future owner instruction lifting this stop can resume performance work; CI clues, status questions or general continuation are not a lift. Preserve committed changes and all evidence: no rollback, deletion, threshold relaxation, rounding into pass, or waiver. Parent confirmed owned performance tasks/services stopped and collected; this docs-only update records **already completed** runs, with no new performance measurement or CPU analysis. Authorized remaining UI work and necessary regressions for existing changes may continue; **no merge or deployment**. This is a deliberate stop with an unmet target, not a blocker awaiting confirmation/resources.
+
+All reproduction commands, historical requests for another performance pin, and older diagnostic plans below are **historical reference only, not execution authorization**. Original checkpoint documents and raw data remain unchanged; the owner stop overrides their performance rerun directions.
+
+## Last completed application b742583 / becf726 — evidence preserved before the stop
+
+[Historical fixed-source instructions](<../checkpoint-b742583.md>): application `b742583254a69dd7103be07b4e5f110f3c4c2c5e`, measured docs HEAD `becf726dafeba0700ad41db1f0d342b636357e9d`, 120-file app/helper aggregate `818b02326ecffdf402ac0387541de6ad921e1a051daad0f0e9a9d26ca3994a8e`. Two producer-path changes removed unused translation imports and equivalent whitespace-regex work without skipping rendering or changing output/source/authority semantics. Related validation **440 passed / 2 report-only skipped / 92.08s / 18 modules** is separate from completed full regressions below. The following N=10 runs completed **before** the stop; this is preservation of existing results, not a new experiment or optimization proposal.
+
+| Platform / run / workload | Existing public raw evidence | Median (s) | Nearest-rank p95, N=10 (s) | First save (s) | Maximum at save | ≤2s |
+| --- | --- | ---: | ---: | ---: | ---: | --- |
+| Linux / comment | [JSON](<linux-saved-performance-optimized8-comment.json>) | 3.902824978926219 | **4.367912306915969** | 3.898366932 | 3 | FAIL |
+| Linux / prose | [JSON](<linux-saved-performance-optimized8-prose.json>) | 3.9108151890104637 | **4.080010120058432** | 3.756733019 | 7 | FAIL |
+| Hosted push / comment | [JSON](<macos-saved-becf726-push-comment.json>) | 3.802007146 | **4.470315208** | 3.800719667 | 10 | FAIL |
+| Hosted push / prose | [JSON](<macos-saved-becf726-push-prose.json>) | 3.6145699795 | **4.210134625** | 3.533413834 | 10 | FAIL |
+| Hosted PR / comment | [JSON](<macos-saved-becf726-pr-comment.json>) | 3.130443396 | **3.678342750** | 3.144769209 | 9 | FAIL |
+| Hosted PR / prose | [JSON](<macos-saved-becf726-pr-prose.json>) | 3.367913541 | **3.969962709** | 2.785689250 | 9 | FAIL |
+
+Parent independently verified these six completed groups: each 10/10 authoritative/completed/non-stale, identical 120-file begin/end aggregate, no source changes and all owned cleanup (entry exit 0, entry/worker exited, private endpoint removed). All prose groups have 10/10 actual ordinary-word published changes and exactly 5000 units, with proof inside the original timer. Linux proof min/median/max **0.056988237 / 0.065557529 / 0.102588256s** is retained, not subtracted. Reference load remains 40 files / 5000 units / 1,479,521 initial bytes; default 800ms and observer 0.5s plus real HTTP work; full native detection/rebuild/publication/notify/queue/check/current/status/export boundary, no browser paint. Every first and slow sample remains. No cross-platform p95 pooling, selective rerun or causal old/new speedup claim.
+
+### Completed functionality is not a blanket hosted or performance pass
+
+Linux full suite collected exit 0: **1555 passed / 19 skipped / 1574 total / 0 failures/errors**, stdout 679.28s (JUnit suite time 678.945s), mandatory native browser. Physical Mac [public feedback](<https://github.com/jinghonh/LaTeX-Review/issues/55#issuecomment-6654121949>) is **1572 passed / 2 report-only skipped / 0 failed / 1574 total**, verify exit 0 / 591.34s; macOS 27.2 arm64 / Python3.11.14 / Playwright1.64.1 / Chromium156, complete-history isolated bundle and unchanged tracked source. CLI/core pass does not establish saved latency.
+
+Hosted [PR 41998696314](<https://github.com/jinghonh/LaTeX-Review/actions/runs/41998696314>) verify **1550 passed / 24 skipped / 576.98s**. Hosted [push 41998689097](<https://github.com/jinghonh/LaTeX-Review/actions/runs/41998689097>) verify **1549 passed / 24 skipped / 1 failed / 732.67s**, actual **live** first resize 1040×780 error **407.008938547486px vs <3px** after the original 150ms. Old d2 standalone 9743px remains unresolved too; physical passes do not identify hosted cause, prove flake or waive either. The truncated after-error dict is a pytest repr issue, not absence of underlying context. Current uncommitted failure-only JSON string/BEGIN-END diagnostics preserve original error versus later RPC clocks and original waits/Range/<3px; parent reports 4 passed / 2 skipped / 16.96s and intentional-failure output checks. This is not a production UI/root-cause fix. Non-performance initial-RAF investigation remains allowed, not yet a fix claim.
+
+### Last physical Mac results — requester chose not to optimize further
+
+| Workload | Median (s, public exact value) | Nearest-rank p95 (s, public exact value) | First save (s) | Maximum at save | ≤2s |
+| --- | ---: | ---: | ---: | ---: | --- |
+| comment | 1.9279404584958684 | **2.013339917000849** | 1.909726292011328 | 8 | FAIL |
+| prose | 1.9421296460204758 | **2.0056546250125393** | 1.940915000042878 | 6 | FAIL |
+
+These are the final physical results named by the owner stop, not pending performance work: **“请求人决定不再优化，当前目标未达标”**. Excesses of about 13.34ms / 5.65ms still strictly fail ≤2s; no rounding or waiver. All 20 authoritative, both complete, source120 818… unchanged, all prose actual-visible/5000-unit proofs and owned cleanup verified by the parent. Each group ran once after regression, independent/sequential; other user load uncontrolled. Public full samples and neutral aggregates are in the [b742 final baseline](<macos-b742583-baseline.md>); private twelve-artifact hash manifest/JUnit/raw evidence stays private and was not accessed/copied/linked by this ledger agent.
+
+**Effective conclusion:** no more performance patches, profiling, design or benchmarks unless the requester explicitly lifts the stop. Existing evidence/code and the ≤2s target stay unchanged and unmet. Continue only authorized UI issues/necessary regressions, not merge/deploy; private-paper/few explicitly authorized model/author-quality evidence remains separate, not a reason to resume performance work. All earlier records below remain historical.
 
 ## Workload classification
 
 **All historical N=1 and complete N=10 results below, through the 6.904089-second p95 run, edit only an invisible TeX comment.** They exercise the full saved-check chain and freshness identities but do **not** establish the latency of visible prose edits. Comment and prose measurements must be reported separately. Pure exact-HTML reuse is expected to help comment-only saves more than changed rendered text.
 
-## Reproduction
+## Historical reproduction — not execution authorization under the stop
 
 From the repository root, using the project's virtualenv:
 
@@ -291,4 +327,4 @@ Parent-audited saved-worker thread CPU spans **2.130–2.357s**, GC **0.279–0.
 
 The [first-attempt JSON](<linux-saved-pipeline-light7-comment.json>) and [exact failed raw archive](<linux-saved-pipeline-light7-attempt1-raw.zip>) remain intact: one authoritative save, RuntimeError and original 180s timeout, cleanup retained. Suspected external GC aggregation iteration is not a proven production regression. Observer-only correction yielded collected authoritative/unchanged-source/cleanup/prose-proof results for both 2-save phases; these instrumented elapsed times are not N=10/p95.
 
-**Current conclusion:** complete reference N=10 measurements still fail on all platforms, and hosted functional failures remain under investigation. Physical 466 repeat is complete, not pending or a resource blocker. Continue feasible implementation; current import-laziness/whitespace work is not yet validated or pinned/rebenchmarked and inherits none of these results. No timer/observer/debounce change, first-save deletion, selective rerun, core-only result or diagnostic profile can turn these failures into acceptance. Private-paper/few explicitly authorized real-model/author-quality evidence remains independently pending, not a reason to stop feasible work.
+**Historical conclusion at 466:** reference N=10 failed on all platforms, hosted functional failures remained under investigation and physical 466 repeat was complete. The subsequent import-laziness/whitespace application b742583 has now completed the evidence listed at the top; no old count is reassigned to it. No timer/observer/debounce change, first-save deletion, core-only result or profile turns failures into acceptance. The later owner decision supersedes all previous requests to continue performance work: **“请求人决定不再优化，当前目标未达标”**. No new performance work unless explicitly lifted; authorized UI/necessary regressions remain separate, with no merge/deploy. Private-paper/few authorized model/author-quality evidence is independently pending, neither a performance restart authorization nor an automatic pause of permitted non-performance work.

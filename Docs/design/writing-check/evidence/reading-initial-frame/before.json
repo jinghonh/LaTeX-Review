@@ -1,0 +1,572 @@
+{
+  "scope": "ONE controlled all-initial-rAF FIFO delay, actual live fixture, native scroll/resize; not historical CI reproduction",
+  "head": "becf726dafeba0700ad41db1f0d342b636357e9d",
+  "screenshot": "before.png",
+  "observations": [
+    {
+      "stage": "initial-original-150ms-callbacks-held",
+      "t": 664.8000001907349,
+      "width": 1280,
+      "height": 900,
+      "scrollY": 0,
+      "resizing": false,
+      "paper": {
+        "width": 876,
+        "height": 76952,
+        "scrollTop": 0,
+        "scrollHeight": 76952,
+        "overflowY": "visible"
+      },
+      "savedRange": null
+    },
+    {
+      "stage": "after-original-CAPTURE-100ms-SAVE",
+      "t": 776.6000001430511,
+      "width": 1280,
+      "height": 900,
+      "scrollY": 36066,
+      "resizing": false,
+      "paper": {
+        "width": 876,
+        "height": 76952,
+        "scrollTop": 0,
+        "scrollHeight": 76952,
+        "overflowY": "visible"
+      },
+      "savedRange": {
+        "top": 433.828125,
+        "bottom": 453.828125,
+        "ratio": 0.33329608938547484,
+        "character": "g",
+        "offset": 11809
+      }
+    },
+    {
+      "stage": "after-native-resize-original-150ms-still-held",
+      "t": 954.1000001430511,
+      "width": 1040,
+      "height": 780,
+      "scrollY": 36066,
+      "resizing": true,
+      "paper": {
+        "width": 944,
+        "height": 76619,
+        "scrollTop": 0,
+        "scrollHeight": 76619,
+        "overflowY": "visible"
+      },
+      "savedRange": {
+        "top": 100.859375,
+        "bottom": 120.859375,
+        "ratio": 0.33329608938547484,
+        "character": "g",
+        "offset": 11809
+      },
+      "error_px": 292.973219273743,
+      "strict_pass": false
+    },
+    {
+      "stage": "original-150ms-after-original-FIFO-release",
+      "t": 1118.5,
+      "width": 1040,
+      "height": 780,
+      "scrollY": 36066,
+      "resizing": false,
+      "paper": {
+        "width": 944,
+        "height": 76619,
+        "scrollTop": 0,
+        "scrollHeight": 76619,
+        "overflowY": "visible"
+      },
+      "savedRange": {
+        "top": 100.859375,
+        "bottom": 120.859375,
+        "ratio": 0.33329608938547484,
+        "character": "g",
+        "offset": 11809
+      },
+      "error_px": 292.973219273743,
+      "strict_pass": false
+    }
+  ],
+  "pageerrors": [],
+  "asset_sha256": {
+    "reading_position.js": "2164d281180128f6e9dc1121152a89ca957e352abb6750b7837e114dec0d541c",
+    "report.css": "087f4f500f7487e84520a27479802c9f405f9368f23303a4ca0c8628b96641db",
+    "review_workspace.js": "feb55803b5f78c7c8cc18f39c7bee741fe2572f5778c0b13934f023fad7ce6b4",
+    "report_sections.js": "fb5034b1fecf03defc68566a31309510a0b56a32c7350216b289f743cd1c6a96"
+  },
+  "browser_version": "155.0.8059.39",
+  "saved_character": "g",
+  "pending_before_resize": [
+    {
+      "id": 1,
+      "name": "remember",
+      "source": "function remember() {\n    readingMode = mode();\n    dimensions = signature();\n    anchors = papers.map(capture).filter(Boolean);\n    // In document flow only th"
+    },
+    {
+      "id": 2,
+      "name": "",
+      "source": "() => { frame = 0; layout(); }"
+    },
+    {
+      "id": 3,
+      "name": "reserveHeadingInset",
+      "source": "function reserveHeadingInset() {\n    const root = document.getElementById('review-workspace');\n    const toolbar = document.querySelector('.report-controls');\n "
+    },
+    {
+      "id": 4,
+      "name": "",
+      "source": "() => {\n      scheduled = false;\n      const compare = document.getElementById('layout-mode')?.value === 'compare';\n      const side = document.querySelector('."
+    }
+  ],
+  "pending_before_release": [
+    {
+      "id": 1,
+      "name": "remember",
+      "source": "function remember() {\n    readingMode = mode();\n    dimensions = signature();\n    anchors = papers.map(capture).filter(Boolean);\n    // In document flow only th"
+    },
+    {
+      "id": 2,
+      "name": "",
+      "source": "() => { frame = 0; layout(); }"
+    },
+    {
+      "id": 3,
+      "name": "reserveHeadingInset",
+      "source": "function reserveHeadingInset() {\n    const root = document.getElementById('review-workspace');\n    const toolbar = document.querySelector('.report-controls');\n "
+    },
+    {
+      "id": 4,
+      "name": "",
+      "source": "() => {\n      scheduled = false;\n      const compare = document.getElementById('layout-mode')?.value === 'compare';\n      const side = document.querySelector('."
+    }
+  ],
+  "failure_context_after_original_sample": {
+    "sampledAt": 1121,
+    "readyState": "complete",
+    "viewport": {
+      "width": 1040,
+      "height": 780
+    },
+    "publishedReadingPosition": {
+      "present": true,
+      "type": "object",
+      "keys": [
+        "isResizing"
+      ],
+      "isResizing": false
+    },
+    "currentScroller": "window",
+    "overflowY": "visible",
+    "windowY": 36066,
+    "paperScrollTop": 0,
+    "paperClientWidth": 944,
+    "paperClientHeight": 76619,
+    "paperScrollHeight": 76619,
+    "paperRect": {
+      "top": -35678.03125,
+      "bottom": 40941.046875,
+      "left": 48,
+      "right": 992,
+      "width": 944,
+      "height": 76619.078125
+    },
+    "rangeRect": {
+      "top": 100.859375,
+      "bottom": 120.859375,
+      "left": 435,
+      "right": 444.015625,
+      "width": 9.015625,
+      "height": 20
+    },
+    "rangeConnected": true,
+    "savedCharacter": "g",
+    "rangeStartOffset": 11809,
+    "expectedRatio": 0.33329608938547484,
+    "viewTop": 200.78125,
+    "viewBottom": 780,
+    "expectedTop": 393.832594273743
+  },
+  "trace": [
+    {
+      "kind": "registered",
+      "id": 1,
+      "name": "remember",
+      "source": "function remember() {\n    readingMode = mode();\n    dimensions = signature();\n    anchors = papers.map(capture).filter(Boolean);\n    // In document flow only th",
+      "t": 282.30000019073486
+    },
+    {
+      "kind": "registered",
+      "id": 2,
+      "name": "",
+      "source": "() => { frame = 0; layout(); }",
+      "t": 282.7000000476837
+    },
+    {
+      "kind": "native-event",
+      "type": "resize",
+      "t": 362.5,
+      "width": 1280,
+      "height": 900,
+      "scrollY": 0,
+      "resizing": true,
+      "paper": {
+        "width": 1232,
+        "height": 47118,
+        "scrollTop": 0,
+        "scrollHeight": 47118,
+        "overflowY": "visible"
+      },
+      "savedRange": null
+    },
+    {
+      "kind": "native-event",
+      "type": "resize",
+      "t": 400.10000014305115,
+      "width": 1280,
+      "height": 900,
+      "scrollY": 0,
+      "resizing": true,
+      "paper": {
+        "width": 876,
+        "height": 76952,
+        "scrollTop": 0,
+        "scrollHeight": 76952,
+        "overflowY": "visible"
+      },
+      "savedRange": null
+    },
+    {
+      "kind": "registered",
+      "id": 3,
+      "name": "reserveHeadingInset",
+      "source": "function reserveHeadingInset() {\n    const root = document.getElementById('review-workspace');\n    const toolbar = document.querySelector('.report-controls');\n ",
+      "t": 439.80000019073486
+    },
+    {
+      "kind": "native-event",
+      "type": "review-math-ready",
+      "t": 493.30000019073486,
+      "width": 1280,
+      "height": 900,
+      "scrollY": 0,
+      "resizing": true,
+      "paper": {
+        "width": 876,
+        "height": 76952,
+        "scrollTop": 0,
+        "scrollHeight": 76952,
+        "overflowY": "visible"
+      },
+      "savedRange": null
+    },
+    {
+      "kind": "native-event",
+      "type": "load",
+      "t": 495.2000000476837,
+      "width": 1280,
+      "height": 900,
+      "scrollY": 0,
+      "resizing": true,
+      "paper": {
+        "width": 876,
+        "height": 76952,
+        "scrollTop": 0,
+        "scrollHeight": 76952,
+        "overflowY": "visible"
+      },
+      "savedRange": null
+    },
+    {
+      "kind": "native-event",
+      "type": "scroll",
+      "t": 680.9000000953674,
+      "width": 1280,
+      "height": 900,
+      "scrollY": 36066,
+      "resizing": false,
+      "paper": {
+        "width": 876,
+        "height": 76952,
+        "scrollTop": 0,
+        "scrollHeight": 76952,
+        "overflowY": "visible"
+      },
+      "savedRange": null
+    },
+    {
+      "kind": "registered",
+      "id": 4,
+      "name": "",
+      "source": "() => {\n      scheduled = false;\n      const compare = document.getElementById('layout-mode')?.value === 'compare';\n      const side = document.querySelector('.",
+      "t": 681.7000000476837
+    },
+    {
+      "kind": "native-event",
+      "type": "resize",
+      "t": 797.4000000953674,
+      "width": 1040,
+      "height": 780,
+      "scrollY": 36066,
+      "resizing": true,
+      "paper": {
+        "width": 944,
+        "height": 76619,
+        "scrollTop": 0,
+        "scrollHeight": 76619,
+        "overflowY": "visible"
+      },
+      "savedRange": {
+        "top": 100.859375,
+        "bottom": 120.859375,
+        "ratio": 0.33329608938547484,
+        "character": "g",
+        "offset": 11809
+      }
+    },
+    {
+      "kind": "release-original-FIFO",
+      "pending": [
+        {
+          "id": 1,
+          "name": "remember"
+        },
+        {
+          "id": 2,
+          "name": ""
+        },
+        {
+          "id": 3,
+          "name": "reserveHeadingInset"
+        },
+        {
+          "id": 4,
+          "name": ""
+        }
+      ],
+      "t": 958.8000001907349,
+      "width": 1040,
+      "height": 780,
+      "scrollY": 36066,
+      "resizing": true,
+      "paper": {
+        "width": 944,
+        "height": 76619,
+        "scrollTop": 0,
+        "scrollHeight": 76619,
+        "overflowY": "visible"
+      },
+      "savedRange": {
+        "top": 100.859375,
+        "bottom": 120.859375,
+        "ratio": 0.33329608938547484,
+        "character": "g",
+        "offset": 11809
+      }
+    },
+    {
+      "kind": "callback-before",
+      "id": 1,
+      "name": "remember",
+      "source": "function remember() {\n    readingMode = mode();\n    dimensions = signature();\n    anchors = papers.map(capture).filter(Boolean);\n    // In document flow only th",
+      "t": 960.3000001907349,
+      "width": 1040,
+      "height": 780,
+      "scrollY": 36066,
+      "resizing": true,
+      "paper": {
+        "width": 944,
+        "height": 76619,
+        "scrollTop": 0,
+        "scrollHeight": 76619,
+        "overflowY": "visible"
+      },
+      "savedRange": {
+        "top": 100.859375,
+        "bottom": 120.859375,
+        "ratio": 0.33329608938547484,
+        "character": "g",
+        "offset": 11809
+      }
+    },
+    {
+      "kind": "callback-after",
+      "id": 1,
+      "name": "remember",
+      "t": 960.6000001430511,
+      "width": 1040,
+      "height": 780,
+      "scrollY": 36066,
+      "resizing": false,
+      "paper": {
+        "width": 944,
+        "height": 76619,
+        "scrollTop": 0,
+        "scrollHeight": 76619,
+        "overflowY": "visible"
+      },
+      "savedRange": {
+        "top": 100.859375,
+        "bottom": 120.859375,
+        "ratio": 0.33329608938547484,
+        "character": "g",
+        "offset": 11809
+      }
+    },
+    {
+      "kind": "callback-before",
+      "id": 2,
+      "name": "",
+      "source": "() => { frame = 0; layout(); }",
+      "t": 960.7000000476837,
+      "width": 1040,
+      "height": 780,
+      "scrollY": 36066,
+      "resizing": false,
+      "paper": {
+        "width": 944,
+        "height": 76619,
+        "scrollTop": 0,
+        "scrollHeight": 76619,
+        "overflowY": "visible"
+      },
+      "savedRange": {
+        "top": 100.859375,
+        "bottom": 120.859375,
+        "ratio": 0.33329608938547484,
+        "character": "g",
+        "offset": 11809
+      }
+    },
+    {
+      "kind": "callback-after",
+      "id": 2,
+      "name": "",
+      "t": 960.8000001907349,
+      "width": 1040,
+      "height": 780,
+      "scrollY": 36066,
+      "resizing": false,
+      "paper": {
+        "width": 944,
+        "height": 76619,
+        "scrollTop": 0,
+        "scrollHeight": 76619,
+        "overflowY": "visible"
+      },
+      "savedRange": {
+        "top": 100.859375,
+        "bottom": 120.859375,
+        "ratio": 0.33329608938547484,
+        "character": "g",
+        "offset": 11809
+      }
+    },
+    {
+      "kind": "callback-before",
+      "id": 3,
+      "name": "reserveHeadingInset",
+      "source": "function reserveHeadingInset() {\n    const root = document.getElementById('review-workspace');\n    const toolbar = document.querySelector('.report-controls');\n ",
+      "t": 960.8000001907349,
+      "width": 1040,
+      "height": 780,
+      "scrollY": 36066,
+      "resizing": false,
+      "paper": {
+        "width": 944,
+        "height": 76619,
+        "scrollTop": 0,
+        "scrollHeight": 76619,
+        "overflowY": "visible"
+      },
+      "savedRange": {
+        "top": 100.859375,
+        "bottom": 120.859375,
+        "ratio": 0.33329608938547484,
+        "character": "g",
+        "offset": 11809
+      }
+    },
+    {
+      "kind": "callback-after",
+      "id": 3,
+      "name": "reserveHeadingInset",
+      "t": 963.6000001430511,
+      "width": 1040,
+      "height": 780,
+      "scrollY": 36066,
+      "resizing": false,
+      "paper": {
+        "width": 944,
+        "height": 76619,
+        "scrollTop": 0,
+        "scrollHeight": 76619,
+        "overflowY": "visible"
+      },
+      "savedRange": {
+        "top": 100.859375,
+        "bottom": 120.859375,
+        "ratio": 0.33329608938547484,
+        "character": "g",
+        "offset": 11809
+      }
+    },
+    {
+      "kind": "callback-before",
+      "id": 4,
+      "name": "",
+      "source": "() => {\n      scheduled = false;\n      const compare = document.getElementById('layout-mode')?.value === 'compare';\n      const side = document.querySelector('.",
+      "t": 963.8000001907349,
+      "width": 1040,
+      "height": 780,
+      "scrollY": 36066,
+      "resizing": false,
+      "paper": {
+        "width": 944,
+        "height": 76619,
+        "scrollTop": 0,
+        "scrollHeight": 76619,
+        "overflowY": "visible"
+      },
+      "savedRange": {
+        "top": 100.859375,
+        "bottom": 120.859375,
+        "ratio": 0.33329608938547484,
+        "character": "g",
+        "offset": 11809
+      }
+    },
+    {
+      "kind": "callback-after",
+      "id": 4,
+      "name": "",
+      "t": 964.3000001907349,
+      "width": 1040,
+      "height": 780,
+      "scrollY": 36066,
+      "resizing": false,
+      "paper": {
+        "width": 944,
+        "height": 76619,
+        "scrollTop": 0,
+        "scrollHeight": 76619,
+        "overflowY": "visible"
+      },
+      "savedRange": {
+        "top": 100.859375,
+        "bottom": 120.859375,
+        "ratio": 0.33329608938547484,
+        "character": "g",
+        "offset": 11809
+      }
+    }
+  ],
+  "completed": true,
+  "phase": "before",
+  "temporary_fixture_path_omitted": true,
+  "original_artifact_sha256": "058f18d98b82144a5ddd4b03819dee475e041446b7fae39840cfb9d33003fd36",
+  "source_revision_kind": "clean baseline application",
+  "baseline_application_commit": "b742583254a69dd7103be07b4e5f110f3c4c2c5e"
+}

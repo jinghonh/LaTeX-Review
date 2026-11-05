@@ -1,0 +1,29 @@
+{
+  "scope": "controlled FIFO late-initial-frame actual-app pair; not historical CI reproduction",
+  "baseline_application_commit": "b742583254a69dd7103be07b4e5f110f3c4c2c5e",
+  "after_commit_pin": "bdc210440520c9880a6b31869199756969d26cfa",
+  "phases": {
+    "before": {
+      "actual_capture_head": "becf726dafeba0700ad41db1f0d342b636357e9d",
+      "reading_position_js_sha256": "2164d281180128f6e9dc1121152a89ca957e352abb6750b7837e114dec0d541c",
+      "held_error_px": 292.973219273743,
+      "released_150ms_error_px": 292.973219273743,
+      "saved_character": "g",
+      "saved_offset": 11809,
+      "saved_ratio": 0.33329608938547484,
+      "pageerrors": [],
+      "screenshot_sha256": "a5453abe57ad906047608adfc7d7aee8d6e5b33d8dfcc3c6a579aa94fbc4d6f4"
+    },
+    "after": {
+      "actual_capture_head": "becf726dafeba0700ad41db1f0d342b636357e9d",
+      "reading_position_js_sha256": "6593383a67d10e5a47f9c8f0e045c92ccb1ef21b42928d3b65470b3976ff0aa4",
+      "held_error_px": 292.973219273743,
+      "released_150ms_error_px": 0.026780726256987464,
+      "saved_character": "g",
+      "saved_offset": 11809,
+      "saved_ratio": 0.33329608938547484,
+      "pageerrors": [],
+      "screenshot_sha256": "47eff4b84bfa248a4fdbf37ab6e5bb1dc5891a3837c8961f136ba9193d77305b"
+    }
+  }
+}
