@@ -1,0 +1,34 @@
+........................................................................ [  5%]
+........................................................................ [ 11%]
+........................................................................ [ 16%]
+........................................................................ [ 22%]
+........................................................................ [ 27%]
+........................................................................ [ 33%]
+........................................................................ [ 39%]
+........................................................................ [ 44%]
+..ssssssssss.sss.sss.s.................................................. [ 50%]
+........................................................................ [ 55%]
+........................................................................ [ 61%]
+........................................................................ [ 67%]
+........................................................................ [ 72%]
+.....................................................s.s................ [ 78%]
+........................................................................ [ 83%]
+........................................................................ [ 89%]
+........................................................................ [ 95%]
+................................................................         [100%]
+=========================== short test summary info ============================
+SKIPPED [1] tests/test_compilation_visual.py:56: 需要 macOS、latexmk 和 Poppler
+SKIPPED [2] tests/test_compilation_visual.py:76: 需要 macOS、latexmk 和 Poppler
+SKIPPED [1] tests/test_compilation_visual.py:88: 需要 macOS、latexmk 和 Poppler
+SKIPPED [1] tests/test_compilation_visual.py:100: 需要 macOS、latexmk 和 Poppler
+SKIPPED [2] tests/test_compilation_visual.py:111: 需要 macOS、TeX 与 BibTeX 工具
+SKIPPED [1] tests/test_compilation_visual.py:140: 需要 macOS 与 TeX 工具
+SKIPPED [1] tests/test_compilation_visual.py:159: 需要 macOS 与 TeX 工具
+SKIPPED [1] tests/test_compilation_visual.py:168: 需要 macOS 与 TeX 工具
+SKIPPED [2] tests/test_compilation_visual.py:188: 需要 macOS 与 TeX 工具
+SKIPPED [1] tests/test_compilation_visual.py:219: 需要 macOS、latexmk 和 Poppler
+SKIPPED [2] tests/test_compilation_visual.py:247: 需要 macOS、latexmk 和 Poppler
+SKIPPED [1] tests/test_compilation_visual.py:274: 需要 macOS 与 TeX 工具
+SKIPPED [1] tests/test_compilation_visual.py:291: 需要 macOS 沙箱
+SKIPPED [2] tests/test_reading_position.py:104: compare mode is report-only
+1269 passed, 19 skipped in 687.54s (0:11:27)
