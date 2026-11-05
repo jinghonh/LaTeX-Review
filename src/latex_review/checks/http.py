@@ -170,15 +170,19 @@ def _status_content_identity(handler):
     """
     from hashlib import sha256
     from ..annotations import MANIFEST
-    from ..annotations.content import validate_content
+    from ..annotations.content import (decode_validated_content, _validation_receipt_namespace,
+                                       _validation_receipt_eligible)
     raw = (Path(handler.directory) / MANIFEST).read_bytes()
-    key = sha256(raw).digest()
+    namespace = _validation_receipt_namespace()
+    key = (sha256(raw).digest(), namespace)
+    cacheable = _validation_receipt_eligible(namespace)
     cached = getattr(handler.server, '_checks_status_identity', None)
-    if cached is not None and cached[0] == key:
+    if cacheable and cached is not None and cached[0] == key:
         return dict(cached[1])
-    content = validate_content(json.loads(raw.decode('utf-8')))
+    content = decode_validated_content(raw)
     identity = {name: content[name] for name in ('entry', 'version_id')}
-    handler.server._checks_status_identity = (key, identity)
+    if cacheable and _validation_receipt_eligible(_validation_receipt_namespace()):
+        handler.server._checks_status_identity = (key, identity)
     return dict(identity)
 
 

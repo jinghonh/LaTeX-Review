@@ -77,9 +77,11 @@ def build(source: ProjectSource, output: Path, revision: int = 1) -> list[str]:
     assets, diagnostics = _figure_assets(None, project, output, _pdf_converters(source, output), 15)
     preview = render_preview(None, project, figure_assets=assets,
                              sentence_highlights={(unit['side'], unit['node_id']): frozenset() for unit in units})
-    from .annotations import MANIFEST, build_content, content_meta
+    from .annotations import MANIFEST, build_content
+    from .annotations.content import _content_meta_from_serialized
     annotation_content = build_content(project, preview.html, _fragment_plan=preview._fragment_plan)
-    _write(output / MANIFEST, json.dumps(annotation_content, ensure_ascii=False))
+    manifest_text = json.dumps(annotation_content, ensure_ascii=False)
+    _write(output / MANIFEST, manifest_text)
     all_diagnostics = [*compile_diagnostics, *preview.diagnostics, *diagnostics]
     messages = [item.message for item in all_diagnostics]
     from .reading import build_reading
@@ -129,7 +131,7 @@ def build(source: ProjectSource, output: Path, revision: int = 1) -> list[str]:
                   + (diagnostic_items or '<li>没有额外诊断。</li>') + '</ul></details>')
     html = preview.compose(
         title='当前论文持续预览 · ' + source.entry, style=style,
-        head=content_meta(annotation_content), body_class='reading-view live-view',
+        head=_content_meta_from_serialized(manifest_text.encode('utf-8')), body_class='reading-view live-view',
         before_main=header + reading.section_toggle + reading.section_directory, after_main=supplement,
         scripts_after_math=reading.scripts)
     from .delivery import local_report_html

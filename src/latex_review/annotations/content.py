@@ -9,6 +9,7 @@ from dataclasses import dataclass
 from threading import Lock
 from difflib import SequenceMatcher
 from html.parser import HTMLParser
+from hashlib import sha256
 import json
 import re
 from pathlib import Path
@@ -370,6 +371,90 @@ def validate_content(content):
     return content
 
 
+# Successful structural predicates only: never retain raw bytes, decoded trees,
+# source facts, permissions or publication authority. Every reader parses afresh.
+_VALIDATION_RECEIPT_LIMIT = 128
+_VALIDATION_RECEIPTS = OrderedDict()
+_VALIDATION_RECEIPT_LOCK = Lock()
+_RECEIPT_JSON_LOADS = json.loads
+_RECEIPT_JSON_DECODER = json._default_decoder
+_RECEIPT_JSON_STATE = tuple((key, id(value)) for key, value in vars(_RECEIPT_JSON_DECODER).items() if key != 'memo')
+_RECEIPT_JSON_METHODS = (json.JSONDecoder.decode, json.JSONDecoder.raw_decode)
+
+
+def _validation_receipt_namespace(validator=None):
+    from ..contract import SourceLocation
+    validator = validate_content if validator is None else validator
+    from . import _validation
+    predicates = (validator, exact_keys, _text, _integer, _slice, utf16_length,
+                  _validation._integer, _validation.utf16_length,
+                  SourceLocation.__init__, SourceLocation.__post_init__,
+                  json.loads, json.JSONDecoder.decode, json.JSONDecoder.raw_decode)
+    return (SCHEMA_VERSION, SourceLocation,
+            tuple((predicate, getattr(predicate, '__code__', None), getattr(predicate, '__defaults__', None),
+                   tuple(sorted((getattr(predicate, '__kwdefaults__', None) or {}).items())))
+                  for predicate in predicates), json.loads, id(json._default_decoder),
+            tuple((key, id(value)) for key, value in vars(json._default_decoder).items() if key != 'memo'),
+            json.JSONDecoder.decode, json.JSONDecoder.raw_decode)
+
+
+# Identity alone cannot prove that a replacement predicate is pure: it might
+# repair an invalid decoded tree in place. Such predicates always run in full.
+_CANONICAL_VALIDATION_NAMESPACE = _validation_receipt_namespace()
+
+
+def _validation_receipt_eligible(namespace):
+    return (namespace == _CANONICAL_VALIDATION_NAMESPACE
+            and json.loads is _RECEIPT_JSON_LOADS and json._default_decoder is _RECEIPT_JSON_DECODER
+            and _RECEIPT_JSON_DECODER.strict is True
+            and namespace[-3] == _RECEIPT_JSON_STATE and namespace[-2:] == _RECEIPT_JSON_METHODS
+            and not _RECEIPT_JSON_DECODER.memo)
+
+
+def decode_validated_content(raw, *, _universal_newlines=False):
+    """Fresh JSON tree plus a bounded exact-byte structural-validation receipt.
+
+    This is not a provenance/write-permission receipt. Under the standard strict
+    decoder, universal-newline conversion changes only JSON whitespace in any
+    successful parse, so both historical readers can share the same byte key.
+    Malformed JSON is still parsed (and rejected) before any receipt lookup.
+    """
+    digest = sha256(raw).digest() if type(raw) is bytes else None
+    text = raw.decode('utf-8') if isinstance(raw, (bytes, bytearray)) else raw
+    if _universal_newlines and isinstance(text, str):
+        text = text.replace('\r\n', '\n').replace('\r', '\n')
+    # Bind admission to the parser invoked, not a global it might restore.
+    decoder = json.loads
+    before = _validation_receipt_namespace()
+    eligible_before = _validation_receipt_eligible(before)
+    content = decoder(text)
+    validator = validate_content
+    namespace = _validation_receipt_namespace(validator)
+    key = (namespace, digest)
+    cacheable = (digest is not None and eligible_before and decoder is json.loads
+                 and before == namespace and _validation_receipt_eligible(namespace))
+    try:
+        if cacheable:
+            hash(key)
+    except TypeError:
+        cacheable = False
+    if cacheable:
+        with _VALIDATION_RECEIPT_LOCK:
+            if key in _VALIDATION_RECEIPTS:
+                _VALIDATION_RECEIPTS.move_to_end(key)
+                return content
+    validated = validator(content)
+    if (cacheable and validated is content and validate_content is validator
+            and _validation_receipt_namespace(validator) == namespace
+            and _validation_receipt_eligible(namespace)):
+        with _VALIDATION_RECEIPT_LOCK:
+            _VALIDATION_RECEIPTS[key] = True
+            _VALIDATION_RECEIPTS.move_to_end(key)
+            while len(_VALIDATION_RECEIPTS) > _VALIDATION_RECEIPT_LIMIT:
+                _VALIDATION_RECEIPTS.popitem(last=False)
+    return validated
+
+
 class PreparedContent(dict):
     """Validated server-owned manifest with an index outside its JSON representation."""
     def __init__(self, content):
@@ -380,7 +465,7 @@ class PreparedContent(dict):
 def load_content(report):
     root = Path(report).expanduser()
     root = root if root.is_dir() else root.parent
-    return validate_content(json.loads((root / MANIFEST).read_text(encoding='utf-8')))
+    return decode_validated_content((root / MANIFEST).read_bytes(), _universal_newlines=True)
 
 
 def make_anchor(content, selection):
@@ -614,5 +699,12 @@ def locate(content, anchor):
 def content_meta(content):
     """Bind the rendered page to its manifest without introducing browser behavior."""
     validate_content(content)
+    return (f'<meta name="latex-review-annotation-project" content="{content["project_id"]}">'
+            f'<meta name="latex-review-annotation-version" content="{content["version_id"]}">')
+
+
+def _content_meta_from_serialized(raw):
+    """Validate the producer's actual serialized bytes, never its mutable tree."""
+    content = decode_validated_content(raw)
     return (f'<meta name="latex-review-annotation-project" content="{content["project_id"]}">'
             f'<meta name="latex-review-annotation-version" content="{content["version_id"]}">')

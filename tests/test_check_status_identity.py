@@ -1,4 +1,5 @@
 """Status observation caches validated identity by manifest bytes, not metadata."""
+import cProfile
 import json
 import os
 from types import SimpleNamespace
@@ -17,20 +18,19 @@ def manifest(version='a', **changes):
             'units': [], **changes}
 
 
-def test_unchanged_manifest_validates_once_and_caller_cannot_mutate_cache(tmp_path, monkeypatch):
+def test_unchanged_manifest_validates_once_and_caller_cannot_mutate_cache(tmp_path):
     path = tmp_path / MANIFEST
     path.write_text(json.dumps(manifest()))
     handler = SimpleNamespace(directory=tmp_path, server=SimpleNamespace())
-    original = content_module.validate_content
-    calls = []
-    def validate(value):
-        calls.append(value)
-        return original(value)
-    monkeypatch.setattr(content_module, 'validate_content', validate)
-    first = _status_content_identity(handler)
-    first['entry'] = 'forged.tex'
-    assert _status_content_identity(handler) == {'entry': 'main.tex', 'version_id': 'a' * 64}
-    assert len(calls) == 1
+    with content_module._VALIDATION_RECEIPT_LOCK:
+        content_module._VALIDATION_RECEIPTS.clear()
+    with cProfile.Profile() as profile:
+        first = _status_content_identity(handler)
+        first['entry'] = 'forged.tex'
+        assert _status_content_identity(handler) == {'entry': 'main.tex', 'version_id': 'a' * 64}
+    calls = sum(entry.callcount for entry in profile.getstats()
+                if entry.code is content_module.validate_content.__code__)
+    assert calls == 1
 
 
 def test_same_size_same_mtime_edit_and_invalid_units_cannot_reuse_identity(tmp_path):
