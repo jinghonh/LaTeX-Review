@@ -18,3 +18,56 @@ jobs:
       - run: ./scripts/verify-macos.sh
         env:
           LATEX_REVIEW_REQUIRE_BROWSER: '1'
+      - name: Measure complete saved-current paths
+        # Collect independent timing evidence even if a browser regression failed.
+        if: ${{ !cancelled() }}
+        run: |
+          output="${RUNNER_TEMP:?}/writing-check-saved"
+          mkdir -p "$output"
+          for edit in comment prose; do
+            python Docs/design/writing-check/evidence/benchmark_saved_checks.py \
+              --files 40 --paragraphs 5000 --saves 10 --edit-kind "$edit" \
+              --poll-seconds 0.5 --settle-timeout 90 \
+              --concurrent-workload 'Scheduled after pytest; no concurrent test or benchmark jobs intentionally started by this workflow.' \
+              --output "$output/saved-$edit.json"
+            python - "$output/saved-$edit.json" <<'PY'
+          import json
+          import sys
+          from pathlib import Path
+          data = json.loads(Path(sys.argv[1]).read_text())
+          assert data['complete'] and len(data['samples']) == data['requested_saves'] == 10, data
+          assert all(sample['authoritative_match'] for sample in data['samples'])
+          assert not data['source_paths_changed_during_measurement']
+          assert data['source_boundary_begin']['files'] == data['source_boundary_end']['files']
+          cleanup = data['cleanup']
+          assert cleanup['owned_entry_exit_code'] == 0
+          assert all(cleanup[key] is True for key in (
+              'owned_entry_exited', 'owned_worker_exited', 'isolated_endpoint_removed')), cleanup
+          if data['edit_kind'] == 'prose':
+              assert all(sample['visible_change_proof']['verified_visible_text_change']
+                         and sample['visible_change_proof']['published_text_units'] == 5000
+                         for sample in data['samples'])
+          PY
+          done
+          python - "$output" <<'PY'
+          import json
+          import sys
+          from pathlib import Path
+          failed = []
+          for mode in ('comment', 'prose'):
+              data = json.loads((Path(sys.argv[1]) / f'saved-{mode}.json').read_text())
+              # With ten samples, nearest-rank p95 is the maximum: keep the first save.
+              measured = max(sample['save_to_verified_current_seconds'] for sample in data['samples'])
+              assert measured == data['saved_p95_nearest_rank_seconds']
+              print(f'{mode}: full saved-current p95={measured:.6f}s; target <=2s')
+              if measured > 2 or data['saved_hot_p95_target_met'] is not True:
+                  failed.append(mode)
+          assert not failed, f'Full saved-current target unmet: {failed}'
+          PY
+      - name: Retain complete saved-current evidence
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: writing-check-saved-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/writing-check-saved/*.json
+          if-no-files-found: warn
