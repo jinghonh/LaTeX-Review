@@ -80,7 +80,8 @@ path = ".latex-review-knowledge.json"
 
 [semantic]
 enabled = false
-provider = "openai-compatible"
+provider = "openai-compatible" # or "deepseek" for DeepSeek-specific options
+thinking = "default" # default, enabled or disabled; explicit modes require deepseek
 base_url = "https://your-provider.example/v1"
 model = "your-model"
 api_key_env = "LATEX_REVIEW_LLM_KEY"
@@ -91,7 +92,7 @@ concurrency = 2
 timeout = 60
 ```
 
-预算是每次运行上限，并非费用估计。密钥只从环境变量读取，不放在论文、报告或候选 JSON 中。真实调用前需确认服务商对论文/代码的隐私要求；HTTPS 是默认要求，仅本地测试允许 loopback HTTP。
+预算是每次运行上限，并非费用估计。`provider = "deepseek"` 时，`thinking = "enabled"` 或 `"disabled"` 会发送 DeepSeek 的 `thinking.type`；通用 `openai-compatible` 不会收到该私有字段，`thinking = "default"` 也不发送它。语义任务状态会显示生效的 provider、thinking 模式和预算。每次 provider 响应都会保留原始 `finish_reason`；截断、拒绝或异常完成仍保留可用的 `prompt_tokens`、`completion_tokens`、`total_tokens`，缺失字段明确为 `null`/`unknown`，不会因失败自动追加请求。密钥只从环境变量读取，不放在论文、报告或候选 JSON 中。真实调用前需确认服务商对论文/代码的隐私要求；HTTPS 是默认要求，仅本地测试允许 loopback HTTP。
 
 ## 离线、历史与导出
 
