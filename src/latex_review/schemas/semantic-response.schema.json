@@ -65,12 +65,14 @@
                 "start": {
                   "type": "integer",
                   "minimum": 0,
-                  "maximum": 9007199254740991
+                  "maximum": 9007199254740991,
+                  "description": "Optional Unicode code-point offset into the referenced evidence_units[].text, inclusive. Do not use the absolute source offset."
                 },
                 "end": {
                   "type": "integer",
                   "minimum": 0,
-                  "maximum": 9007199254740991
+                  "maximum": 9007199254740991,
+                  "description": "Optional Unicode code-point offset into the referenced evidence_units[].text, exclusive. Do not use the absolute source offset."
                 }
               },
               "required": [

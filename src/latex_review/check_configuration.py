@@ -5,7 +5,7 @@ from urllib.parse import urlsplit
 FIELDS = {
     'checks': {'enabled': bool, 'on_save': bool, 'debounce_ms': int, 'rules': list},
     'knowledge': {'storage': str, 'path': str},
-    'semantic': {'enabled': bool, 'provider': str, 'base_url': str, 'model': str,
+    'semantic': {'enabled': bool, 'provider': str, 'thinking': str, 'base_url': str, 'model': str,
                  'api_key_env': str, 'max_requests': int, 'max_input_tokens': int,
                  'max_output_tokens': int, 'concurrency': int, 'timeout': int},
 }
@@ -31,8 +31,14 @@ def validate_check_configuration(data):
     if knowledge.get('storage', 'project') not in {'project', 'external'}:
         raise ValueError('配置 [knowledge].storage 必须是 project 或 external')
     semantic = data.get('semantic', {})
-    if semantic.get('provider', 'openai-compatible') != 'openai-compatible':
+    provider = semantic.get('provider', 'openai-compatible')
+    if provider not in {'openai-compatible', 'deepseek'}:
         raise ValueError('配置 [semantic].provider 不受支持')
+    thinking = semantic.get('thinking', 'default')
+    if thinking not in {'default', 'enabled', 'disabled'}:
+        raise ValueError('配置 [semantic].thinking 必须是 default、enabled 或 disabled')
+    if thinking != 'default' and provider != 'deepseek':
+        raise ValueError('只有 provider = deepseek 支持显式 thinking 模式')
     if semantic.get('concurrency', 2) > 2:
         raise ValueError('配置 [semantic].concurrency 不得大于 2')
     # Disabled semantic checks do not require a connection or credentials.

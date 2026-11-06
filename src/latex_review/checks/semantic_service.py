@@ -199,7 +199,7 @@ class SemanticService:
         self._require_owner(paper_id)
         if mode == 'call':
             config = self.coordinator._configuration(context).get('semantic', {})
-            CallerConfig(**{k: v for k, v in config.items() if k != 'provider'}).validate()
+            CallerConfig(**config).validate()
         request_id = uuid4().hex
         with self.lock:
             if self.closed:
@@ -228,7 +228,7 @@ class SemanticService:
             elif mode == 'export':
                 self._update(path, request_id, state='ready')
             else:
-                settings = CallerConfig(**{k: v for k, v in config.get('semantic', {}).items() if k != 'provider'})
+                settings = CallerConfig(**config.get('semantic', {}))
                 settings.validate()
                 # Shared caller enforces <=2 actual provider requests across papers.
                 with self.lock:
@@ -252,7 +252,7 @@ class SemanticService:
         if row['state'] in {'queued', 'running', 'importing', 'cancelling'} or not row['authority_json']:
             _fail('not_ready', '请求未准备好或任务正在运行', 409)
         config = self.coordinator._configuration(context).get('semantic', {})
-        settings = CallerConfig(**{k: v for k, v in config.items() if k != 'provider'})
+        settings = CallerConfig(**config)
         settings.validate()
         request = self._restore(row['authority_json'])
         with self.lock:
@@ -317,9 +317,12 @@ class SemanticService:
         row = self._row(path, request_id)
         settings = self.coordinator._configuration(context).get('semantic', {})
         authority = self._restore(row['authority_json']) if row['authority_json'] else None
+        effective_provider = settings.get('provider', CallerConfig().provider)
+        effective_thinking = settings.get('thinking', CallerConfig().thinking)
         return {'request_id': request_id, 'state': row['state'], 'task': row['task'], 'mode': row['mode'],
                 'called': bool(row['called']), 'model_configured': settings.get('enabled') is True,
                 'budget': {k: settings.get(k, getattr(CallerConfig(), k)) for k in ('max_requests', 'max_input_tokens', 'max_output_tokens', 'concurrency', 'timeout')},
+                'provider': effective_provider, 'thinking': effective_thinking,
                 'model': settings.get('model') if settings.get('enabled') is True else None,
                 'input_id': authority.input_id if authority else None,
                 'preview': {'entry': authority.payload['versions']['entry'], 'unit_count': len(authority.payload['evidence_units']),

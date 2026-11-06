@@ -378,7 +378,7 @@ latex-review-check semantic import --request request.json --response candidates.
 
 新 CLI 独立退出协议：0=所请求范围完成；1=配置/读写/执行失败；2=部分完成、覆盖不足或被取消；3=显式 `--fail-on` 阈值命中。优先级 1 > 2 > 3 > 0；AI 候选不参与失败阈值。默认发现规则问题不改变为失败码，避免把提示误作编译错误。旧 CLI 的退出协议保持不变。
 
-### 9.4 配置示例（API-03，新增键尚不受当前版本支持）
+### 9.4 配置示例（API-03，当前版本支持）
 
 ```toml
 [checks]
@@ -393,7 +393,8 @@ path = ".latex-review-knowledge.json"
 
 [semantic]
 enabled = false
-provider = "openai-compatible"
+provider = "openai-compatible" # or "deepseek"
+thinking = "default" # default, enabled or disabled; explicit modes require deepseek
 base_url = "https://your-provider.example/v1"
 model = "your-model"
 api_key_env = "LATEX_REVIEW_LLM_KEY"
@@ -404,7 +405,7 @@ concurrency = 2
 timeout = 60
 ```
 
-预算是每次运行上限，不是已测成本。只有显式启用语义调用时才校验所需连接字段。只读项目强制采用外部知识位置，即使配置要求 project 也拒绝在源码根写入并说明原因。现有 `cli._config` 会拒绝未知顶层键，必须与 `project_profile.validate`、全局配置校验同步扩展；不能只实现 UI 设置。
+预算是每次运行上限，不是已测成本。`deepseek` provider 的显式 `thinking` 模式会映射为 `thinking.type`；通用 `openai-compatible` provider 不发送该私有字段。任务状态显示生效的 provider、thinking 模式与预算；每个响应保留原始 `finish_reason` 和可用 token 用量，缺失值记为 `null`/`unknown`，截断或拒绝不会自动追加调用。只有显式启用语义调用时才校验所需连接字段。只读项目强制采用外部知识位置，即使配置要求 project 也拒绝在源码根写入并说明原因。`cli._config`、`project_profile.validate` 与全局配置校验共同验证这些配置字段，避免 UI 与 CLI 使用不同标准。
 
 ## 10. 修改、导出与兼容（COMPAT-01）
 
