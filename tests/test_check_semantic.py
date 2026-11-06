@@ -14,6 +14,7 @@ from latex_review.checks.snapshot import capture_snapshot
 from latex_review.checks.semantic import (
     MAX_RESPONSE_BYTES, SemanticError, ProviderCompletionError, build_request, export_request,
     import_response, validate_candidate, _schema, CallerConfig, SemanticCaller, openai_transport,
+    provider_request,
 )
 from latex_review.identity import identity_hash
 
@@ -66,6 +67,9 @@ def test_contracts_strict_and_export_is_not_authority(host):
     assert contract["allowed_object_ids"] == ["method"]
     assert contract["evidence_range_example"] == {"unit_text": "Alpha beta.", "quote": "Alpha", "start": 0, "end": 5}
     assert "absolute source offset" in public["instructions"]
+    provider = json.loads(provider_request(request))
+    assert "sources" not in provider["evidence_units"][0]
+    assert "sources" in public["evidence_units"][0]
     with pytest.raises(SemanticError, match="known host"):
         import_response(public, response(request), current)
     with pytest.raises(SemanticError):
@@ -313,6 +317,8 @@ def test_fake_provider_usage_and_no_tools_cache_identity(host, caller_factory):
         assert "allowed_candidate_kinds" in body["messages"][0]["content"]
         assert "allowed_object_ids" in body["messages"][0]["content"]
         assert "Unicode code-point offsets" in body["messages"][0]["content"]
+        assert "intentionally omitted" in body["messages"][0]["content"]
+        assert "\"sources\"" not in body["messages"][1]["content"]
         return json.dumps(response(request, candidate(request))), {"prompt_tokens": 100, "completion_tokens": 20, "total_tokens": 120}
     caller = caller_factory(provider)
     run = caller.run(request, lambda: current)
