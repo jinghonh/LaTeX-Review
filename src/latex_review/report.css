@@ -758,6 +758,8 @@ main {
 /* Comparison keeps report metadata outside the scrolling reading area. */
 @media screen {
   body.compare-view { display:flex; flex-direction:column; height:100vh; overflow:hidden; }
+  body.compare-view > #review-workspace,
+  body.compare-view #workspace-reading { display:flex; flex:1 1 auto; flex-direction:column; min-height:0; }
   .compare-view .report-header,.compare-view .report-supplement { display:none; }
   body.compare-view .report-controls { position:relative; top:0; flex:none; margin-top:16px; }
   body.compare-view .reader-tools { flex:none; max-height:30vh; overflow:auto; margin-top:0; margin-bottom:12px; }
