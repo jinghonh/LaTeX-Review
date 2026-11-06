@@ -1,5 +1,4 @@
 """Real HTTP/browser acceptance for report annotation components."""
-import os
 import json
 from pathlib import Path
 from threading import Thread
@@ -8,7 +7,7 @@ from latex_review import compare_projects, parse_project, resolve_sources, write
 from latex_review.serve import create_server
 
 @pytest.fixture
-def annotated_page(tmp_path):
+def annotated_page(tmp_path, isolated_browser):
     for side in ('old','new'):
         root=tmp_path/side; root.mkdir()
         (root/'main.tex').write_text(r'\documentclass{article}\begin{document}'+'\n'+
@@ -17,16 +16,17 @@ def annotated_page(tmp_path):
     with resolve_sources(entry='main.tex',old_dir=tmp_path/'old',new_dir=tmp_path/'new') as pair:
         old,new=parse_project(pair.old.expand()),parse_project(pair.new.expand())
         report=write_report(old,new,compare_projects(old,new),tmp_path/'report',pdf_converter='')
-    from playwright.sync_api import sync_playwright
-    with create_server(report.html.parent) as server, sync_playwright() as pw:
+    with create_server(report.html.parent) as server:
         worker=Thread(target=server.serve_forever);worker.start()
-        browser=pw.chromium.launch(executable_path=os.environ.get('LATEX_REVIEW_BROWSER'))
-        page=browser.new_page(viewport={'width':1280,'height':900})
-        page.route('https://**',lambda r:r.abort())
-        page.goto(f'http://127.0.0.1:{server.server_port}/report.html')
-        page.wait_for_function('window.reviewAnnotations?.isReady() === true')
-        yield page
-        browser.close();server.shutdown();worker.join()
+        try:
+            with isolated_browser.new_context(viewport={'width':1280,'height':900}) as context:
+                page=context.new_page()
+                page.route('https://**',lambda r:r.abort())
+                page.goto(f'http://127.0.0.1:{server.server_port}/report.html')
+                page.wait_for_function('window.reviewAnnotations?.isReady() === true')
+                yield page
+        finally:
+            server.shutdown();worker.join()
 
 
 def create(page,changed=False,start=0,end=7):

@@ -1,12 +1,10 @@
 """Stage 3 uses installed Chrome, including file and static HTTP delivery."""
 import json
-import os
 from pathlib import Path
 from functools import partial
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from threading import Thread
 import pytest
-from playwright.sync_api import sync_playwright
 from latex_review.live import build
 from latex_review.sources import ProjectSource
 from latex_review.contract import ComparisonSource
@@ -26,11 +24,8 @@ def live_report(tmp_path):
     return root,entry,output,source
 
 @pytest.fixture
-def chrome():
-    with sync_playwright() as pw:
-        browser=pw.chromium.launch(executable_path=os.environ.get('LATEX_REVIEW_BROWSER'))
-        yield browser
-        browser.close()
+def chrome(isolated_browser):
+    return isolated_browser
 
 def ready(p,url):
     p.route('https://**',lambda r:r.abort());p.goto(url);p.wait_for_function('window.reviewAnnotationDeliveryReady===true')

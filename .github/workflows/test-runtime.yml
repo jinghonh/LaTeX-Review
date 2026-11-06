@@ -1,0 +1,66 @@
+name: Full test runtime comparison
+on:
+  push:
+    branches:
+      - agent/test-runtime-optimization-9be57528c9ca
+  workflow_dispatch:
+
+# One baseline and one changed run execute sequentially on the SAME runner.
+# This workflow only runs functional tests, never saved-current benchmarks.
+jobs:
+  compare:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
+    env:
+      LATEX_REVIEW_REQUIRE_BROWSER: '1'
+      LATEX_REVIEW_FUNCTIONAL_ONLY: '1'
+      LATEX_REVIEW_TEST_SHARDS: 'auto'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: after
+          fetch-depth: 0
+      - uses: actions/checkout@v4
+        with:
+          ref: 702896fd22bc25c9ef016badde6265eedda68114
+          path: before
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install one dependency environment for both revisions
+        run: |
+          python -m pip install -e './before[test]'
+          python -m playwright install --with-deps chromium
+          python -m pip freeze > "$RUNNER_TEMP/dependencies.txt"
+      - name: Full baseline (unchanged tests)
+        working-directory: before
+        run: python ../after/scripts/measure-tests.py --output "$RUNNER_TEMP/test-runtime/before"
+      - name: Select changed checkout
+        if: ${{ !cancelled() }}
+        run: python -m pip install --no-deps -e ./after
+      - name: Full changed run (same runner, no test filtering)
+        if: ${{ !cancelled() }}
+        working-directory: after
+        run: python scripts/measure-tests.py --output "$RUNNER_TEMP/test-runtime/after"
+      - name: Compare full coverage and measured wall time
+        if: ${{ !cancelled() }}
+        working-directory: after
+        run: |
+          python scripts/compare-test-runs.py \
+            "$RUNNER_TEMP/test-runtime/before/timings.json" \
+            "$RUNNER_TEMP/test-runtime/after/timings.json" \
+            > "$RUNNER_TEMP/test-runtime/comparison.json"
+      - name: Preserve every result, including failures
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-runtime-${{ matrix.os }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            ${{ runner.temp }}/test-runtime/
+            ${{ runner.temp }}/dependencies.txt
+          if-no-files-found: error

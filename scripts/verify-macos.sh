@@ -4,12 +4,7 @@ if [ "$(uname -s)" != "Darwin" ]; then
   echo '仅在 macOS 上运行此验证入口' >&2
   exit 1
 fi
-python3 -m pytest -q -ra
-latex-review --help >/dev/null
-latex-review --version >/dev/null
-latex-review-check --help >/dev/null
-latex-review-check query --help >/dev/null
-latex-review-check semantic export --help >/dev/null
+"$(dirname "$0")/verify-tests.sh" full
 # Functional-only validation honors an explicit performance-work hold without
 # changing the default benchmark or its acceptance criteria.
 if [ "${LATEX_REVIEW_FUNCTIONAL_ONLY:-0}" = "1" ]; then
