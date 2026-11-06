@@ -43,6 +43,7 @@
     const values = Object.fromEntries(fields.map(id => [id, document.getElementById(id).value]));
     return {...values, sync: document.getElementById('sync-scroll').checked,
       selected: navigation.selected(), scrollY: window.scrollY,
+      compareScrollTop: document.querySelector('main').scrollTop,
       readerOpen: document.getElementById('reader-tools').open, query: document.getElementById('report-search').value,
       sections: window.reviewSections.snapshot(),
       directoryOpen: document.body.classList.contains('directory-open'),
@@ -201,6 +202,8 @@
       if (Number.isFinite(value) && value >= 0) document.querySelector('.preview-side[data-side="' + side + '"]').scrollTop = value;
     }
     if (Number.isFinite(ui.scrollY) && ui.scrollY >= 0) window.scrollTo(0, ui.scrollY);
+    if (Number.isFinite(ui.compareScrollTop) && ui.compareScrollTop >= 0)
+      document.querySelector('main').scrollTop = ui.compareScrollTop;
     restoring = false;
   }
   if (document.readyState === 'complete') requestAnimationFrame(restorePosition);
@@ -208,6 +211,7 @@
   let timer;
   function scheduleSave() { clearTimeout(timer); timer = setTimeout(persist, 200); }
   window.addEventListener('scroll', scheduleSave, {passive: true});
+  document.querySelector('main').addEventListener('scroll', scheduleSave, {passive: true});
   document.querySelectorAll('.preview-side').forEach(panel => panel.addEventListener('scroll', scheduleSave, {passive: true}));
   window.addEventListener('pagehide', persist);
 })();

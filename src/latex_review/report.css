@@ -741,15 +741,39 @@ main {
   max-width:none;
   padding:24px;
   gap:24px;
+  margin:0;
 }
 
 .compare-view .preview-side {
   display:block;
+  /* Directory auto margins must not let content widen the grid item. */
+  width:100%;
   height:calc(100vh - 210px);
   min-height:350px;
   overflow:auto;
   padding:30px;
   scrollbar-gutter:stable;
+}
+
+/* Comparison keeps report metadata outside the scrolling reading area. */
+@media screen {
+  body.compare-view { display:flex; flex-direction:column; height:100vh; overflow:hidden; }
+  .compare-view .report-header,.compare-view .report-supplement { display:none; }
+  body.compare-view .report-controls { position:relative; top:0; flex:none; margin-top:16px; }
+  body.compare-view .reader-tools { flex:none; max-height:30vh; overflow:auto; margin-top:0; margin-bottom:12px; }
+  body.compare-view main { flex:1; min-height:0; width:auto; margin-top:0; margin-bottom:0; overflow:hidden; }
+  body.compare-view .preview-side { height:100%; min-height:0; overscroll-behavior:contain; }
+  body.compare-view.sync-scroll-view main { overflow:auto; overscroll-behavior:contain; align-items:start; }
+  body.compare-view.sync-scroll-view .preview-side { height:auto; min-height:100%; overflow:visible; scrollbar-gutter:auto; }
+  .compare-view.sync-scroll-view .preview-side .review-node,
+  .compare-view.sync-scroll-view .preview-side :is(h1,h2,h3,h4,h5,h6) { scroll-margin-top:20px; }
+}
+@media screen and (max-width:540px) {
+  body.compare-view main { grid-template-rows:repeat(2,minmax(0,1fr)); }
+  body.compare-view.sync-scroll-view main { grid-template-rows:auto; }
+}
+@media screen and (min-width:1100px) {
+  .compare-view.directory-open .report-controls,.compare-view.directory-open .reader-tools { margin-left:340px; }
 }
 
 .compare-view .inline-change {

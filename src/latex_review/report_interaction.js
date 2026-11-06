@@ -29,6 +29,10 @@
   let arrangeInlineChanges = () => {};
   let selected = -1;
   function readingView() { return layout && layout.value === 'reading'; }
+  function sharedScroll() { return layout && !readingView() && sync.checked; }
+  function updateScrollMode() {
+    document.body.classList.toggle('sync-scroll-view', !!sharedScroll());
+  }
   function updateSelection(card) {
     selected = cards.indexOf(card);
     document.dispatchEvent(new CustomEvent('review-selection', {detail: card?.id || null}));
@@ -214,6 +218,7 @@
     document.querySelectorAll('.preview-side .is-highlighted').forEach(node => node.classList.remove('is-highlighted'));
     document.querySelectorAll('.preview-side .is-cell-highlighted').forEach(node => node.classList.remove('is-cell-highlighted'));
     const messages = [];
+    let sharedTarget = null;
     const sentenceJump = button.classList.contains('detail-jump') &&
       (button.dataset.oldSentences || button.dataset.newSentences);
     for (const [side, label] of [['old', '修改前'], ['new', '修改后']]) {
@@ -232,7 +237,8 @@
         empty.classList.remove('is-visible');
         node.classList.add('is-highlighted');
         if (precise) sentenceNodes.slice(1).forEach(sentence => sentence.classList.add('is-highlighted'));
-        if (!readingView()) panel.scrollTop += node.getBoundingClientRect().top - panel.getBoundingClientRect().top - panel.clientHeight / 3;
+        if (sharedScroll()) sharedTarget = node;
+        else if (!readingView()) panel.scrollTop += node.getBoundingClientRect().top - panel.getBoundingClientRect().top - panel.clientHeight / 3;
         const row = button.dataset[side + 'Row'];
         const column = button.dataset[side + 'Column'];
         if (row || column) {
@@ -250,6 +256,7 @@
     }
     mutedUntil = performance.now() + 350;
     status.textContent = messages.join('；');
+    if (scroll && sharedTarget) sharedTarget.scrollIntoView({block: 'start', behavior: 'auto'});
     if (readingView() && detail) {
       let selectedDetail = null;
       if (button.classList.contains('detail-jump'))
@@ -406,7 +413,7 @@
     }));
   }
   function align(side) {
-    if (readingView() || !sync.checked || performance.now() < mutedUntil || window.matchMedia('(max-width:1000px)').matches) return;
+    if (readingView() || sharedScroll() || !sync.checked || performance.now() < mutedUntil || window.matchMedia('(max-width:1000px)').matches) return;
     if (!geometry) measure();
     const panel = panels[side];
     const targetSide = side === 'old' ? 'new' : 'old';
@@ -467,7 +474,7 @@
     const offset = entry ? panel.scrollTop + panel.clientHeight / 2 - entry.top : null;
     geometry = null;
     // Width changes use the shared character anchor. Keep block anchors for other layout changes.
-    if (entry && sync.checked && !readingView() && !window.reviewReadingPosition?.isResizing()) {
+    if (entry && sync.checked && !readingView() && !sharedScroll() && !window.reviewReadingPosition?.isResizing()) {
       measure();
       const updated = geometry[activeSide].find(item => item.node === entry.node);
       if (updated) {
@@ -491,7 +498,7 @@
     panel.addEventListener('load', invalidateGeometry, true);
     panel.addEventListener('toggle', invalidateGeometry, true);
   }
-  sync.addEventListener('change', () => { mutedUntil = 0; invalidateGeometry(); });
+  sync.addEventListener('change', () => { updateScrollMode(); mutedUntil = 0; invalidateGeometry(); });
   for (const control of [mode, kind, category, layout].filter(Boolean))
     control.addEventListener('change', invalidateGeometry);
   if (window.addEventListener) window.addEventListener('resize', invalidateGeometry, {passive: true});
@@ -534,6 +541,7 @@
     layout.addEventListener('change', () => {
       document.body.classList.toggle('compare-view', !readingView());
       document.body.classList.toggle('reading-view', readingView());
+      updateScrollMode();
       updateTriggerState();
       arrangeInlineChanges();
       if (selected >= 0) navigate(cards[selected].querySelector('.change-jump'), 'mode');
@@ -968,7 +976,7 @@
     },
     chapter(side, id, otherId) {
       this.node(side, id, false, true);
-      if (!readingView() && otherId) {
+      if (!readingView() && !sharedScroll() && otherId) {
         const otherSide = side === 'new' ? 'old' : 'new';
         const other = document.getElementById(otherSide + '-' + otherId);
         if (other) {

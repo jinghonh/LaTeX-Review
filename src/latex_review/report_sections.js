@@ -147,7 +147,8 @@
       scheduled = false;
       const compare = document.getElementById('layout-mode')?.value === 'compare';
       const side = document.querySelector('.preview-side[data-side="new"]');
-      const threshold = compare ? side.getBoundingClientRect().top + 40 : document.querySelector('.report-controls').getBoundingClientRect().bottom + 40;
+      const scroller = document.body.classList.contains('sync-scroll-view') ? document.querySelector('main') : side;
+      const threshold = compare ? scroller.getBoundingClientRect().top + 40 : document.querySelector('.report-controls').getBoundingClientRect().bottom + 40;
       let active;
       headings.filter(node => node.side === 'new').forEach(node => {
         const target = document.getElementById('new-' + node.id);
@@ -176,6 +177,7 @@
     });
   }
   window.addEventListener('scroll', track, {passive: true});
+  document.querySelector('main').addEventListener('scroll', track, {passive: true});
   document.querySelectorAll('.preview-side').forEach(side => side.addEventListener('scroll', track, {passive: true}));
   toggle.addEventListener('click', () => open(panel.hidden));
   document.getElementById('close-sections').addEventListener('click', () => { open(false); toggle.focus(); });

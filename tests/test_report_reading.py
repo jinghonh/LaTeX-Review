@@ -75,6 +75,42 @@ def test_inline_expansion_keeps_reading_position(reading_report, browser_page):
     assert summary_box['y'] + summary_box['height'] < page.evaluate('innerHeight')
 
 
+@pytest.mark.parametrize('width', [1100, 1280, 1600])
+@pytest.mark.parametrize('directory', ['sections', 'changes'])
+def test_compare_panels_fit_with_directory_open(tmp_path, browser_page, width, directory):
+    # A wide table must scroll inside its panel, not enlarge the grid item.
+    for side in ('old', 'new'):
+        source = tmp_path / side
+        source.mkdir()
+        (source / 'main.tex').write_text(
+            '\\documentclass{article}\n\\begin{document}\n\\section{Results}\n'
+            f'The {side} model predicts the boundary from the observation history.\n\n'
+            '\\begin{tabular}{llllll}\n'
+            'Method & Coefficient error & Support error & Boundary error & Hausdorff distance & Convexity violations'
+            '\\\\\n\\end{tabular}\n\\end{document}\n',
+            encoding='utf-8',
+        )
+    with resolve_sources(entry='main.tex', old_dir=tmp_path / 'old', new_dir=tmp_path / 'new') as pair:
+        old, new = parse_project(pair.old.expand()), parse_project(pair.new.expand())
+        report = write_report(old, new, compare_projects(old, new), tmp_path / 'report', pdf_converter='', single_file=True)
+    page = browser_page
+    page.set_viewport_size({'width': width, 'height': 900})
+    page.goto(report.html.as_uri())
+    toggle = page.locator(f'#toggle-{directory}')
+    if toggle.get_attribute('aria-expanded') != 'true':
+        toggle.click()
+    page.locator('#layout-mode').select_option('compare')
+    assert page.locator(f'#{directory}-side').is_visible()
+
+    old = page.locator('.preview-side[data-side="old"]').bounding_box()
+    new = page.locator('.preview-side[data-side="new"]').bounding_box()
+    main = page.locator('main').bounding_box()
+    assert old['x'] >= main['x']
+    assert old['x'] + old['width'] <= new['x']
+    assert new['x'] + new['width'] <= main['x'] + main['width']
+    assert not page.evaluate('document.documentElement.scrollWidth > innerWidth')
+
+
 def test_reading_inline_navigation_and_filters(reading_report, browser_page):
     page = browser_page
     errors = []

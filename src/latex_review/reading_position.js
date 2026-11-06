@@ -3,27 +3,31 @@
   'use strict';
   const papers = [...document.querySelectorAll('.preview-side')];
   if (!papers.length) return;
+  const main = document.querySelector('main');
   const content = '.node-paragraph p,.node-figure figcaption,.table-caption,.table-preview td,.node-equation,h1,h2,h3,h4,h5,h6,.translation-block';
   const excluded = '.annotation-card,.annotation-editor,.translation-item-controls,.inline-change,.old-excerpt,button';
   let anchors = [], dimensions = '', frame = 0, restoring = false, settleFrame = 0, stableFrames = 0;
   const mode = () => document.getElementById('layout-mode')?.value || 'reading';
   let readingMode = mode();
   const expectedScroll = new Map();
-  const nativeAnchoring = new Map([document.documentElement, ...papers].map(node => [node, node.style.overflowAnchor]));
+  const nativeAnchoring = new Map([document.documentElement, main, ...papers].map(node => [node, node.style.overflowAnchor]));
   function enableNativeAnchoring(enabled) {
     for (const [node, original] of nativeAnchoring) node.style.overflowAnchor = enabled ? original : 'none';
   }
   function signature() {
-    return [innerWidth, innerHeight, ...papers.flatMap(p => [p.clientWidth,
+    return [innerWidth, innerHeight, document.body.classList.contains('compare-view') ? main.clientHeight : 0, ...papers.flatMap(p => [p.clientWidth,
       getComputedStyle(p).overflowY])].join(':');
   }
   function scroller(paper) {
-    const style = getComputedStyle(paper);
-    return /auto|scroll/.test(style.overflowY) && paper.scrollHeight > paper.clientHeight ? paper : window;
+    for (let node = paper; node && node !== document.body; node = node.parentElement)
+      if (/auto|scroll/.test(getComputedStyle(node).overflowY) && node.scrollHeight > node.clientHeight) return node;
+    return window;
   }
   function viewport(paper, scroll) {
-    const rect = paper.getBoundingClientRect();
-    if (scroll !== window) return {top: Math.max(0, rect.top + paper.clientTop), bottom: Math.min(innerHeight, rect.bottom)};
+    if (scroll !== window) {
+      const rect = scroll.getBoundingClientRect();
+      return {top: Math.max(0, rect.top + scroll.clientTop), bottom: Math.min(innerHeight, rect.bottom)};
+    }
     const toolbar = document.querySelector('.report-controls');
     const bar = toolbar?.getBoundingClientRect();
     const top = bar && getComputedStyle(toolbar).position === 'sticky' ? Math.max(0, bar.bottom) : 0;
@@ -95,15 +99,15 @@
     readingMode = mode();
     dimensions = signature();
     anchors = papers.map(capture).filter(Boolean);
-    // In document flow only the currently visible paper controls the window.
-    const windows = anchors.filter(anchor => anchor.scroll === window);
-    if (windows.length > 1) anchors = anchors.filter(anchor => anchor.scroll !== window || anchor === windows.at(-1));
+    // Only one paper controls each shared scroller; prefer the new paper.
+    anchors = [...new Map(anchors.map(anchor => [anchor.scroll, anchor])).values()];
   }
   function restore() {
     restoring = true;
     enableNativeAnchoring(false);
     stableFrames = 0;
-    for (const anchor of anchors) {
+    const current = new Map(anchors.map(anchor => [scroller(anchor.paper), anchor]));
+    for (const anchor of current.values()) {
       if (!anchor.element.isConnected || !anchor.paper.getClientRects().length) continue;
       const scroll = scroller(anchor.paper), view = viewport(anchor.paper, scroll);
       const rect = anchor.range?.startContainer.isConnected ? anchor.range.getBoundingClientRect() : anchor.element.getBoundingClientRect();
@@ -150,6 +154,7 @@
   }
   window.reviewReadingPosition = Object.freeze({isResizing: () => mode() === readingMode && (restoring || signature() !== dimensions)});
   papers.forEach(paper => paper.addEventListener('scroll', scroll, {passive: true}));
+  main.addEventListener('scroll', scroll, {passive: true});
   window.addEventListener('scroll', scroll, {passive: true});
   window.addEventListener('resize', schedule, {passive: true});
   if (typeof ResizeObserver !== 'undefined') {
