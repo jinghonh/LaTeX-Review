@@ -21,6 +21,7 @@ from ..identity import identity_hash
 
 SCHEMA_VERSION = "1.0"
 PROMPT_VERSION = "semantic-2"
+PROVIDER_CONTEXT_VERSION = "provider-context-1"
 MAX_REQUEST_BYTES = 2 * 1024 * 1024
 MAX_RESPONSE_BYTES = 512 * 1024
 TASK_KINDS = {
@@ -223,6 +224,26 @@ def export_request(request):
     if not isinstance(request, SemanticRequest):
         raise SemanticError("unknown_request", "a known host request is required")
     return request._json
+
+
+def _provider_payload(request):
+    """Build the versioned model view without host source coordinates."""
+    if not isinstance(request, SemanticRequest):
+        raise SemanticError("unknown_request", "a known host request is required")
+    payload = request.payload
+    for unit in payload["evidence_units"]:
+        unit.pop("sources", None)
+    return payload
+
+
+def provider_request(request):
+    """Return the model context without host source coordinates.
+
+    The retained/exported request keeps exact provenance for validation and audit.
+    A provider does not need those absolute file offsets, and showing them beside
+    the unit text invites copying them into the response's unit-relative range.
+    """
+    return _json(_provider_payload(request))
 
 
 def _sources(request, unit, start, end):
@@ -496,9 +517,14 @@ class SemanticCaller:
 
     def cache_identity(self, request):
         payload = request.payload
-        # Exclude random request_id; include all data, model, connection and contracts.
+        provider_payload = _provider_payload(request)
+        # Exclude random request_id; include the exact versioned provider view so
+        # changing the projection cannot reuse a result produced from another view.
         payload.pop("request_id")
-        return identity_hash({"request": payload, "response_schema": _schema("response"),
+        provider_payload.pop("request_id", None)
+        return identity_hash({"request": payload, "provider_context": provider_payload,
+                              "provider_context_version": PROVIDER_CONTEXT_VERSION,
+                              "response_schema": _schema("response"),
                               "model": self.config.model, "endpoint": self.config.base_url,
                               "provider": self.config.provider, "thinking": self.config.thinking})
 
@@ -544,8 +570,13 @@ class SemanticCaller:
                 request_contract = request.payload.get("response_contract")
                 system_policy = (_prompt_instructions(request_contract)
                                  if request_contract is not None else POLICY)
+                if request_contract is not None:
+                    system_policy += (f"\nProvider context version: {PROVIDER_CONTEXT_VERSION}. "
+                                      "The host keeps source provenance separately for validation. "
+                                      "Source file coordinates are intentionally omitted from this context; "
+                                      "derive ranges only from each unit's text.")
                 messages = [{"role": "system", "content": system_policy + "\nResponse schema: " + _json(_schema("response"))},
-                            {"role": "user", "content": export_request(request)}]
+                            {"role": "user", "content": provider_request(request)}]
                 if format_context:
                     messages.append({"role": "user", "content": format_context})
                 estimate = len(_json(messages).encode("utf-8")) + 1024
