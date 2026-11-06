@@ -16,6 +16,8 @@ def test_disabled_semantic_needs_no_connection():
     {'checks': {'debounce_ms': -1}}, {'knowledge': {'storage': 'merge'}},
     {'semantic': {'enabled': True}}, {'semantic': {'concurrency': 3}},
     {'semantic': {'api_key': 'secret'}}, {'semantic': {'max_requests': True}},
+    {'semantic': {'thinking': 'disabled'}},
+    {'semantic': {'provider': 'deepseek', 'thinking': 'unknown'}},
 ])
 def test_invalid_check_config_rejected(data):
     with pytest.raises(ValueError):
@@ -47,3 +49,10 @@ def test_unknown_global_key_still_rejected(tmp_path, monkeypatch):
 def test_enabled_semantic_connection_safety(url):
     with pytest.raises(ValueError):
         validate({'semantic': {'enabled': True, 'base_url': url, 'model': 'model', 'api_key_env': 'KEY'}})
+
+
+def test_deepseek_thinking_configuration_is_explicit():
+    result = validate({'semantic': {'enabled': True, 'provider': 'deepseek', 'thinking': 'disabled',
+                                    'base_url': 'https://api.deepseek.com/v1', 'model': 'deepseek-chat',
+                                    'api_key_env': 'KEY'}})
+    assert result['semantic']['thinking'] == 'disabled'

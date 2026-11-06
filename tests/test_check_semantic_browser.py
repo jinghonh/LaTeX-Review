@@ -24,7 +24,7 @@ def setup(page, *, writable=True, configured=False):
       window.calls=[]; window.relationship=null; window.exposed=null;
       const inputId='a'.repeat(64);
       const evidence={file:'main.tex',quote:'Original <img onerror="window.pwned=1">',start:0,end:8,reliability:'exact'};
-      window.state={request_id:'known-host-id',state:'ready',task:'concept_definition',input_id:inputId,called:false,model_configured:configured,model:'fixed-fake',budget:{max_requests:3,max_input_tokens:60000,max_output_tokens:12000,timeout:60},preview:{entry:'main.tex',unit_count:1,sections:['A']},result:null,error:null};
+      window.state={request_id:'known-host-id',state:'ready',task:'concept_definition',input_id:inputId,called:false,model_configured:configured,model:'fixed-fake',provider:configured?'deepseek':'openai-compatible',thinking:configured?'disabled':'default',budget:{max_requests:3,max_input_tokens:60000,max_output_tokens:12000,timeout:60},preview:{entry:'main.tex',unit_count:1,sections:['A']},result:null,error:null};
       window.reviewWorkspace={
         panels:{semantic:document.getElementById('semantic')},capability:{paper_id:'p',available:writable,capabilities:{semantic_import:writable,knowledge:writable}},report:{input_id:inputId},
         element(tag,text,attrs={}) { const x=document.createElement(tag);if(text!==undefined)x.textContent=text;Object.entries(attrs).forEach(([k,v])=>x.setAttribute(k,v));return x; },
@@ -84,6 +84,7 @@ def test_explicit_call_requires_preview_and_confirmation(browser_page):
     setup(page, configured=True)
     assert not any(c['path'].endswith('/invoke') for c in page.evaluate('calls'))
     page.get_by_role('button', name='准备本地请求（不联网）').click()
+    assert '提供商：deepseek；思考模式：disabled' in page.locator('#semantic-manager').inner_text()
     page.get_by_role('button', name='手动调用已配置模型').wait_for()
     page.once('dialog', lambda dialog: dialog.dismiss())
     page.get_by_role('button', name='手动调用已配置模型').click()
