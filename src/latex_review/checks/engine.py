@@ -75,13 +75,24 @@ def evaluate_current(document, knowledge=None, rule_set=None, *, configuration=N
                      "complete": False, "applicable_count": None,
                      "reasons": ["requires_two_versions"], "blind_spots": []})
     findings = []
+    external_incomplete_codes = {"missing_external_aux", "stale_external_aux", "malformed_external_aux",
+                                 "uncertain_external_reference", "unreadable_external_source",
+                                 "unreadable_external_aux", "oversized_external_aux",
+                                 "external_aux_outside_root", "external_aux_nesting_limit",
+                                 "unavailable_external_aux", "uncertain_external_aux"}
+    external_only_incomplete = (bool(scan.get("external_uncertain_prefixes")) and
+                                any(b["code"] in external_incomplete_codes for b in blind_spots) and
+                                all(b["code"] in external_incomplete_codes for b in blind_spots))
     for item in scan["findings"]:
         rule = item["rule_id"]
         if rule not in enabled or scan["execution_uncertain"]:
             continue
         # Only duplicate labels have affirmative evidence independent of an
-        # absence proof across the whole document.
-        if rule != "duplicate_label" and not next(c for c in coverage if c["rule_id"] == rule)["complete"]:
+        # absence proof across the whole document. Local references remain
+        # provable when the only incomplete input is a prefixed external aux.
+        if (rule != "duplicate_label" and
+                not next(c for c in coverage if c["rule_id"] == rule)["complete"] and
+                not (rule == "unresolved_reference" and external_only_incomplete)):
             continue
         occurrences, evidence = [], []
         for index, site in enumerate(item["sites"]):

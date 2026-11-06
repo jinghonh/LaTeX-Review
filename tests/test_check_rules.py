@@ -192,3 +192,148 @@ def test_frozen_project_never_reads_resource_bytes(tmp_path, monkeypatch):
     report = evaluate_current(build_check_document(frozen))
     assert report['status'] == 'partial'
     assert not report['findings']
+
+
+def _external_fixture(root, declaration=r'\externaldocument[][nocite]{supplement}'):
+    (root / 'main.tex').write_text(
+        r'\documentclass{article}' + '\n' + declaration + '\n' +
+        r'\begin{document}See~\ref{sec:external} and~\ref{missing}.\end{document}' + '\n')
+    (root / 'supplement.tex').write_text(
+        r'\documentclass{article}\begin{document}\section{Details}\label{sec:external}\end{document}' + '\n')
+    (root / 'supplement.aux').write_text(r'\relax\newlabel{sec:external}{{S1}{1}{Details}{section.1}{}}' + '\n')
+
+
+def test_binary_resource_capture_does_not_break_source_evidence(tmp_path):
+    (tmp_path / 'plot.pdf').write_bytes(b'%PDF-1.4\xc4\x00binary')
+    _, report = evaluate(tmp_path, r'\includegraphics{plot} \ref{missing}')
+    assert [f['target'] for f in report['findings']] == ['missing']
+
+
+def test_externaldocument_aux_labels_are_resolved_and_missing_labels_remain_visible(tmp_path):
+    _external_fixture(tmp_path)
+    report = evaluate_current(build_check_document(capture_snapshot(tmp_path / 'main.tex')))
+    assert [f['target'] for f in report['findings']] == ['missing']
+    coverage = next(c for c in report['coverage'] if c['rule_id'] == 'unresolved_reference')
+    assert coverage['complete'] and coverage['status'] == 'executed'
+
+
+def test_externaldocument_prefix_and_aux_changes_are_part_of_the_snapshot(tmp_path):
+    _external_fixture(tmp_path, r'\externaldocument[ext:]{supplement}')
+    (tmp_path / 'main.tex').write_text(
+        r'\documentclass{article}\externaldocument[ext:]{supplement}\begin{document}'
+        r'\ref{ext:sec:external}\ref{ext:missing}\end{document}' + '\n')
+    first = build_check_document(capture_snapshot(tmp_path / 'main.tex'))
+    report = evaluate_current(first)
+    assert [f['target'] for f in report['findings']] == ['ext:missing']
+    original_id = first.snapshot.content_id
+    (tmp_path / 'supplement.aux').write_text(r'\relax\newlabel{other}{{S2}{1}{}{}}' + '\n')
+    second = build_check_document(capture_snapshot(tmp_path / 'main.tex'))
+    assert second.snapshot.content_id != original_id
+    changed = evaluate_current(second)
+    assert {f['target'] for f in changed['findings']} == {'ext:sec:external', 'ext:missing'}
+
+
+def test_multiple_external_entries_keep_prefixes_and_dependencies_separate(tmp_path):
+    main = (tmp_path / 'main.tex')
+    main.write_text(
+        r'\documentclass{article}\externaldocument[one:]{supplement}'
+        r'\externaldocument[two:]{appendix}\begin{document}'
+        r'\ref{one:sec:supplement}\ref{two:sec:appendix}\ref{two:missing}'
+        r'\end{document}' + '\n')
+    for stem, label in (('supplement', 'sec:supplement'), ('appendix', 'sec:appendix')):
+        (tmp_path / f'{stem}.tex').write_text(r'\documentclass{article}' + '\n')
+        (tmp_path / f'{stem}.aux').write_text(
+            rf'\relax\newlabel{{{label}}}{{{{1}}{{1}}{{}}{{}}{{}}}}' + '\n')
+    document = build_check_document(capture_snapshot(main))
+    report = evaluate_current(document)
+    assert [f['target'] for f in report['findings']] == ['two:missing']
+    assert {(d.kind, d.file, d.external_prefix) for d in document.parsed.expanded.dependencies} == {
+        ('external_aux', 'supplement.aux', 'one:'), ('external_source', 'supplement.tex', 'one:'),
+        ('external_aux', 'appendix.aux', 'two:'), ('external_source', 'appendix.tex', 'two:')}
+
+
+def test_unreliable_external_aux_suppresses_absence_claim_and_marks_coverage_partial(tmp_path):
+    _external_fixture(tmp_path)
+    (tmp_path / 'supplement.aux').unlink()
+    document = build_check_document(capture_snapshot(tmp_path / 'main.tex'))
+    report = evaluate_current(document)
+    assert report['status'] == 'partial' and report['findings'] == []
+    coverage = next(c for c in report['coverage'] if c['rule_id'] == 'unresolved_reference')
+    assert not coverage['complete'] and 'source_incomplete' in coverage['reasons']
+    assert any(b['code'] == 'missing_external_aux' for b in coverage['blind_spots'])
+
+
+def test_missing_prefixed_external_aux_keeps_local_missing_reference_detection(tmp_path):
+    _external_fixture(tmp_path, r'\externaldocument[ext:]{supplement}')
+    (tmp_path / 'main.tex').write_text(
+        r'\documentclass{article}\externaldocument[ext:]{supplement}\begin{document}'
+        r'\ref{ext:sec:external}\ref{local-missing}\end{document}' + '\n')
+    (tmp_path / 'supplement.aux').unlink()
+    report = evaluate_current(build_check_document(capture_snapshot(tmp_path / 'main.tex')))
+    assert [f['target'] for f in report['findings']] == ['local-missing']
+    assert report['status'] == 'partial'
+
+
+def test_stale_external_aux_suppresses_absence_claim(tmp_path):
+    _external_fixture(tmp_path)
+    import os
+    aux = tmp_path / 'supplement.aux'
+    tex = tmp_path / 'supplement.tex'
+    os.utime(aux, (tex.stat().st_atime - 2, tex.stat().st_mtime - 2))
+    report = evaluate_current(build_check_document(capture_snapshot(tmp_path / 'main.tex')))
+    assert report['status'] == 'partial' and report['findings'] == []
+    assert any(b['code'] == 'stale_external_aux'
+               for c in report['coverage'] for b in c['blind_spots'])
+
+
+def _external_coverage_codes(report):
+    return {spot['code'] for row in report['coverage'] for spot in row['blind_spots']}
+
+
+def test_external_aux_read_errors_are_explicit_partial_coverage(tmp_path, monkeypatch):
+    _external_fixture(tmp_path)
+    from pathlib import Path
+    original_read_bytes = Path.read_bytes
+
+    def fail_aux_read(path):
+        if path.name == 'supplement.aux':
+            raise OSError('synthetic unreadable aux')
+        return original_read_bytes(path)
+
+    monkeypatch.setattr(Path, 'read_bytes', fail_aux_read)
+    report = evaluate_current(build_check_document(capture_snapshot(tmp_path / 'main.tex')))
+    assert report['status'] == 'partial'
+    assert 'unreadable_external_aux' in _external_coverage_codes(report)
+
+
+def test_oversized_external_aux_is_explicit_partial_coverage(tmp_path):
+    _external_fixture(tmp_path)
+    (tmp_path / 'supplement.aux').write_bytes(b'x' * (4 * 1024 * 1024 + 1))
+    report = evaluate_current(build_check_document(capture_snapshot(tmp_path / 'main.tex')))
+    assert report['status'] == 'partial'
+    assert 'oversized_external_aux' in _external_coverage_codes(report)
+
+
+def test_external_aux_symlink_outside_root_is_explicit_partial_coverage(tmp_path):
+    _external_fixture(tmp_path)
+    outside = tmp_path.parent / 'outside-external.aux'
+    outside.write_text(r'\relax\newlabel{sec:external}{{S1}{1}{}{}{}}' + '\n')
+    (tmp_path / 'supplement.aux').unlink()
+    (tmp_path / 'supplement.aux').symlink_to(outside)
+    report = evaluate_current(build_check_document(capture_snapshot(tmp_path / 'main.tex')))
+    assert report['status'] == 'partial'
+    assert 'external_aux_outside_root' in _external_coverage_codes(report)
+
+
+def test_129_nested_external_aux_files_hit_explicit_limit(tmp_path):
+    _external_fixture(tmp_path)
+    for index in range(129):
+        next_file = f'nested{index + 1}.aux'
+        content = rf'\@input{{{next_file}}}\n' if index < 128 else r'\relax\n'
+        (tmp_path / f'nested{index}.aux').write_text(content)
+    (tmp_path / 'supplement.aux').write_text(
+        r'\newlabel{sec:external}{{S1}{1}{}{}{}}\@input{nested0.aux}' + '\n')
+    report = evaluate_current(build_check_document(capture_snapshot(tmp_path / 'main.tex')))
+    coverage = next(row for row in report['coverage'] if row['rule_id'] == 'unresolved_reference')
+    assert report['status'] == 'partial' and not coverage['complete']
+    assert 'external_aux_nesting_limit' in _external_coverage_codes(report)

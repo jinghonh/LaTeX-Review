@@ -133,13 +133,19 @@ def _bibliography_reliable(project: ParsedProject) -> bool:
 
 def _findings(project: ParsedProject, *, sites=None, _raw_labels_only=False) -> dict[tuple[str, str], list[_Site]]:
     labels, citations, references = _sites(project) if sites is None else sites
+    external = project.expanded.external_labels
+    uncertain_prefixes = project.expanded.uncertain_external_prefixes
     findings: dict[tuple[str, str], list[_Site]] = {}
     bibliography_reliable = _bibliography_reliable(project)
+
+    def external_uncertain(key: str) -> bool:
+        return any(not prefix or key.startswith(prefix) for prefix in uncertain_prefixes)
     for key, sites in citations.items():
         if bibliography_reliable and key not in project.bibliography and f"bib:{key}" not in project.labels:
             findings[("bibliography_key_unresolved", key)] = sites
     for key, sites in references.items():
-        if key not in labels and (_raw_labels_only or key not in project.numbering.labels):
+        if (key not in labels and key not in external and
+                not external_uncertain(key) and (_raw_labels_only or key not in project.numbering.labels)):
             findings[("unresolved_reference", key)] = sites
     for key, sites in labels.items():
         if len(sites) > 1:
@@ -197,6 +203,7 @@ def current_findings(project: ParsedProject, *, _raw_labels_only=False) -> dict:
                               project, sites=(labels, citations, references), _raw_labels_only=_raw_labels_only).items())],
             "bibliography_reliable": _bibliography_reliable(project),
             "unexpanded_rule_macros": unexpanded_rule_macros,
+             "external_uncertain_prefixes": project.expanded.uncertain_external_prefixes,
             "execution_uncertain": bool(re.search(r"\\(?:if(?:false|true|defined|x|num|dim|odd|case|cat|eof|hmode|vmode|mmode|inner|void|hbox|vbox)|else|fi)(?![A-Za-z@])", mask)),
             "applicable": {"bibliography_key_unresolved": sum(map(len, citations.values())),
                            "unresolved_reference": sum(map(len, references.values())),

@@ -90,7 +90,10 @@ def _expansion_identity(expanded):
     return {"text": expanded.text,
             "segments": [asdict(s) for s in expanded.source_map.segments],
             "dependencies": [asdict(d) for d in expanded.dependencies],
-            "diagnostics": [asdict(d) for d in expanded.diagnostics]}
+            "diagnostics": [asdict(d) for d in expanded.diagnostics],
+            "external_labels": expanded.external_labels,
+            "external_prefixes": expanded.external_prefixes,
+            "uncertain_external_prefixes": expanded.uncertain_external_prefixes}
 
 
 def capture_snapshot(entry, *, root=None, configuration=None, retries=2, source=None, include_title=True) -> ContentSnapshot:

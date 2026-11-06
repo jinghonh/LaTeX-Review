@@ -37,7 +37,7 @@ _SAFE_COMMANDS = {
     "documentclass", "usepackage", "begin", "end", "label", *REFERENCE_COMMANDS, *CITATION_COMMANDS,
     "includegraphics", "caption", "centering", "item", "bibitem", "bibliography", "bibliographystyle", "addbibresource", "printbibliography",
     "tag", "notag", "nonumber",
-    "input", "include", "graphicspath", "textbf", "textit", "emph", "texttt", "underline", "footnote", "url", "href", "hfill",
+    "input", "include", "externaldocument", "graphicspath", "textbf", "textit", "emph", "texttt", "underline", "footnote", "url", "href", "hfill",
     "small", "large", "Large", "normalsize", "itshape", "bfseries", "textsc", "noindent", "newline", "newpage", "clearpage",
     "maketitle", "title", "author", "date", "abstract", "thanks", "today", "and", "quad", "qquad", "ldots", "cdots",
     "newcommand", "renewcommand", "providecommand", "DeclareRobustCommand", "newenvironment", "renewenvironment", "provideenvironment",
