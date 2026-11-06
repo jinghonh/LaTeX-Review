@@ -1,0 +1,195 @@
+{
+  "date": "2026-11-06",
+  "evaluated_commit": "aa7296cc307e4d1a569167c29a518ecc9f292209",
+  "outcome": "completed_not_fully_accepted",
+  "paper": "Reachable-Set-FNO",
+  "fixed_fixture_sha256": "3d67effceff26a8c7fdcbc018cd71a82e436e352cd293567673d30d9b4a9fd45",
+  "provider": "deepseek",
+  "model": "deepseek-flash",
+  "thinking": "disabled",
+  "prompt_version": "semantic-2",
+  "authorization": {
+    "max_requests": 6,
+    "max_input_tokens": 120000,
+    "max_output_tokens": 24000,
+    "automatic_retries": 0
+  },
+  "usage": {
+    "requests": 6,
+    "prompt_tokens": 22791,
+    "completion_tokens": 4377,
+    "total_tokens": 27168,
+    "input_upper_bound_reserved": 89465,
+    "output_upper_bound_reserved": 24000,
+    "automatic_retries": 0,
+    "client_result_cache_hits": 0,
+    "all_finish_reasons": "stop"
+  },
+  "protocol": {
+    "valid": 11,
+    "invalid": 8,
+    "real_paper_valid": 6,
+    "real_paper_invalid": 6,
+    "fixed_cases_valid": 5,
+    "fixed_cases_invalid": 2,
+    "invalid_error_counts": {
+      "quote_range": 8
+    },
+    "invalid_candidates_repaired_or_reclassified": 0
+  },
+  "author_review": {
+    "explicitly_confirmed": true,
+    "valid_candidates_reviewed": 11,
+    "content_accepted": 6,
+    "rejected": 3,
+    "wording_reminder_only": 1,
+    "correct_but_low_value": 1,
+    "confirmed_issues": 1,
+    "active_review_seconds": null,
+    "not_an_estimate_of_general_model_accuracy": true
+  },
+  "workflow": {
+    "binary_decode_failure": false,
+    "baseline_deterministic_findings": 0,
+    "images_decoded": 5,
+    "mathjax_containers": 385,
+    "reference_rule_applicable_count": 51,
+    "external_aux_missing_has_blind_spot": true,
+    "external_aux_restored_has_complete_reference_coverage": true,
+    "on_save_typo_detected": true,
+    "annotation_conversion_idempotent": true,
+    "source_restored_and_current_typo_absent": true,
+    "resolved_lifecycle_observed": false,
+    "export_matches_input": true,
+    "reimport_preserves_rejections": true,
+    "semantic_decisions_leave_knowledge_unchanged": true,
+    "reimport_preserves_execution_usage": false,
+    "narrow_width": {
+      "width": 390,
+      "scrollWidth": 390
+    },
+    "browser_errors": []
+  },
+  "remaining_gaps": [
+    "quote_range protocol failures",
+    "author-rejected semantic judgments",
+    "offline reimport drops result.execution",
+    "unknown_latex rendering coverage",
+    "unsupported_prose_macro terminology coverage",
+    "no new real truncation or refusal response",
+    "four historical truncated responses still have unknown usage"
+  ],
+  "integrity": {
+    "original_files_verified": 59,
+    "original_changed": [],
+    "copy_changed": [],
+    "called_task_count": 6,
+    "isolated_listener_closed": true,
+    "preexisting_slots_unchanged": true
+  },
+  "historical_evidence": {
+    "original_artifacts_recovered_locally": true,
+    "paper": "Reachable-Set-FNO",
+    "round2_prompt_version": "semantic-1",
+    "round2_prompt_tokens": 19562,
+    "round2_completion_tokens": 6800,
+    "first_two_rounds_requests": 12,
+    "first_two_rounds_known_usage_responses": 8,
+    "first_two_rounds_known_prompt_tokens": 22593,
+    "first_two_rounds_known_completion_tokens": 8381,
+    "first_two_rounds_unknown_usage_responses": 4
+  },
+  "main_ci": {
+    "run_id": 42153145825,
+    "passed": 1581,
+    "skipped": 24,
+    "performance_included": false
+  },
+  "issues_to_keep_open": [
+    59,
+    60,
+    61,
+    62
+  ],
+  "new_provider_requests_authorized_remaining": 0,
+  "cases": [
+    {
+      "case": "R01",
+      "request_id": "1611eb799b7446a18a7295187654d89c",
+      "task": "concept_definition",
+      "prompt_version": "semantic-2",
+      "prompt_tokens": 3386,
+      "completion_tokens": 1029,
+      "finish_reason": "stop",
+      "valid_candidates": 3,
+      "invalid_candidates": 3,
+      "invalid_error_counts": {
+        "quote_range": 3
+      }
+    },
+    {
+      "case": "R02",
+      "request_id": "8080a7df90c243b7b97de351238b0255",
+      "task": "name_mapping",
+      "prompt_version": "semantic-2",
+      "prompt_tokens": 3095,
+      "completion_tokens": 589,
+      "finish_reason": "stop",
+      "valid_candidates": 0,
+      "invalid_candidates": 3,
+      "invalid_error_counts": {
+        "quote_range": 3
+      }
+    },
+    {
+      "case": "R03",
+      "request_id": "de430a774a834aad9c1bcfabbcb658f8",
+      "task": "cross_section_comparison",
+      "prompt_version": "semantic-2",
+      "prompt_tokens": 6031,
+      "completion_tokens": 1204,
+      "finish_reason": "stop",
+      "valid_candidates": 3,
+      "invalid_candidates": 0,
+      "invalid_error_counts": {}
+    },
+    {
+      "case": "Q01-Q02",
+      "request_id": "efbc2d19bdbf45e39eb81647cb270094",
+      "task": "cross_section_comparison",
+      "prompt_version": "semantic-2",
+      "prompt_tokens": 6237,
+      "completion_tokens": 788,
+      "finish_reason": "stop",
+      "valid_candidates": 3,
+      "invalid_candidates": 0,
+      "invalid_error_counts": {}
+    },
+    {
+      "case": "Q03",
+      "request_id": "e0d49801517e4a2ab14a6f3433983ce5",
+      "task": "name_mapping",
+      "prompt_version": "semantic-2",
+      "prompt_tokens": 2053,
+      "completion_tokens": 444,
+      "finish_reason": "stop",
+      "valid_candidates": 2,
+      "invalid_candidates": 0,
+      "invalid_error_counts": {}
+    },
+    {
+      "case": "Q04",
+      "request_id": "18e1e23d7897448585317c251798fd7b",
+      "task": "concept_definition",
+      "prompt_version": "semantic-2",
+      "prompt_tokens": 1989,
+      "completion_tokens": 323,
+      "finish_reason": "stop",
+      "valid_candidates": 0,
+      "invalid_candidates": 2,
+      "invalid_error_counts": {
+        "quote_range": 2
+      }
+    }
+  ]
+}
