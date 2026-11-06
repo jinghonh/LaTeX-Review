@@ -1,41 +1,67 @@
-# Existing real-AI acceptance record
+# 真实论文与 AI 质量验收记录
 
-This document records the already completed 12 provider requests from the paper acceptance session. It authorizes no new request and contains no manuscript text, credentials or raw provider payloads. The historical record is cited from the public Issue discussions:
+2026-11-06 在合并后的 `main` 提交 `aa7296cc307e4d1a569167c29a518ecc9f292209` 完成第三轮验收。真实论文日常流程的已测部分通过；**AI 质量未整体通过**。Issues [#59](https://github.com/jinghonh/LaTeX-Review/issues/59)、[#60](https://github.com/jinghonh/LaTeX-Review/issues/60)、[#61](https://github.com/jinghonh/LaTeX-Review/issues/61)、[#62](https://github.com/jinghonh/LaTeX-Review/issues/62) 均保留开放。
 
-- [Issue #62](https://github.com/jinghonh/LaTeX-Review/issues/62) records the thinking-mode and truncation run.
-- [Issue #61](https://github.com/jinghonh/LaTeX-Review/issues/61) records the candidate-validation outcomes.
-- [Issue #61 author decision record](https://github.com/jinghonh/LaTeX-Review/issues/61#issuecomment-6666013406) identifies the provider, budgets and Q04/R02/R03 judgments.
+本记录只公开脱敏统计。请求、响应、论文副本、截图、调用账本和作者决定保存在请求人的本地私有验收目录。本次提交不包含论文正文、凭据或模型响应。结构化统计见 [real-paper-round3.json](real-paper-round3.json)。
 
-## Historical provider requests
+## 历史证据校正
 
-Both rounds used provider/model `deepseek-flash`. Neither round automatically retried a request.
+已在请求人本地找到前两轮的原始请求、响应、汇总和作者评价。原始模型验收使用 **Reachable-Set-FNO**，此前本文件中的 **BRUE** 归属错误。服务器 BRUE 独立副本的确定性检查是另一项实验，不能归入这些模型调用。
 
-| Round | Scope and configuration | Completion result | Candidate protocol result |
+第二轮六份请求的提示词版本均为 `semantic-1`。第二轮实际用量为输入 **19,562**、输出 **6,800** tokens。前两轮共 12 次调用中，8 次保留用量，合计输入 **22,593**、输出 **8,381** tokens；第一轮四个截断响应的用量仍未知。恢复附件没有补造这四个数值，也没有把未知用量记成零。
+
+| 轮次 | 配置与授权上限 | 调用结果 | 候选协议结果 |
 | --- | --- | --- | --- |
-| 1 | Six one-request tasks; total input limit 120,000 tokens; total output limit 12,000 tokens; 2,000 output tokens per task; thinking mode was not explicitly disabled | 4/6 returned `provider_truncated`; the historical record says their saved `execution.usage` was empty. The remaining 2/6 completed normally. | No candidate-level count was published for this round. |
-| 2 | Six requests: three BRUE paper fragment requests and three requests covering four established comparison cases; total input limit 120,000 tokens; total output limit 24,000 tokens; thinking explicitly disabled; no retry | 6/6 responses completed normally | BRUE paper fragments: 0 valid / 16 invalid candidates. Comparison cases: 1 valid / 9 invalid. Combined: 1 valid / 25 invalid, 3.85% candidate protocol pass rate. The invalid-candidate first errors were `candidate_kind` (10), `object_id` (10) and `quote_range` (5). |
+| 1 | `deepseek-flash`；未显式关闭 thinking；6 次；输入 120,000、输出 12,000 tokens；不自动重试 | 2/6 正常结束；4/6 `provider_truncated`，缺少用量 | 不由完成率推算候选质量 |
+| 2 | 同一模型；thinking disabled；6 次；输入 120,000、输出 24,000 tokens；不自动重试 | 6/6 正常结束 | 真实论文 0/16；固定案例 1/10；合计 **1/26 有效、25/26 无效**。首个错误为 `candidate_kind` 10、`object_id` 10、`quote_range` 5 |
+| 3 | 同一模型与第二轮预算；thinking disabled；`semantic-2`；合并后的 main | 6/6 正常结束；实际输入 **22,791**、输出 **4,377** tokens | 真实论文 6/12；固定案例 5/7；合计 **11/19 有效、8/19 无效**。八个错误均为 `quote_range` |
 
-At the completion level, round 1 normal completion was 2/6 (33.3%) and round 2 normal completion was 6/6 (100%). These completion rates are separate from candidate protocol validity and do not measure semantic correctness.
+历史作者评价继续保留：Q04 的缺上下文判断合理；R02 表述过强并被拒绝；R03 只能作为措辞检查提醒。R02/R03 的历史原始输出仍是协议无效结果，作者评价不改变其统计。[历史作者记录](https://github.com/jinghonh/LaTeX-Review/issues/61#issuecomment-6666013406)
 
-The historical Issue #62 record states that the 12 requests retained usage for 8 responses and had unknown usage for the 4 truncated responses. It does not publish the exact token counts for each response. No refusal response is recorded in the historical 12-request summary. Missing usage therefore cannot be reconstructed as a number from the historical evidence; the implementation records absent fields as explicit `null` values with `usage_status = "unknown"`.
+## 第三轮执行与作者评价
 
-## Author judgments
+请求人明确授权第三轮的论文发送范围、模型和预算。本轮使用原论文的独立副本，以及原来的四类固定案例。与第二轮相比，选定原文、章节路径、源码位置和知识输入保持一致。应用与提示词版本已变更；两轮通过率之差只作描述，不构成因果或统计结论。
 
-The author records the following judgments separately from protocol validity:
+六次调用通过未修改的 `SemanticService.invoke`、`SemanticCaller` 和 `openai_transport` 执行。记录器原样委托传输，并在发送前核对请求和总预算。每次最多 4,000 输出 tokens，每任务最多一次请求。实际发送六次，没有自动重试或客户端结果缓存命中。供应商返回的缓存 Token 仍计入其 `prompt_tokens`。
 
-- **Q04**: reasonable; the missing-context candidate should remain bounded by the absent companion document.
-- **R02**: wording was too strong and was rejected; it must not be presented as an established contradiction.
-- **R03**: a wording-check reminder only; it does not establish a contradiction.
+| 案例 | 任务 | 输入 / 输出 tokens | 有效 / 无效 | 已确认的作者评价 |
+| --- | --- | --- | --- | --- |
+| R01 | `concept_definition` | 3,386 / 1,029 | 3 / 3 | 接受三个有效候选的内容；定义保留原有限定 |
+| R02 | `name_mapping` | 3,095 / 589 | 0 / 3 | 没有有效候选，不记为语义通过 |
+| R03 | `cross_section_comparison` | 6,031 / 1,204 | 3 / 0 | 一项只作措辞提醒；拒绝另外两项错误判断 |
+| Q01–Q02 | `cross_section_comparison` | 6,237 / 788 | 3 / 0 | 接受明确矛盾识别和条件区分；拒绝自行补设定义域限制 |
+| Q03 | `name_mapping` | 2,053 / 444 | 2 / 0 | 接受两个估计器的区分；缺少代码映射的提示属实，但价值低 |
+| Q04 | `concept_definition` | 1,989 / 323 | 0 / 2 | 没有有效候选，仍保留无效记录 |
 
-These judgments are human review outcomes, not model accuracy or candidate acceptance rates.
+作者已对 11 个有效候选逐项确认评价：**6 项内容认可、3 项拒绝、1 项仅措辞提醒、1 项属实但价值低**。6/11 是本次内容认可比例，不是模型总体准确率。只有 Q01 的明确矛盾被确认为问题；Q02/Q03 的正确区分不转成论文错误。人工主动审查时长未计时。
 
-## Fixed-response regression
+八个无效候选涉及的引文均可在选定片段中唯一定位，但模型提供的范围不正确。原始结果仍全部判为 `quote_range` 无效。未删去范围、修补偏移或重发请求以提高通过率。
 
-The repository regression is separate from the historical provider requests. It makes no provider request and contains no private paper input. The current focused target has 86 passing tests, including:
+## 真实论文工作流与已知缺口
 
-- a fixed `finish_reason = "length"` response with known usage, retained with one request and no retry;
-- a truncation result with absent usage, retained as `prompt_tokens = null`, `completion_tokens = null`, `total_tokens = null`, `usage_status = "unknown"`;
-- a refusal completion with its finish reason and known usage retained, with no retry;
-- explicit DeepSeek thinking request shaping and generic-provider omission of the private `thinking` field.
+1. 实际检查 CLI 和持续预览均完成。五张图片成功解码；页面呈现 385 个 MathJax 容器。没有二进制图片 UTF-8 解码崩溃。
+2. 原来的六个外部引用误报不再出现。`unresolved_reference` 完整执行，适用数为 51。暂时移走副本的外部辅助文件后，相关规则显示 `unsupported`、`complete=false` 和 `missing_external_aux`。恢复后覆盖恢复。
+3. 在独立副本登记禁用名称，制造一次受控拼写错误。保存触发检查，并得到精确源码范围。两次显式转换只创建一个批注。恢复源码后，当前问题消失；冻结导出的输入身份匹配。
+4. 代理按作者确认的评价，通过实际界面拒绝两个错误的 R03 候选，并拒绝 Q01 的附加错误判断。相同 R03 原始响应离线重新导入后，两项拒绝仍保留。语义决定没有自动写入知识关系。这为 AC-14 增加了真实、协议有效但推理错误的证据。
+5. **发现新的 #62 缺口**：对同一已调用任务离线重复导入原始响应后，`result.execution` 消失。导入前的 `requests=1`、`finish_reason=stop` 和已知用量均不再出现在任务结果中。私有调用账本及初次结果仍保留完整数据；未追加模型调用。
 
-The historical raw request/response artifacts were not found in the repository or the BRUE project copy. The Issue comments above are the available de-identified evidence, so this record does not claim independent replay, token-level reconstruction, refusal coverage in the original session, model quality, or author agreement beyond the judgments explicitly recorded there. Issue #62 remains open for that reason.
+```mermaid
+flowchart LR
+  A[原稿独立副本] --> B[检查与持续预览]
+  B --> C[六次获准模型调用]
+  C --> D[协议校验与作者评价]
+  D --> E[离线复导与保存流程]
+  E --> F[恢复副本并核对原稿]
+```
+
+五个面板可用，390px 页面没有横向溢出，浏览器没有 JavaScript 错误。原稿与副本的 59 个文件最终均匹配开始时的哈希。只停止本轮的两个服务槽位和独立入口；原有四个槽位的 PID、generation 和状态未变。
+
+`unknown_latex` 渲染盲区和 `unsupported_prose_macro` 术语覆盖盲区仍存在。恢复拼写后没有取得 `resolved` 生命周期记录，不能把当前问题消失写成完整生命周期验收。零确定性问题不证明论文科学结论正确。本轮没有新的真实截断或拒绝响应，不能声称验证了这些真实失败路径。
+
+## 固定响应回归与整体结论
+
+PR #65 的既有固定响应回归涵盖已知/未知用量的截断、拒绝响应以及 DeepSeek thinking 请求字段。此前聚焦目标为 86 passed；这些离线测试独立于三轮真实调用。本轮没有重跑该目标，也不改变历史失败记录。
+
+合并后 main 的 [CI](https://github.com/jinghonh/LaTeX-Review/actions/runs/42153145825) 为 **1581 passed、24 skipped**，不包含性能基准。历史阅读位置浏览器失败继续保留；后续通过不证明根因已经修复。
+
+本轮完成验收执行，但未通过整体 AI 质量验收。#59/#60 的原始真实论文症状已复测通过；#61 保留协议及语义质量问题；#62 保留复导丢失用量和历史真实失败路径的证据边界。三个轮次共 18 次获准调用已用完，不授权后续模型请求，也不授权自动合并或关闭 Issue。
