@@ -361,8 +361,16 @@ class SemanticService:
 
     def _import(self, context, path, request, response, cancel):
         try:
-            result = validate_candidate(request, response, self._capture(context)[1])
-            self._save_result(path, request, result.to_dict(), cancel)
+            # Import validates a new candidate response, but must not replace
+            # locally recorded execution provenance from an earlier provider call.
+            with self._connect(path) as db:
+                row = db.execute('SELECT result_json FROM semantic_tasks WHERE request_id=?', (request.request_id,)).fetchone()
+            previous = json.loads(row[0]) if row and row[0] else {}
+            result = validate_candidate(request, response, self._capture(context)[1]).to_dict()
+            execution = previous.get('execution')
+            if isinstance(execution, dict):
+                result['execution'] = deepcopy(execution)
+            self._save_result(path, request, result, cancel)
         except Exception as exc:
             self._update(path, request.request_id, state='cancelled' if cancel.is_set() else 'failed', error_json=_json({'code': getattr(exc, 'code', 'semantic_import_failed'), 'message': str(exc)}))
 
