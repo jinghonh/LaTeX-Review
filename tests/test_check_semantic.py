@@ -7,6 +7,7 @@ from types import MappingProxyType
 
 import pytest
 from jsonschema import Draft202012Validator
+import latex_review.checks.semantic as semantic_module
 
 from latex_review.checks.document import build_check_document
 from latex_review.checks.model import ENGINE_VERSION
@@ -305,7 +306,7 @@ def test_deepseek_thinking_is_explicit_and_generic_body_stays_portable(host, cal
     assert "thinking" not in bodies[-1]
 
 
-def test_fake_provider_usage_and_no_tools_cache_identity(host, caller_factory):
+def test_fake_provider_usage_and_no_tools_cache_identity(host, caller_factory, monkeypatch):
     document, current, request = host
     calls = []
     def provider(endpoint, key, body, timeout):
@@ -317,6 +318,7 @@ def test_fake_provider_usage_and_no_tools_cache_identity(host, caller_factory):
         assert "allowed_candidate_kinds" in body["messages"][0]["content"]
         assert "allowed_object_ids" in body["messages"][0]["content"]
         assert "Unicode code-point offsets" in body["messages"][0]["content"]
+        assert "Provider context version: provider-context-1" in body["messages"][0]["content"]
         assert "intentionally omitted" in body["messages"][0]["content"]
         assert "\"sources\"" not in body["messages"][1]["content"]
         return json.dumps(response(request, candidate(request))), {"prompt_tokens": 100, "completion_tokens": 20, "total_tokens": 120}
@@ -333,6 +335,17 @@ def test_fake_provider_usage_and_no_tools_cache_identity(host, caller_factory):
     other = caller_factory(provider, max_requests=1)
     assert other.cache_identity(request) == caller.cache_identity(request)
     assert SemanticCaller(replace(other.config, model="different"), transport=provider).cache_identity(request) != caller.cache_identity(request)
+    original_provider_payload = semantic_module._provider_payload
+    baseline = caller.cache_identity(request)
+    def changed_provider_payload(value):
+        projected = original_provider_payload(value)
+        projected["evidence_units"][0]["text"] += " projection change"
+        return projected
+    monkeypatch.setattr(semantic_module, "_provider_payload", changed_provider_payload)
+    assert caller.cache_identity(request) != baseline
+    monkeypatch.setattr(semantic_module, "_provider_payload", original_provider_payload)
+    monkeypatch.setattr(semantic_module, "PROVIDER_CONTEXT_VERSION", "provider-context-2")
+    assert caller.cache_identity(request) != baseline
 
 
 def test_bounded_retries_and_one_format_repair(host, caller_factory):
