@@ -669,6 +669,33 @@ def test_service_preview_then_explicit_once_only_invoke(semantic_service, monkey
         service.invoke(pid, request.request_id)
 
 
+def test_import_preserves_local_execution_after_author_rejection(semantic_service, monkeypatch):
+    from latex_review.checks.service import CheckError
+    service, pid, _ = semantic_service
+    _, _, request = host_request(service, pid)
+    settings = {'enabled': True, 'provider': 'deepseek', 'thinking': 'disabled',
+                'base_url': 'http://localhost:1/v1', 'model': 'fake', 'api_key_env': 'FIXED_SERVICE_TEST_KEY'}
+    monkeypatch.setenv('FIXED_SERVICE_TEST_KEY', 'fake-test-only')
+    service.coordinator._configuration = lambda ctx: {'semantic': settings}
+    service.transport = lambda *args: (response(request, candidate(request)),
+                                       {'prompt_tokens': 6031, 'completion_tokens': 1204, 'total_tokens': 7235})
+    service.invoke(pid, request.request_id)
+    completed = complete_task(service, pid, request.request_id)
+    execution = completed['result']['execution']
+    item = completed['result']['candidates'][0]
+    decision = {'request_id': request.request_id, 'candidate_id': item['candidate_id'], 'input_id': request.input_id,
+                'action': 'reject', 'reason': 'fixed author rejection', 'decision_id': 'import-execution-decision'}
+    rejected = service.decide(pid, decision)
+    assert rejected['called'] and rejected['result']['candidates'][0]['review_state'] == 'rejected'
+    service.import_response(pid, {'request_id': request.request_id, 'response': response(request, candidate(request))})
+    imported = complete_task(service, pid, request.request_id)
+    assert imported['called'] and imported['result']['candidates'][0]['review_state'] == 'rejected'
+    assert imported['result']['execution'] == execution
+    assert imported['result']['execution']['usage'][0]['total_tokens'] == 7235
+    with pytest.raises(CheckError, match='预算'):
+        service.invoke(pid, request.request_id)
+
+
 def test_service_persists_abnormal_completion_metadata(semantic_service, monkeypatch):
     service, pid, _ = semantic_service
     _, _, request = host_request(service, pid)
