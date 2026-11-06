@@ -225,6 +225,21 @@ def export_request(request):
     return request._json
 
 
+def provider_request(request):
+    """Return the model context without host source coordinates.
+
+    The retained/exported request keeps exact provenance for validation and audit.
+    A provider does not need those absolute file offsets, and showing them beside
+    the unit text invites copying them into the response's unit-relative range.
+    """
+    if not isinstance(request, SemanticRequest):
+        raise SemanticError("unknown_request", "a known host request is required")
+    payload = request.payload
+    for unit in payload["evidence_units"]:
+        unit.pop("sources", None)
+    return _json(payload)
+
+
 def _sources(request, unit, start, end):
     result, cursor = [], 0
     for original in unit["sources"]:
@@ -544,8 +559,12 @@ class SemanticCaller:
                 request_contract = request.payload.get("response_contract")
                 system_policy = (_prompt_instructions(request_contract)
                                  if request_contract is not None else POLICY)
+                if request_contract is not None:
+                    system_policy += ("\nThe host keeps source provenance separately for validation. "
+                                      "Source file coordinates are intentionally omitted from this context; "
+                                      "derive ranges only from each unit's text.")
                 messages = [{"role": "system", "content": system_policy + "\nResponse schema: " + _json(_schema("response"))},
-                            {"role": "user", "content": export_request(request)}]
+                            {"role": "user", "content": provider_request(request)}]
                 if format_context:
                     messages.append({"role": "user", "content": format_context})
                 estimate = len(_json(messages).encode("utf-8")) + 1024
